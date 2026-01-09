@@ -40,4 +40,23 @@ Stores:
 3. Website + pricing + privacy policy
 4. Chrome Web Store publish
 
+## Proposed tiers (v1)
+
+### Free
+- **Backend-paid summaries**: 5 / month
+- **Bring your own API key**: unlimited
+
+### Pro (promo)
+- Price: **£4.99/year** (intro promo)
+- **Backend-paid summaries**: 50 / month
+- **Bring your own API key**: unlimited
+
+### Enterprise
+- Custom pricing + custom limits (contact sales)
+
+## Rate limits (v1)
+- Free: 3 summaries / minute
+- Pro: 10 summaries / minute
+- Enterprise: custom
+
 

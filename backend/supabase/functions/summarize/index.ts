@@ -37,6 +37,16 @@ function monthStart(d = new Date()) {
   return dt.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+function getMonthlyQuota(plan: string) {
+  // v1 pricing:
+  // - free: 5/month
+  // - pro: 50/month
+  // - enterprise: custom (env)
+  if (plan === "pro") return Number(Deno.env.get("PRO_MONTHLY_QUOTA") || "50");
+  if (plan === "enterprise") return Number(Deno.env.get("ENTERPRISE_MONTHLY_QUOTA") || "5000");
+  return Number(Deno.env.get("FREE_MONTHLY_QUOTA") || "5");
+}
+
 function buildPrompt(url: string, text: string) {
   return {
     system:
@@ -126,14 +136,15 @@ Deno.serve(async (req) => {
     // Subscription status check (MVP)
     const { data: sub } = await supabase
       .from("subscriptions")
-      .select("status")
+      .select("status, plan")
       .eq("user_id", userId)
       .maybeSingle();
 
     const status = sub?.status || "free";
-    if (status !== "active") {
-      return json({ error: "Subscription required" }, 402);
-    }
+    const plan = sub?.plan || "free";
+    // Allow free tier usage via backend up to free quota.
+    // Pro users should have status 'active' + plan 'pro'.
+    if (plan === "pro" && status !== "active") return json({ error: "Subscription required" }, 402);
 
     // Quota check (MVP)
     const m = monthStart();
@@ -145,7 +156,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const used = counter?.summaries_count || 0;
-    const quota = Number(Deno.env.get("PRO_MONTHLY_QUOTA") || "500");
+    const quota = getMonthlyQuota(plan);
     if (used >= quota) return json({ error: "Quota exceeded" }, 429);
 
     const summary = await callOpenAI(url, text);

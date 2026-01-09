@@ -11,9 +11,13 @@ create table if not exists public.profiles (
 -- 2) Subscription status
 create type if not exists public.subscription_status as enum ('free', 'active', 'past_due', 'canceled');
 
+-- Plan tier (for quotas)
+create type if not exists public.plan_tier as enum ('free', 'pro', 'enterprise');
+
 create table if not exists public.subscriptions (
   user_id uuid primary key references auth.users(id) on delete cascade,
   status public.subscription_status not null default 'free',
+  plan public.plan_tier not null default 'free',
   stripe_customer_id text,
   stripe_subscription_id text,
   current_period_end timestamptz,
