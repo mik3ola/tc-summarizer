@@ -51,7 +51,7 @@ The extension will be available on the Chrome Web Store once it's ready for publ
 ### Free Tier (Your Own API Key)
 
 1. Get an API key from [OpenAI](https://platform.openai.com/api-keys)
-2. Open extension Settings (click the extension icon)
+2. Open extension Settings (click the Extension Options under Details)
 3. Paste your API key
 4. Choose your preferred model (GPT-4o Mini recommended for cost)
 

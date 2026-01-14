@@ -188,9 +188,86 @@
       .footer a:hover { text-decoration: underline; }
       
       .hidden { display: none !important; }
+      
+      /* Modal overlay */
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.2s, visibility 0.2s;
+      }
+      .modal-overlay.show {
+        opacity: 1;
+        visibility: visible;
+      }
+      .modal-box {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        max-width: 360px;
+        width: 90%;
+        text-align: center;
+        transform: scale(0.95);
+        transition: transform 0.2s;
+      }
+      .modal-overlay.show .modal-box {
+        transform: scale(1);
+      }
+      .modal-icon {
+        font-size: 3rem;
+        margin-bottom: 12px;
+      }
+      .modal-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .modal-message {
+        font-size: 0.875rem;
+        color: var(--text-muted);
+        margin-bottom: 16px;
+        line-height: 1.5;
+      }
+      .modal-btn {
+        background: var(--accent);
+        border: none;
+        color: #fff;
+        padding: 10px 24px;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .modal-btn:hover {
+        background: var(--accent-hover);
+      }
+      .modal-success .modal-icon { color: var(--success); }
+      .modal-error .modal-icon { color: #f87171; }
+      .modal-loading .modal-icon { animation: spin 1s linear infinite; }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
     </style>
   </head>
   <body>
+    <!-- Modal for feedback -->
+    <div id="modalOverlay" class="modal-overlay">
+      <div class="modal-box">
+        <div id="modalIcon" class="modal-icon">✅</div>
+        <div id="modalTitle" class="modal-title">Success</div>
+        <div id="modalMessage" class="modal-message">Operation completed successfully.</div>
+        <button id="modalBtn" class="modal-btn">OK</button>
+      </div>
+    </div>
     <div class="container">
       <h1><span class="logo">📜</span> T&C Hover Summarizer</h1>
       <p class="subtitle">Quickly understand Terms & Conditions before you agree</p>
@@ -198,15 +275,31 @@
       <!-- Subscription Status Card -->
       <div class="card">
         <div class="card-header">
-          <div class="card-title">⚡ Subscription</div>
-          <span id="subBadge" class="badge badge-warning">Free Tier</span>
+          <div class="card-title">⚡ Account</div>
+          <span id="subBadge" class="badge badge-warning">Not logged in</span>
         </div>
         <div id="subStatus">
           <p style="margin: 0 0 12px; color: var(--text-muted); font-size: 0.875rem;">
-            You're using the free tier with your own API key.
+            <strong>Use your own API key below</strong> for unlimited summaries, or sign in for our managed service.
           </p>
           <div class="btn-row">
-            <button id="loginBtn" class="primary">🔐 Login / Subscribe</button>
+            <button id="loginBtn">🔐 Login / Create account</button>
+          </div>
+          <div id="authForm" class="hidden" style="margin-top: 14px;">
+            <div class="input-group">
+              <label for="authEmail">Email</label>
+              <input id="authEmail" type="email" placeholder="you@example.com" autocomplete="email" />
+            </div>
+            <div class="input-group">
+              <label for="authPassword">Password</label>
+              <input id="authPassword" type="password" placeholder="••••••••" autocomplete="current-password" />
+              <div class="input-hint">New user? Enter your email and password, then click "Create account".</div>
+            </div>
+            <div class="btn-row">
+              <button id="signInBtn" class="primary">Sign in</button>
+              <button id="signUpBtn">Create account</button>
+              <button id="cancelAuthBtn">Cancel</button>
+            </div>
           </div>
         </div>
         <div id="subActive" class="hidden">
@@ -214,18 +307,21 @@
             Logged in as <strong id="userEmail">user@example.com</strong>
           </p>
           <div class="btn-row">
+            <button id="upgradeBtn" class="primary">⭐ Upgrade to Pro (£4.99/year)</button>
+            <button id="refreshStatusBtn">Refresh status</button>
             <button id="logoutBtn">Logout</button>
           </div>
+          <p id="planHint" style="margin: 10px 0 0; color: var(--text-muted); font-size: 0.8rem;"></p>
         </div>
       </div>
       
-      <!-- Usage Stats -->
-      <div class="card">
+      <!-- Usage Stats (only shown when logged in) -->
+      <div class="card" id="statsCard">
         <div class="card-title" style="margin-bottom: 16px;">📊 Usage Stats</div>
         <div class="stats">
           <div>
-            <div class="stat-value" id="statSummaries">0</div>
-            <div class="stat-label">Summaries</div>
+            <div class="stat-value" id="statSummaries">0/5</div>
+            <div class="stat-label">Used / Limit</div>
           </div>
           <div>
             <div class="stat-value" id="statCached">0</div>
@@ -236,18 +332,22 @@
             <div class="stat-label">Min Saved</div>
           </div>
         </div>
+        <p id="usageHint" style="margin: 12px 0 0; color: var(--text-muted); font-size: 0.75rem; text-align: center;"></p>
       </div>
       
-      <!-- API Settings (for free tier) -->
+      <!-- API Settings (for BYO key - unlimited usage) -->
       <div class="card" id="apiCard">
         <div class="card-header">
-          <div class="card-title">🔑 API Settings</div>
-          <span class="badge badge-info">Free Tier</span>
+          <div class="card-title">🔑 Your OpenAI API Key</div>
+          <span class="badge badge-success" id="apiKeyBadge">Unlimited</span>
         </div>
+        <p style="margin: 0 0 12px; color: var(--text-muted); font-size: 0.8rem;" id="apiKeyHint">
+          Add your own OpenAI API key for <strong>unlimited</strong> summaries when not logged in.
+        </p>
         <div class="input-group">
           <label for="apiKey">OpenAI API Key</label>
           <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
-          <div class="input-hint">Required for free tier. Stored locally, never sent to our servers.</div>
+          <div class="input-hint">Stored locally, never sent to our servers.</div>
         </div>
         <div class="input-group">
           <label for="model">Model</label>
@@ -261,6 +361,26 @@
         <div class="btn-row">
           <button id="saveApi" class="primary">Save API Settings</button>
           <button id="clearApi" class="danger">Clear Key</button>
+        </div>
+      </div>
+
+      <!-- Backend connection (developer) -->
+      <div class="card" id="backendCard">
+        <div class="card-header">
+          <div class="card-title">🧩 Backend connection</div>
+          <span class="badge badge-info">Dev</span>
+        </div>
+        <div class="input-group">
+          <label for="supabaseUrl">Supabase Project URL</label>
+          <input id="supabaseUrl" type="text" placeholder="https://xxxxx.supabase.co" autocomplete="off" />
+        </div>
+        <div class="input-group">
+          <label for="supabaseAnonKey">Supabase anon key</label>
+          <input id="supabaseAnonKey" type="password" placeholder="eyJhbGciOi..." autocomplete="off" />
+          <div class="input-hint">This is a public key used by the extension to talk to Supabase. For Chrome Web Store release we can bake this in.</div>
+        </div>
+        <div class="btn-row">
+          <button id="saveBackend" class="primary">Save backend settings</button>
         </div>
       </div>
       

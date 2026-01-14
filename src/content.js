@@ -391,10 +391,16 @@ function extractTextFromHtml(html, baseUrl) {
     }
     
     const doc = new DOMParser().parseFromString(html, "text/html");
+    // Try to set base URL, but ignore CSP errors (some sites like gov.uk block this)
     if (baseUrl) {
-      const base = doc.createElement("base");
-      base.href = baseUrl;
-      doc.head.appendChild(base);
+      try {
+        const base = doc.createElement("base");
+        base.href = baseUrl;
+        doc.head.appendChild(base);
+      } catch (e) {
+        // CSP may block base-uri, but that's okay - we just won't have relative URL resolution
+        console.warn("[T&C Summarizer] Could not set base URL (CSP restriction):", e.message);
+      }
     }
 
     // Remove only script/style (keep other elements - some sites put content in unusual places)
@@ -497,7 +503,7 @@ function createUi() {
       text-overflow: ellipsis;
       max-width: 280px;
     }
-    .header-right { display: flex; align-items: center; gap: 6px; }
+    .header-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; white-space: nowrap; }
     .confidence-label { font-size: 10px; color: rgba(226,232,240,0.6); }
     .badge {
       font-size: 11px;
@@ -506,6 +512,23 @@ function createUi() {
       border: 1px solid rgba(148,163,184,0.25);
       background: rgba(15,23,42,0.8);
       color: rgba(226,232,240,0.85);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .badge-high {
+      background: rgba(34,197,94,0.15);
+      color: rgba(134,239,172,0.95);
+      border-color: rgba(34,197,94,0.35);
+    }
+    .badge-medium {
+      background: rgba(234,179,8,0.15);
+      color: rgba(253,224,71,0.95);
+      border-color: rgba(234,179,8,0.35);
+    }
+    .badge-low {
+      background: rgba(239,68,68,0.15);
+      color: rgba(252,165,165,0.95);
+      border-color: rgba(239,68,68,0.35);
     }
     .muted { color: rgba(226,232,240,0.72); }
     .section { margin-top: 10px; }
@@ -616,6 +639,52 @@ function truncateUrl(url, maxLen = 50) {
 }
 
 function renderError(errMsg, url) {
+  const msg = errMsg || "Unknown error";
+  
+  // Check for common errors and provide helpful messages
+  let helpText = "Click \"Open link directly\" to view the original page.";
+  let showRefreshHint = false;
+  let showUpgradeButton = false;
+  let displayMsg = msg;
+  
+  if (msg.includes("Extension context invalidated") || msg.includes("message port closed")) {
+    helpText = "The extension was updated. Please refresh this page (Ctrl+R or Cmd+R) and try again.";
+    showRefreshHint = true;
+    displayMsg = "Extension needs page refresh";
+  } else if (msg.includes("No API access") || msg.includes("Please login")) {
+    helpText = "You need to sign in first. Click \"Open Options\" to login or create an account.";
+    displayMsg = "Please sign in first";
+  } else if (msg.includes("Quota exceeded") || msg.includes("quotaExceeded")) {
+    helpText = "You've used all your summaries this month. Upgrade to Pro for more!";
+    displayMsg = "Monthly quota exceeded";
+    showUpgradeButton = true;
+  } else if (msg.includes("Session expired") || msg.includes("sign in again")) {
+    helpText = "Your session has expired. Click \"Open Options\" to sign in again.";
+    displayMsg = "Session expired - please sign in again";
+  } else if (msg.includes("Invalid JWT") || msg.includes("401") || msg.includes("Unauthorized")) {
+    helpText = "Authentication failed. Click \"Open Options\" to sign in again.";
+    displayMsg = "Please sign in again";
+  }
+  
+  // Build buttons based on error type
+  let buttonsHtml;
+  if (showRefreshHint) {
+    buttonsHtml = `
+      <button onclick="location.reload()">Refresh page</button>
+      <button data-action="open-link">Open link directly</button>
+    `;
+  } else if (showUpgradeButton) {
+    buttonsHtml = `
+      <button data-action="upgrade-to-pro" style="background: linear-gradient(135deg, #3b82f6, #8b5cf6); border: none; font-weight: 600;">⚡ Upgrade to Pro</button>
+      <button data-action="open-options">Open Options</button>
+    `;
+  } else {
+    buttonsHtml = `
+      <button data-action="open-options">Open Options</button>
+      <button data-action="open-link">Open link directly</button>
+    `;
+  }
+  
   UI.popover.innerHTML = `
     <div class="header">
       <div class="title">Couldn't summarize</div>
@@ -623,13 +692,12 @@ function renderError(errMsg, url) {
         <div class="badge">error</div>
       </div>
     </div>
-    <div class="error">${escapeHtml(errMsg || "Unknown error")}</div>
+    <div class="error">${escapeHtml(displayMsg)}</div>
     <div class="buttons">
-      <button data-action="open-options">Open Options</button>
-      <button data-action="open-link">Open link directly</button>
+      ${buttonsHtml}
     </div>
     <div class="section muted" style="margin-top:8px;">
-      Click "Open link directly" to view the original page.
+      ${escapeHtml(helpText)}
     </div>
   `;
 }
@@ -669,13 +737,14 @@ function renderSummary(summary, url, fromCache) {
   const confidence = summary?.confidence || "medium";
   const badgeText = fromCache ? `${confidence} • cached` : confidence;
   const badgeTooltip = getConfidenceTooltip(confidence);
+  const badgeColorClass = confidence === "high" ? "badge-high" : confidence === "low" ? "badge-low" : "badge-medium";
 
   UI.popover.innerHTML = `
     <div class="header">
       <div class="title" title="${escapeAttr(title)}">${escapeHtml(title)}</div>
       <div class="header-right">
         <span class="confidence-label">Confidence:</span>
-        <div class="badge" title="${escapeAttr(badgeTooltip)}">${escapeHtml(badgeText)}</div>
+        <div class="badge ${badgeColorClass}" title="${escapeAttr(badgeTooltip)}">${escapeHtml(badgeText)}</div>
       </div>
     </div>
     <div class="section">
@@ -1001,11 +1070,15 @@ UI.popover.addEventListener("click", (e) => {
     if (action === "open-options") {
       e.preventDefault();
       e.stopPropagation();
-      chrome.runtime.openOptionsPage().catch((err) => {
-        console.error("[T&C Summarizer] Failed to open options:", err);
-        // Fallback: open in new tab
-        window.open(chrome.runtime.getURL("src/options.html"), "_blank");
-      });
+      // Ask background script to open options page (window.open doesn't work for chrome-extension:// URLs)
+      chrome.runtime.sendMessage({ type: "open_options" });
+      return;
+    }
+    if (action === "upgrade-to-pro") {
+      e.preventDefault();
+      e.stopPropagation();
+      // Ask background script to open options page (window.open doesn't work for chrome-extension:// URLs)
+      chrome.runtime.sendMessage({ type: "open_options_upgrade" });
       return;
     }
     if (action === "open-link") {

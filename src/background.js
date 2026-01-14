@@ -2,9 +2,9 @@
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const MAX_TEXT_CHARS = 45_000; // keep request size reasonable
-
-// Backend URL - update this when you deploy your backend
-const BACKEND_URL = "https://your-backend-url.com/api"; // TODO: Update with your actual backend URL
+const DEFAULT_SUPABASE_URL = "https://rsxvxezucgczesplmjiw.supabase.co";
+// Anon key is safe to expose - it's a public key meant for client-side use
+const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzeHZ4ZXp1Y2djemVzcGxtaml3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNjMwNjYsImV4cCI6MjA1MTgzOTA2Nn0.1umoIHDTHX8NXU_5JlVJMx14LvxOIGXiZOg2wFHqfBE";
 
 function nowMs() {
   return Date.now();
@@ -25,15 +25,27 @@ async function getSettings() {
     "openaiApiKey",
     "openaiModel",
     "subscription",
-    "authToken",
+    "subscriptionPlan",
+    "supabaseUrl",
+    "supabaseAnonKey",
+    "supabaseSession",
     "preferences"
   ]);
+  
+  const session = data.supabaseSession || null;
+  
+  // Check if session is expired (with 5 minute buffer)
+  const isSessionExpired = session?.expires_at && (session.expires_at - 300000) < Date.now();
   
   return {
     openaiApiKey: typeof data.openaiApiKey === "string" ? data.openaiApiKey.trim() : "",
     openaiModel: typeof data.openaiModel === "string" && data.openaiModel.trim() ? data.openaiModel.trim() : DEFAULT_MODEL,
-    isSubscribed: data.subscription === "active",
-    authToken: data.authToken || null,
+    supabaseUrl: (data.supabaseUrl || DEFAULT_SUPABASE_URL).trim(),
+    supabaseAnonKey: (data.supabaseAnonKey || DEFAULT_SUPABASE_ANON_KEY).trim(),
+    session: session,
+    isSessionExpired: isSessionExpired,
+    subscription: data.subscription || null,
+    subscriptionPlan: data.subscriptionPlan || null,
     preferences: data.preferences || {}
   };
 }
@@ -138,12 +150,13 @@ ${input.text}
 }
 
 // Call via backend proxy (for subscribers)
-async function callBackendProxy({ authToken, input }) {
-  const res = await fetch(`${BACKEND_URL}/summarize`, {
+async function callSupabaseFunction({ supabaseUrl, anonKey, accessToken, input }) {
+  const res = await fetch(`${supabaseUrl}/functions/v1/summarize`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${authToken}`
+      apikey: anonKey,
+      Authorization: `Bearer ${accessToken}`
     },
     body: JSON.stringify({
       url: input.url,
@@ -153,16 +166,35 @@ async function callBackendProxy({ authToken, input }) {
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    if (res.status === 401) {
-      // Token expired, clear subscription
-      await chrome.storage.local.set({ subscription: null, authToken: null });
-      throw new Error("Session expired. Please login again.");
-    }
     throw new Error(`Backend error (${res.status}): ${txt.slice(0, 200)}`);
   }
 
   const data = await res.json();
   return data.summary || data;
+}
+
+async function refreshSessionIfPossible({ supabaseUrl, anonKey, session }) {
+  if (!session?.refresh_token) return null;
+  const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: { "content-type": "application/json", apikey: anonKey },
+    body: JSON.stringify({ refresh_token: session.refresh_token })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return null;
+
+  const expiresAt = Date.now() + (Number(data.expires_in || 0) * 1000);
+  const next = {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: expiresAt,
+    user: data.user ? { id: data.user.id, email: data.user.email } : session.user
+  };
+  await chrome.storage.local.set({
+    supabaseSession: next,
+    userEmail: next.user?.email || null
+  });
+  return next;
 }
 
 // Call OpenAI directly (for free tier with own API key)
@@ -221,6 +253,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     try {
       if (!message || typeof message !== "object") return;
 
+      // Open options page
+      if (message.type === "open_options") {
+        chrome.tabs.create({ url: chrome.runtime.getURL("src/options.html") });
+        sendResponse({ ok: true });
+        return;
+      }
+
+      // Open options page with upgrade intent
+      if (message.type === "open_options_upgrade") {
+        chrome.tabs.create({ url: chrome.runtime.getURL("src/options.html?upgrade=true") });
+        sendResponse({ ok: true });
+        return;
+      }
+
       // Fetch HTML for a URL
       if (message.type === "fetch_html") {
         const url = normalizeUrl(message.url);
@@ -248,16 +294,52 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           return;
         }
 
-        const settings = await getSettings();
+        let settings = await getSettings();
 
-        // Determine which API to use
-        const useBackend = settings.isSubscribed && settings.authToken;
-        const useDirectApi = !useBackend && settings.openaiApiKey;
+        // If session is expired, try to refresh proactively
+        if (settings.session?.access_token && settings.isSessionExpired && settings.supabaseAnonKey) {
+          console.log("[T&C Summarizer] Session expired, refreshing...");
+          const refreshed = await refreshSessionIfPossible({
+            supabaseUrl: settings.supabaseUrl,
+            anonKey: settings.supabaseAnonKey,
+            session: settings.session
+          });
+          if (refreshed?.access_token) {
+            // Reload settings with new session
+            settings = await getSettings();
+          } else {
+            // Clear expired session
+            await chrome.storage.local.set({ supabaseSession: null, subscription: null, subscriptionPlan: null });
+            settings.session = null;
+          }
+        }
+
+        // AUTHENTICATION REQUIRED - guests cannot use the service
+        const isLoggedIn = !!settings.session?.access_token;
+        
+        if (!isLoggedIn) {
+          console.log("[T&C Summarizer] Guest blocked - must sign in");
+          sendResponse({
+            ok: false,
+            error: "Please sign in to use T&C Summarizer or create an account for free summaries!"
+          });
+          return;
+        }
+
+        // User is logged in - determine API access
+        const hasOwnApiKey = !!settings.openaiApiKey;
+        const isPro = settings.subscription === "active" && settings.subscriptionPlan === "pro";
+        const hasBackendAccess = !!settings.supabaseAnonKey;
+        
+        // Pro users can use their own API key for unlimited usage
+        // Free users must use backend (quota enforced server-side)
+        const useDirectApi = isPro && hasOwnApiKey;
+        const useBackend = !useDirectApi && hasBackendAccess;
 
         if (!useBackend && !useDirectApi) {
           sendResponse({
             ok: false,
-            error: "No API access. Please login to subscribe or add your own OpenAI API key in Settings."
+            error: "Backend configuration error. Please contact support."
           });
           return;
         }
@@ -272,11 +354,79 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         let summary;
 
         if (useBackend) {
-          // Use backend proxy (subscriber)
-          summary = await callBackendProxy({
-            authToken: settings.authToken,
-            input: { url, text }
+          // Use Supabase Edge Function (free or pro; quotas enforced server-side)
+          console.log("[T&C Summarizer] Using backend with:", {
+            supabaseUrl: settings.supabaseUrl,
+            hasAnonKey: !!settings.supabaseAnonKey,
+            hasAccessToken: !!settings.session?.access_token,
+            tokenPreview: settings.session?.access_token?.slice(0, 20) + "..."
           });
+          
+          try {
+            summary = await callSupabaseFunction({
+              supabaseUrl: settings.supabaseUrl,
+              anonKey: settings.supabaseAnonKey,
+              accessToken: settings.session.access_token,
+              input: { url, text }
+            });
+          } catch (e) {
+            // On 401/unauthorized, try refresh once then retry
+            const msg = e?.message || String(e);
+            console.log("[T&C Summarizer] Backend error:", msg);
+            
+            if (msg.includes("401") || msg.includes("Invalid JWT") || msg.includes("Unauthorized") || msg.includes("Auth failed")) {
+              console.log("[T&C Summarizer] Got auth error, attempting token refresh...");
+              const refreshed = await refreshSessionIfPossible({
+                supabaseUrl: settings.supabaseUrl,
+                anonKey: settings.supabaseAnonKey,
+                session: settings.session
+              });
+              if (refreshed?.access_token) {
+                console.log("[T&C Summarizer] Token refreshed, retrying...");
+                summary = await callSupabaseFunction({
+                  supabaseUrl: settings.supabaseUrl,
+                  anonKey: settings.supabaseAnonKey,
+                  accessToken: refreshed.access_token,
+                  input: { url, text }
+                });
+              } else {
+                // Token refresh failed - if user has own API key, use that as fallback
+                if (hasOwnApiKey) {
+                  console.log("[T&C Summarizer] Token refresh failed, falling back to own API key");
+                  const outputText = await callOpenAI({
+                    apiKey: settings.openaiApiKey,
+                    model: settings.openaiModel,
+                    input: { url, text }
+                  });
+                  const parsed = safeJsonParse(outputText);
+                  summary = parsed.ok ? parsed.value : {
+                    title: "",
+                    tldr: outputText.trim(),
+                    costs_and_renewal: [],
+                    cancellation_and_refunds: [],
+                    liability_and_disputes: [],
+                    privacy_and_data: [],
+                    red_flags: [],
+                    quotes: [],
+                    confidence: "low",
+                    _note: "Model did not return valid JSON; showing raw output."
+                  };
+                } else {
+                  console.log("[T&C Summarizer] Token refresh failed, clearing session");
+                  await chrome.storage.local.set({ 
+                    supabaseSession: null, 
+                    subscription: null, 
+                    subscriptionPlan: null,
+                    userEmail: null,
+                    monthlyUsage: null
+                  });
+                  throw new Error("Please sign in again");
+                }
+              }
+            } else {
+              throw e;
+            }
+          }
         } else {
           // Use direct OpenAI API (free tier)
           const outputText = await callOpenAI({
@@ -325,7 +475,6 @@ chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) =>
   if (message.type === "auth_callback" && message.token) {
     chrome.storage.local.set({
       subscription: "active",
-      authToken: message.token,
       userEmail: message.email || "Subscriber"
     }).then(() => {
       sendResponse({ ok: true });

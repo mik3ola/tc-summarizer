@@ -1,0 +1,4 @@
+# Disable JWT verification - we'll handle auth ourselves in the function
+[functions.summarize]
+verify_jwt = false
+

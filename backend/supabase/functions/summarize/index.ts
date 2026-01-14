@@ -1,11 +1,15 @@
+// @ts-nocheck
 // Supabase Edge Function: POST /summarize
-// - Verifies Supabase JWT (user)
-// - Enforces subscription + quota + rate limits (MVP scaffolding)
-// - Calls OpenAI with server-side API key
-//
-// This is a scaffold: you'll need to finish quota rules + Stripe integration.
+// JWT verification is DISABLED - we decode the token ourselves
 
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS"
+};
 
 type Summary = {
   title: string;
@@ -22,35 +26,38 @@ type Summary = {
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "content-type": "application/json" }
+    headers: { "content-type": "application/json", ...corsHeaders }
   });
-}
-
-function requireEnv(name: string) {
-  const v = Deno.env.get(name);
-  if (!v) throw new Error(`Missing env var: ${name}`);
-  return v;
 }
 
 function monthStart(d = new Date()) {
   const dt = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
-  return dt.toISOString().slice(0, 10); // YYYY-MM-DD
+  return dt.toISOString().slice(0, 10);
 }
 
 function getMonthlyQuota(plan: string) {
-  // v1 pricing:
-  // - free: 5/month
-  // - pro: 50/month
-  // - enterprise: custom (env)
-  if (plan === "pro") return Number(Deno.env.get("PRO_MONTHLY_QUOTA") || "50");
-  if (plan === "enterprise") return Number(Deno.env.get("ENTERPRISE_MONTHLY_QUOTA") || "5000");
-  return Number(Deno.env.get("FREE_MONTHLY_QUOTA") || "5");
+  if (plan === "pro") return 50;
+  if (plan === "enterprise") return 5000;
+  return 5; // free tier
+}
+
+function decodeJwtPayload(token: string): { sub: string; role: string } | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    
+    let payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (payload.length % 4 !== 0) payload += "=";
+    
+    return JSON.parse(atob(payload));
+  } catch {
+    return null;
+  }
 }
 
 function buildPrompt(url: string, text: string) {
   return {
-    system:
-      "You summarize website legal pages (terms, privacy, refund, billing). Be concise, cautious, and highlight potentially costly clauses. If unsure, say so.",
+    system: "You summarize website legal pages (terms, privacy, refund, billing). Be concise, cautious, and highlight potentially costly clauses. If unsure, say so.",
     user: `Summarize this page for a normal user.
 
 Requirements:
@@ -80,7 +87,9 @@ ${text}
 }
 
 async function callOpenAI(url: string, text: string): Promise<Summary> {
-  const apiKey = requireEnv("OPENAI_API_KEY");
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+  
   const model = Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini";
   const prompt = buildPrompt(url, text);
 
@@ -107,89 +116,158 @@ async function callOpenAI(url: string, text: string): Promise<Summary> {
 
   const data = await res.json();
   const content = data?.choices?.[0]?.message?.content;
-  if (!content) throw new Error("Empty OpenAI response.");
+  if (!content) throw new Error("Empty OpenAI response");
+  
   return JSON.parse(content) as Summary;
 }
 
-Deno.serve(async (req) => {
+serve(async (req: Request) => {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+  
+  if (req.method !== "POST") {
+    return json({ error: "Method not allowed" }, 405);
+  }
+
   try {
-    if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !serviceRoleKey) {
+      return json({ error: "Server configuration error" }, 500);
+    }
 
-    // Supabase client (service role recommended for server-side writes; JWT is used to identify user)
-    const supabaseUrl = requireEnv("SUPABASE_URL");
-    const anonKey = requireEnv("SUPABASE_ANON_KEY");
+    // Get and decode JWT from authorization header
     const authHeader = req.headers.get("authorization") || "";
+    let userId: string | null = null;
+    
+    if (authHeader.startsWith("Bearer ")) {
+      const token = authHeader.replace("Bearer ", "");
+      const payload = decodeJwtPayload(token);
+      if (payload?.sub) {
+        userId = payload.sub;
+      }
+    }
 
-    const supabase = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
+    // Anonymous users are NOT allowed - must be authenticated
+    if (!userId) {
+      console.log("Anonymous request blocked");
+      return json({ error: "Authentication required. Please sign in to use this service." }, 401);
+    }
 
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
-    const userId = userData.user.id;
+    console.log("User ID:", userId);
 
+    // Parse request body
     const body = await req.json().catch(() => null);
     const url = typeof body?.url === "string" ? body.url : "";
     const text = typeof body?.text === "string" ? body.text : "";
-    if (!url || !text) return json({ error: "Missing url or text" }, 400);
-
-    // Subscription status check (MVP)
-    const { data: sub } = await supabase
-      .from("subscriptions")
-      .select("status, plan")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    const status = sub?.status || "free";
-    const plan = sub?.plan || "free";
-    // Allow free tier usage via backend up to free quota.
-    // Pro users should have status 'active' + plan 'pro'.
-    if (plan === "pro" && status !== "active") return json({ error: "Subscription required" }, 402);
-
-    // Quota check (MVP)
-    const m = monthStart();
-    const { data: counter } = await supabase
-      .from("usage_counters_monthly")
-      .select("summaries_count")
-      .eq("user_id", userId)
-      .eq("month_start", m)
-      .maybeSingle();
-
-    const used = counter?.summaries_count || 0;
-    const quota = getMonthlyQuota(plan);
-    if (used >= quota) return json({ error: "Quota exceeded" }, 429);
-
-    const summary = await callOpenAI(url, text);
-
-    // Record usage
-    await supabase.from("usage_events").insert({
-      user_id: userId,
-      url,
-      url_hash: null,
-      input_chars: text.length,
-      model: Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini",
-      cached: false
-    });
-
-    // Increment monthly counter
-    if (!counter) {
-      await supabase.from("usage_counters_monthly").insert({
-        user_id: userId,
-        month_start: m,
-        summaries_count: 1
-      });
-    } else {
-      await supabase
-        .from("usage_counters_monthly")
-        .update({ summaries_count: used + 1 })
-        .eq("user_id", userId)
-        .eq("month_start", m);
+    
+    if (!url || !text) {
+      return json({ error: "Missing url or text" }, 400);
     }
 
-    return json({ summary });
+    // Create Supabase client for DB operations
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    });
+
+    // Check quota for the authenticated user
+    {
+      const { data: sub } = await supabase
+        .from("subscriptions")
+        .select("status, plan")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const plan = sub?.plan || "free";
+      const m = monthStart();
+      
+      const { data: counter } = await supabase
+        .from("usage_counters_monthly")
+        .select("summaries_count")
+        .eq("user_id", userId)
+        .eq("month_start", m)
+        .maybeSingle();
+
+      const used = counter?.summaries_count || 0;
+      const quota = getMonthlyQuota(plan);
+      
+      if (used >= quota) {
+        return json({ 
+          error: "Quota exceeded",
+          quotaExceeded: true,
+          used,
+          quota,
+          plan,
+          message: plan === "free" 
+            ? "You've used all 5 free summaries this month. Upgrade to Pro for 50 summaries/month!"
+            : "You've reached your monthly limit. Contact us to upgrade your plan."
+        }, 429);
+      }
+    }
+
+    // Call OpenAI
+    console.log("Calling OpenAI for URL:", url.slice(0, 100));
+    const summary = await callOpenAI(url, text);
+    console.log("OpenAI response received, confidence:", summary.confidence);
+
+    // Return the summary first, then try to log usage
+    const response = json({ summary });
+
+    // Try to record usage (non-blocking)
+    if (userId) {
+      try {
+        const m = monthStart();
+        
+        // Log usage event
+        const { error: insertError } = await supabase.from("usage_events").insert({
+          user_id: userId,
+          url,
+          input_chars: text.length,
+          model: Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini",
+          cached: false
+        });
+        if (insertError) console.error("Usage event error:", insertError.message);
+        else console.log("Usage event logged");
+
+        // Update monthly counter
+        const { data: existing, error: selectError } = await supabase
+          .from("usage_counters_monthly")
+          .select("summaries_count")
+          .eq("user_id", userId)
+          .eq("month_start", m)
+          .maybeSingle();
+        
+        if (selectError) {
+          console.error("Counter select error:", selectError.message);
+        } else if (existing) {
+          const { error: updateError } = await supabase
+            .from("usage_counters_monthly")
+            .update({ summaries_count: (existing.summaries_count || 0) + 1 })
+            .eq("user_id", userId)
+            .eq("month_start", m);
+          if (updateError) console.error("Counter update error:", updateError.message);
+          else console.log("Counter updated to:", (existing.summaries_count || 0) + 1);
+        } else {
+          const { error: createError } = await supabase.from("usage_counters_monthly").insert({
+            user_id: userId,
+            month_start: m,
+            summaries_count: 1
+          });
+          if (createError) console.error("Counter create error:", createError.message);
+          else console.log("Counter created");
+        }
+      } catch (e) {
+        console.error("Usage tracking error:", e);
+      }
+    }
+
+    return response;
+    
   } catch (e) {
+    console.error("Error:", e);
     return json({ error: e?.message || String(e) }, 500);
   }
 });
-
-

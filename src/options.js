@@ -8,6 +8,22 @@ const clearCacheBtn = document.getElementById("clearCache");
 const exportDataBtn = document.getElementById("exportData");
 const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
+const upgradeBtn = document.getElementById("upgradeBtn");
+const refreshStatusBtn = document.getElementById("refreshStatusBtn");
+
+// Auth form
+const authFormEl = document.getElementById("authForm");
+const authEmailEl = document.getElementById("authEmail");
+const authPasswordEl = document.getElementById("authPassword");
+const signInBtn = document.getElementById("signInBtn");
+const signUpBtn = document.getElementById("signUpBtn");
+const cancelAuthBtn = document.getElementById("cancelAuthBtn");
+const planHintEl = document.getElementById("planHint");
+
+// Backend config
+const supabaseUrlEl = document.getElementById("supabaseUrl");
+const supabaseAnonKeyEl = document.getElementById("supabaseAnonKey");
+const saveBackendBtn = document.getElementById("saveBackend");
 
 // Toggles
 const autoHoverEl = document.getElementById("autoHover");
@@ -20,6 +36,7 @@ const hoverDelayEl = document.getElementById("hoverDelay");
 const statSummariesEl = document.getElementById("statSummaries");
 const statCachedEl = document.getElementById("statCached");
 const statSavedEl = document.getElementById("statSaved");
+const usageHintEl = document.getElementById("usageHint");
 
 // Subscription elements
 const subBadgeEl = document.getElementById("subBadge");
@@ -27,7 +44,57 @@ const subStatusEl = document.getElementById("subStatus");
 const subActiveEl = document.getElementById("subActive");
 const userEmailEl = document.getElementById("userEmail");
 const apiCardEl = document.getElementById("apiCard");
+const backendCardEl = document.getElementById("backendCard");
+const statsCardEl = document.getElementById("statsCard");
 
+// Modal elements
+const modalOverlay = document.getElementById("modalOverlay");
+const modalIcon = document.getElementById("modalIcon");
+const modalTitle = document.getElementById("modalTitle");
+const modalMessage = document.getElementById("modalMessage");
+const modalBtn = document.getElementById("modalBtn");
+
+// Modal functions
+function showModal(type, title, message) {
+  const icons = {
+    success: "✅",
+    error: "❌",
+    loading: "⏳",
+    info: "ℹ️"
+  };
+  
+  modalIcon.textContent = icons[type] || "ℹ️";
+  modalTitle.textContent = title;
+  modalMessage.textContent = message;
+  
+  // Add type class for styling
+  modalOverlay.querySelector(".modal-box").className = `modal-box modal-${type}`;
+  
+  // Show/hide button based on type
+  if (type === "loading") {
+    modalBtn.style.display = "none";
+  } else {
+    modalBtn.style.display = "inline-block";
+  }
+  
+  modalOverlay.classList.add("show");
+}
+
+function hideModal() {
+  modalOverlay.classList.remove("show");
+}
+
+// Close modal on button click
+modalBtn?.addEventListener("click", hideModal);
+
+// Close modal on overlay click (outside the box)
+modalOverlay?.addEventListener("click", (e) => {
+  if (e.target === modalOverlay) {
+    hideModal();
+  }
+});
+
+// Legacy status function (still used for minor feedback)
 function showStatus(msg, type = "success") {
   statusEl.textContent = msg;
   statusEl.className = `status show ${type}`;
@@ -41,10 +108,15 @@ async function loadSettings() {
     "openaiApiKey",
     "openaiModel",
     "subscription",
+    "subscriptionPlan",
     "userEmail",
+    "supabaseUrl",
+    "supabaseAnonKey",
+    "supabaseSession",
     "preferences",
     "summariesCache",
-    "usageStats"
+    "usageStats",
+    "monthlyUsage"
   ]);
 
   // API settings
@@ -60,39 +132,108 @@ async function loadSettings() {
   hoverDelayEl.value = prefs.hoverDelay || "750";
 
   // Subscription status
-  updateSubscriptionUI(data.subscription, data.userEmail);
+  // Prefer real session if present
+  await refreshSupabaseStatusIfPossible(data);
+  
+  // Refresh data after status update
+  const refreshedData = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
+  updateSubscriptionUI(refreshedData.subscription, refreshedData.userEmail, refreshedData.subscriptionPlan);
 
-  // Stats
-  updateStats(data.summariesCache, data.usageStats);
+  // Backend config
+  supabaseUrlEl.value = data.supabaseUrl || "https://rsxvxezucgczesplmjiw.supabase.co";
+  supabaseAnonKeyEl.value = data.supabaseAnonKey || "";
+
+  // Stats - pass monthly usage and plan
+  updateStats(data.summariesCache, data.usageStats, refreshedData.monthlyUsage, refreshedData.subscriptionPlan);
 }
 
-function updateSubscriptionUI(subscription, email) {
-  const isSubscribed = subscription === "active";
+function updateSubscriptionUI(subscription, email, plan) {
+  const isLoggedIn = !!email;
+  const isPro = subscription === "active" && plan === "pro";
   
-  if (isSubscribed) {
+  // API key hint element
+  const apiKeyHint = document.getElementById("apiKeyHint");
+  const apiKeyBadge = document.getElementById("apiKeyBadge");
+  
+  if (isPro) {
+    // Pro user - logged in with active subscription
     subBadgeEl.textContent = "Pro";
     subBadgeEl.className = "badge badge-success";
     subStatusEl.classList.add("hidden");
     subActiveEl.classList.remove("hidden");
     userEmailEl.textContent = email || "Subscriber";
-    apiCardEl.classList.add("hidden");
-  } else {
-    subBadgeEl.textContent = "Free Tier";
+    planHintEl.textContent = "Pro: 50 summaries/month included. Add your own API key below for unlimited.";
+    upgradeBtn.classList.add("hidden");
+    refreshStatusBtn.classList.remove("hidden");
+    
+    // Show stats and API card for Pro users
+    statsCardEl?.classList.remove("hidden");
+    apiCardEl?.classList.remove("hidden");
+    backendCardEl?.classList.add("hidden");
+    
+    // Update API hint for Pro users
+    if (apiKeyHint) apiKeyHint.innerHTML = "Your Pro plan is active. Add your own key for <strong>unlimited</strong> usage.";
+    if (apiKeyBadge) { apiKeyBadge.textContent = "Optional"; apiKeyBadge.className = "badge badge-info"; }
+  } else if (isLoggedIn) {
+    // Logged in but not pro → backend free tier available
+    subBadgeEl.textContent = "Free";
     subBadgeEl.className = "badge badge-warning";
+    subStatusEl.classList.add("hidden");
+    subActiveEl.classList.remove("hidden");
+    userEmailEl.textContent = email || "User";
+    planHintEl.textContent = "Free: 5 summaries/month. Upgrade to Pro for 50/month and API key access.";
+    upgradeBtn.classList.remove("hidden");
+    refreshStatusBtn.classList.remove("hidden");
+    
+    // Show stats, HIDE API card for free tier (Pro only feature)
+    statsCardEl?.classList.remove("hidden");
+    apiCardEl?.classList.add("hidden"); // API key is Pro-only
+    backendCardEl?.classList.add("hidden");
+  } else {
+    // Not logged in → prompt to sign in/up
+    subBadgeEl.textContent = "Guest";
+    subBadgeEl.className = "badge badge-info";
     subStatusEl.classList.remove("hidden");
     subActiveEl.classList.add("hidden");
-    apiCardEl.classList.remove("hidden");
+    
+    // Hide stats, API card, and backend config for guests - they need to sign in first
+    statsCardEl?.classList.add("hidden");
+    apiCardEl?.classList.add("hidden"); // Must sign in to use API key
+    backendCardEl?.classList.add("hidden"); // Backend config is baked in
   }
 }
 
-function updateStats(cache, stats) {
+function updateStats(cache, stats, monthlyUsage, plan) {
   const cacheCount = cache ? Object.keys(cache).length : 0;
-  const totalSummaries = stats?.totalSummaries || cacheCount;
+  const totalSummaries = stats?.totalSummaries || 0;
   const avgReadTime = 5; // Assume 5 min saved per summary
   
-  statSummariesEl.textContent = totalSummaries;
+  // Determine quota based on plan
+  let quota = 5; // Free tier default
+  if (plan === "pro") quota = 50;
+  else if (plan === "enterprise") quota = 5000;
+  
+  // Use monthly usage if available, otherwise use local stats
+  const used = monthlyUsage ?? totalSummaries;
+  const remaining = Math.max(0, quota - used);
+  
+  statSummariesEl.textContent = `${used}/${quota}`;
   statCachedEl.textContent = cacheCount;
   statSavedEl.textContent = `~${totalSummaries * avgReadTime}`;
+  
+  // Update hint
+  if (usageHintEl) {
+    if (remaining === 0) {
+      usageHintEl.textContent = "You've used all your summaries this month. Upgrade for more!";
+      usageHintEl.style.color = "#f87171";
+    } else if (remaining <= 2) {
+      usageHintEl.textContent = `Only ${remaining} ${remaining === 1 ? "summary" : "summaries"} left this month.`;
+      usageHintEl.style.color = "#f59e0b";
+    } else {
+      usageHintEl.textContent = `${remaining} ${remaining === 1 ? "summary" : "summaries"} remaining this month.`;
+      usageHintEl.style.color = "";
+    }
+  }
 }
 
 // Save API settings
@@ -149,29 +290,276 @@ showQuotesEl.addEventListener("change", savePreferences);
 enableCachingEl.addEventListener("change", savePreferences);
 hoverDelayEl.addEventListener("change", savePreferences);
 
-// Login button (placeholder - will integrate with your auth system)
-loginBtn.addEventListener("click", () => {
-  // TODO: Integrate with your authentication backend
-  // For now, show a message
-  showStatus("Subscription coming soon! For now, use your own API key.", "error");
+function requireBackendConfigOrThrow() {
+  const url = (supabaseUrlEl.value || "").trim();
+  const anon = (supabaseAnonKeyEl.value || "").trim();
+  if (!url) throw new Error("Missing Supabase Project URL (Backend connection section).");
+  if (!anon) throw new Error("Missing Supabase anon key (Backend connection section).");
+  return { url, anon };
+}
+
+async function signInOrUp(mode) {
+  const { url, anon } = requireBackendConfigOrThrow();
+  const email = (authEmailEl.value || "").trim();
+  const password = (authPasswordEl.value || "").trim();
+  if (!email || !password) throw new Error("Please enter both email and password.");
+
+  if (mode === "signup") {
+    showModal("loading", "Creating account...", "Please wait while we create your account.");
+    
+    const res = await fetch(`${url}/auth/v1/signup`, {
+      method: "POST",
+      headers: { "content-type": "application/json", apikey: anon },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json().catch(() => ({}));
+    
+    // Check for various error formats Supabase might return
+    if (!res.ok) {
+      const errorMsg = data?.msg || data?.error_description || data?.message || data?.error?.message || "Signup failed. Please try again.";
+      throw new Error(errorMsg);
+    }
+    
+    // Check if user was created (Supabase returns user object on success)
+    if (data?.user?.id || data?.id) {
+      // Check if email confirmation is required
+      if (data?.user?.confirmation_sent_at || data?.confirmation_sent_at) {
+        showModal("success", "Account created!", "Please check your email to verify your account, then come back and sign in.");
+      } else {
+        showModal("success", "Account created!", "You can now sign in with your email and password.");
+      }
+    } else if (data?.error) {
+      throw new Error(data.error.message || data.error);
+    } else {
+      // Some Supabase configs auto-confirm, so this might still be success
+      showModal("success", "Account created!", "Please check your email or try signing in.");
+    }
+    return;
+  }
+
+  // Sign in
+  showModal("loading", "Signing in...", "Please wait while we verify your credentials.");
   
-  // When ready, this would open your auth flow:
-  // window.open("https://your-backend.com/auth/login", "_blank");
+  const res = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: { "content-type": "application/json", apikey: anon },
+    body: JSON.stringify({ email, password })
+  });
+  const data = await res.json().catch(() => ({}));
+  
+  if (!res.ok) {
+    const errorMsg = data?.error_description || data?.message || data?.error?.message || "Sign-in failed. Please check your credentials.";
+    throw new Error(errorMsg);
+  }
+
+  const expiresAt = Date.now() + (Number(data.expires_in || 0) * 1000);
+  const session = {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: expiresAt,
+    user: data.user ? { id: data.user.id, email: data.user.email } : { email }
+  };
+
+  await chrome.storage.local.set({
+    supabaseUrl: url,
+    supabaseAnonKey: anon,
+    supabaseSession: session
+  });
+
+  authFormEl.classList.add("hidden");
+  showModal("success", "Signed in!", `Welcome back, ${email}!`);
+  await refreshSupabaseStatusIfPossible({ supabaseUrl: url, supabaseAnonKey: anon, supabaseSession: session });
+  await loadSettings();
+}
+
+loginBtn.addEventListener("click", () => {
+  authFormEl.classList.toggle("hidden");
+});
+
+cancelAuthBtn?.addEventListener("click", () => {
+  authFormEl.classList.add("hidden");
+});
+
+signInBtn?.addEventListener("click", async () => {
+  try {
+    await signInOrUp("signin");
+  } catch (e) {
+    console.error(e);
+    showModal("error", "Sign-in failed", e?.message || "Please check your credentials and try again.");
+  }
+});
+
+signUpBtn?.addEventListener("click", async () => {
+  try {
+    await signInOrUp("signup");
+  } catch (e) {
+    console.error(e);
+    showModal("error", "Signup failed", e?.message || "Please try again with a different email.");
+  }
+});
+
+saveBackendBtn?.addEventListener("click", async () => {
+  try {
+    const url = (supabaseUrlEl.value || "").trim();
+    const anon = (supabaseAnonKeyEl.value || "").trim();
+    await chrome.storage.local.set({ supabaseUrl: url, supabaseAnonKey: anon });
+    showStatus("Backend settings saved!");
+  } catch (e) {
+    showStatus(e?.message || "Failed to save backend settings", "error");
+  }
+});
+
+async function refreshSupabaseStatusIfPossible(data) {
+  const supabaseUrl = (data.supabaseUrl || "").trim();
+  const anon = (data.supabaseAnonKey || "").trim();
+  const session = data.supabaseSession;
+  if (!supabaseUrl || !anon || !session?.access_token) return;
+
+  const userId = session.user?.id;
+  
+  // Fetch subscription status (RLS restricts to own row)
+  const subQs = userId
+    ? `?select=status,plan,current_period_end&user_id=eq.${encodeURIComponent(userId)}`
+    : `?select=status,plan,current_period_end`;
+
+  const subRes = await fetch(`${supabaseUrl}/rest/v1/subscriptions${subQs}`, {
+    method: "GET",
+    headers: { apikey: anon, Authorization: `Bearer ${session.access_token}` }
+  });
+
+  if (!subRes.ok) {
+    // If token is invalid/expired, leave as-is; background worker will refresh on next use
+    return;
+  }
+  const subRows = await subRes.json().catch(() => []);
+  const sub = Array.isArray(subRows) ? subRows[0] : subRows;
+  const status = sub?.status || null;
+  const plan = sub?.plan || null;
+
+  // Fetch monthly usage (current month)
+  let monthlyUsage = 0;
+  if (userId) {
+    const now = new Date();
+    const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+    const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${monthStart}`;
+    
+    try {
+      const usageRes = await fetch(`${supabaseUrl}/rest/v1/usage_counters_monthly${usageQs}`, {
+        method: "GET",
+        headers: { apikey: anon, Authorization: `Bearer ${session.access_token}` }
+      });
+      
+      if (usageRes.ok) {
+        const usageRows = await usageRes.json().catch(() => []);
+        const usage = Array.isArray(usageRows) ? usageRows[0] : usageRows;
+        monthlyUsage = usage?.summaries_count || 0;
+      }
+    } catch (e) {
+      console.warn("Failed to fetch monthly usage:", e);
+    }
+  }
+
+  await chrome.storage.local.set({
+    subscription: status,
+    subscriptionPlan: plan,
+    userEmail: session.user?.email || null,
+    monthlyUsage: monthlyUsage
+  });
+}
+
+upgradeBtn?.addEventListener("click", async () => {
+  try {
+    const { supabaseUrl, supabaseAnonKey, supabaseSession } = await chrome.storage.local.get([
+      "supabaseUrl",
+      "supabaseAnonKey",
+      "supabaseSession"
+    ]);
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseSession?.access_token) {
+      throw new Error("Please sign in first.");
+    }
+
+    showModal("loading", "Preparing checkout...", "Please wait while we create your payment link.");
+
+    const res = await fetch(`${supabaseUrl}/functions/v1/create-checkout`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseSession.access_token}`
+      },
+      body: JSON.stringify({})
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || "Failed to create checkout session.");
+    if (!data?.url) throw new Error("Checkout URL missing.");
+
+    hideModal();
+    window.open(data.url, "_blank", "noopener,noreferrer");
+    
+    // Show info modal after a brief delay
+    setTimeout(() => {
+      showModal("info", "Checkout opened", "Complete your payment in the new tab. After payment, click 'Refresh status' to see your Pro subscription.");
+    }, 500);
+  } catch (e) {
+    console.error(e);
+    showModal("error", "Upgrade failed", e?.message || "Please try again later.");
+  }
+});
+
+refreshStatusBtn?.addEventListener("click", async () => {
+  try {
+    showModal("loading", "Refreshing...", "Checking your subscription status.");
+    const data = await chrome.storage.local.get(["supabaseUrl", "supabaseAnonKey", "supabaseSession"]);
+    await refreshSupabaseStatusIfPossible(data);
+    await loadSettings();
+    showModal("success", "Status refreshed", "Your subscription status has been updated.");
+  } catch (e) {
+    showModal("error", "Refresh failed", e?.message || "Failed to refresh status.");
+  }
 });
 
 // Logout button
 logoutBtn.addEventListener("click", async () => {
   await chrome.storage.local.set({ 
     subscription: null, 
+    subscriptionPlan: null,
     userEmail: null,
-    authToken: null 
+    supabaseSession: null
   });
-  updateSubscriptionUI(null, null);
-  showStatus("Logged out successfully.");
+  updateSubscriptionUI(null, null, null);
+  showModal("success", "Logged out", "You have been logged out successfully.");
 });
 
+// Check for query parameters (e.g., ?upgrade=true)
+function handleQueryParams() {
+  const params = new URLSearchParams(window.location.search);
+  
+  if (params.get("upgrade") === "true") {
+    // Wait a moment for the page to load, then trigger upgrade
+    setTimeout(async () => {
+      // Check if user is logged in
+      const { supabaseSession } = await chrome.storage.local.get(["supabaseSession"]);
+      
+      if (supabaseSession?.access_token) {
+        // User is logged in, trigger upgrade flow
+        upgradeBtn?.click();
+      } else {
+        // User not logged in, show login form and info
+        authFormEl?.classList.remove("hidden");
+        showModal("info", "Sign in to upgrade", "Please sign in or create an account first, then click the 'Upgrade to Pro' button.");
+      }
+      
+      // Clear the query param from URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }, 500);
+  }
+}
+
 // Initialize
-loadSettings().catch((e) => {
+loadSettings().then(() => {
+  // Check for query params after settings are loaded
+  handleQueryParams();
+}).catch((e) => {
   console.error("Failed to load settings:", e);
   showStatus(e?.message || "Failed to load settings", "error");
 });
