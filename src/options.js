@@ -149,7 +149,8 @@ async function loadSettings() {
 
 function updateSubscriptionUI(subscription, email, plan) {
   const isLoggedIn = !!email;
-  const isPro = subscription === "active" && plan === "pro";
+  // Pro if: (1) subscription is active AND plan is pro, OR (2) plan is pro (fallback for edge cases)
+  const isPro = (subscription === "active" && plan === "pro") || plan === "pro";
   
   // API key hint element
   const apiKeyHint = document.getElementById("apiKeyHint");
@@ -409,36 +410,152 @@ saveBackendBtn?.addEventListener("click", async () => {
   }
 });
 
+async function refreshSessionToken(supabaseUrl, anon, session) {
+  if (!session?.refresh_token) return null;
+  
+  try {
+    const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { "content-type": "application/json", apikey: anon },
+      body: JSON.stringify({ refresh_token: session.refresh_token })
+    });
+    
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    if (!data?.access_token) return null;
+    
+    const expiresAt = Date.now() + (Number(data.expires_in || 0) * 1000);
+    const refreshed = {
+      ...session,
+      access_token: data.access_token,
+      refresh_token: data.refresh_token || session.refresh_token,
+      expires_at: expiresAt,
+      user: data.user ? { id: data.user.id, email: data.user.email } : session.user
+    };
+    
+    await chrome.storage.local.set({ supabaseSession: refreshed });
+    return refreshed;
+  } catch (e) {
+    console.error("[Options] Token refresh failed:", e);
+    return null;
+  }
+}
+
 async function refreshSupabaseStatusIfPossible(data) {
   const supabaseUrl = (data.supabaseUrl || "").trim();
   const anon = (data.supabaseAnonKey || "").trim();
-  const session = data.supabaseSession;
-  if (!supabaseUrl || !anon || !session?.access_token) return;
-
-  const userId = session.user?.id;
-  
-  // Fetch subscription status (RLS restricts to own row)
-  const subQs = userId
-    ? `?select=status,plan,current_period_end&user_id=eq.${encodeURIComponent(userId)}`
-    : `?select=status,plan,current_period_end`;
-
-  const subRes = await fetch(`${supabaseUrl}/rest/v1/subscriptions${subQs}`, {
-    method: "GET",
-    headers: { apikey: anon, Authorization: `Bearer ${session.access_token}` }
-  });
-
-  if (!subRes.ok) {
-    // If token is invalid/expired, leave as-is; background worker will refresh on next use
+  let session = data.supabaseSession;
+  if (!supabaseUrl || !anon || !session?.access_token) {
     return;
   }
-  const subRows = await subRes.json().catch(() => []);
-  const sub = Array.isArray(subRows) ? subRows[0] : subRows;
-  const status = sub?.status || null;
-  const plan = sub?.plan || null;
 
-  // Fetch monthly usage (current month)
-  let monthlyUsage = 0;
-  if (userId) {
+  const userId = session.user?.id;
+  if (!userId) {
+    return;
+  }
+  
+  // Check if token is expired and refresh if needed
+  const isExpired = session.expires_at && (session.expires_at - 300000) < Date.now();
+  if (isExpired) {
+    const refreshed = await refreshSessionToken(supabaseUrl, anon, session);
+    if (refreshed?.access_token) {
+      session = refreshed;
+    } else {
+      return;
+    }
+  }
+  
+  // Fetch subscription status (RLS restricts to own row)
+  const subQs = `?select=status,plan,current_period_end&user_id=eq.${encodeURIComponent(userId)}`;
+
+  try {
+    const subRes = await fetch(`${supabaseUrl}/rest/v1/subscriptions${subQs}`, {
+      method: "GET",
+      headers: { apikey: anon, Authorization: `Bearer ${session.access_token}` }
+    });
+
+    if (!subRes.ok) {
+      const errorText = await subRes.text().catch(() => "");
+      console.error(`[Options] Failed to fetch subscription (${subRes.status}):`, errorText);
+      
+      // If 401, try refreshing token once more
+      if (subRes.status === 401) {
+        const refreshed = await refreshSessionToken(supabaseUrl, anon, session);
+        if (refreshed?.access_token) {
+          // Retry with new token
+          const retryRes = await fetch(`${supabaseUrl}/rest/v1/subscriptions${subQs}`, {
+            method: "GET",
+            headers: { apikey: anon, Authorization: `Bearer ${refreshed.access_token}` }
+          });
+          if (retryRes.ok) {
+            session = refreshed;
+            // Continue with processing below
+            const subRows = await retryRes.json().catch(() => []);
+            const sub = Array.isArray(subRows) ? subRows[0] : subRows;
+            
+            if (!sub) {
+              await chrome.storage.local.set({
+                subscription: null,
+                subscriptionPlan: null
+              });
+              return;
+            }
+            
+            const status = sub?.status || null;
+            const plan = sub?.plan || null;
+            
+            // Fetch monthly usage
+            let monthlyUsage = 0;
+            const now = new Date();
+            const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+            const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${monthStart}`;
+            
+            try {
+              const usageRes = await fetch(`${supabaseUrl}/rest/v1/usage_counters_monthly${usageQs}`, {
+                method: "GET",
+                headers: { apikey: anon, Authorization: `Bearer ${refreshed.access_token}` }
+              });
+              
+              if (usageRes.ok) {
+                const usageRows = await usageRes.json().catch(() => []);
+                const usage = Array.isArray(usageRows) ? usageRows[0] : usageRows;
+                monthlyUsage = usage?.summaries_count || 0;
+              }
+            } catch (e) {
+              // Silently fail - usage is optional
+            }
+
+            await chrome.storage.local.set({
+              subscription: status,
+              subscriptionPlan: plan,
+              userEmail: refreshed.user?.email || null,
+              monthlyUsage: monthlyUsage
+            });
+            return;
+          }
+        }
+      }
+      
+      return;
+    }
+    
+    const subRows = await subRes.json().catch(() => []);
+    const sub = Array.isArray(subRows) ? subRows[0] : subRows;
+    
+    if (!sub) {
+      // Clear subscription data if no row exists
+      await chrome.storage.local.set({
+        subscription: null,
+        subscriptionPlan: null
+      });
+      return;
+    }
+    
+    const status = sub?.status || null;
+    const plan = sub?.plan || null;
+
+    // Fetch monthly usage (current month)
+    let monthlyUsage = 0;
     const now = new Date();
     const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
     const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${monthStart}`;
@@ -455,16 +572,20 @@ async function refreshSupabaseStatusIfPossible(data) {
         monthlyUsage = usage?.summaries_count || 0;
       }
     } catch (e) {
-      console.warn("Failed to fetch monthly usage:", e);
+      // Silently fail - usage is optional
     }
-  }
 
-  await chrome.storage.local.set({
-    subscription: status,
-    subscriptionPlan: plan,
-    userEmail: session.user?.email || null,
-    monthlyUsage: monthlyUsage
-  });
+    // Store the updated subscription data
+    await chrome.storage.local.set({
+      subscription: status,
+      subscriptionPlan: plan,
+      userEmail: session.user?.email || null,
+      monthlyUsage: monthlyUsage
+    });
+  } catch (e) {
+    console.error("[Options] Error refreshing subscription status:", e);
+    throw e; // Re-throw so caller can handle it
+  }
 }
 
 upgradeBtn?.addEventListener("click", async () => {
@@ -496,10 +617,81 @@ upgradeBtn?.addEventListener("click", async () => {
     hideModal();
     window.open(data.url, "_blank", "noopener,noreferrer");
     
-    // Show info modal after a brief delay
-    setTimeout(() => {
-      showModal("info", "Checkout opened", "Complete your payment in the new tab. After payment, click 'Refresh status' to see your Pro subscription.");
-    }, 500);
+    // Show info modal
+    showModal("info", "Checkout opened", "Complete your payment in the new tab. We'll automatically detect when payment is complete.");
+    
+    // Poll for subscription status changes (payment webhook may take a few seconds)
+    // Stripe redirects to success page, doesn't close window, so we just poll periodically
+    let pollCount = 0;
+    const maxPolls = 20; // Poll for up to 20 checks (every 3 seconds = 60 seconds total)
+    const pollInterval = setInterval(async () => {
+      pollCount++;
+      
+      try {
+        // Refresh subscription status from backend
+        await refreshSupabaseStatusIfPossible({ supabaseUrl, supabaseAnonKey, supabaseSession });
+        
+        // Get updated data immediately after refresh
+        const updated = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
+        
+        // Check if subscription is now active (be flexible - plan="pro" is enough)
+        if ((updated.subscription === "active" && updated.subscriptionPlan === "pro") || updated.subscriptionPlan === "pro") {
+          clearInterval(pollInterval);
+          window.removeEventListener("focus", focusHandler);
+          
+          // Force UI update with latest data
+          updateSubscriptionUI(updated.subscription, updated.userEmail, updated.subscriptionPlan);
+          updateStats(
+            (await chrome.storage.local.get(["summariesCache"])).summariesCache,
+            (await chrome.storage.local.get(["usageStats"])).usageStats,
+            updated.monthlyUsage,
+            updated.subscriptionPlan
+          );
+          
+          // Show success
+          showModal("success", "Payment successful!", "Your Pro subscription is now active! You can start using all Pro features.");
+          return;
+        }
+        
+        // Stop polling after max attempts
+        if (pollCount >= maxPolls) {
+          clearInterval(pollInterval);
+          window.removeEventListener("focus", focusHandler);
+          // Don't show error - user might have completed payment, just remind them to refresh
+          showModal("info", "Payment check complete", "If you completed payment, click 'Refresh status' to see your Pro subscription.");
+        }
+      } catch (err) {
+        console.error("Error polling subscription status:", err);
+      }
+    }, 3000); // Poll every 3 seconds
+    
+    // Also listen for window focus (user might have switched back after payment)
+    const focusHandler = async () => {
+      try {
+        await refreshSupabaseStatusIfPossible({ supabaseUrl, supabaseAnonKey, supabaseSession });
+        const updated = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
+        
+        // Check if subscription is now active (be flexible - plan="pro" is enough)
+        if ((updated.subscription === "active" && updated.subscriptionPlan === "pro") || updated.subscriptionPlan === "pro") {
+          clearInterval(pollInterval);
+          window.removeEventListener("focus", focusHandler);
+          
+          // Force UI update
+          updateSubscriptionUI(updated.subscription, updated.userEmail, updated.subscriptionPlan);
+          updateStats(
+            (await chrome.storage.local.get(["summariesCache"])).summariesCache,
+            (await chrome.storage.local.get(["usageStats"])).usageStats,
+            updated.monthlyUsage,
+            updated.subscriptionPlan
+          );
+          
+          showModal("success", "Payment successful!", "Your Pro subscription is now active!");
+        }
+      } catch (err) {
+        console.error("[Options] Error checking subscription on focus:", err);
+      }
+    };
+    window.addEventListener("focus", focusHandler);
   } catch (e) {
     console.error(e);
     showModal("error", "Upgrade failed", e?.message || "Please try again later.");
@@ -510,11 +702,25 @@ refreshStatusBtn?.addEventListener("click", async () => {
   try {
     showModal("loading", "Refreshing...", "Checking your subscription status.");
     const data = await chrome.storage.local.get(["supabaseUrl", "supabaseAnonKey", "supabaseSession"]);
+    
+    // Force refresh from backend
     await refreshSupabaseStatusIfPossible(data);
+    
+    // Get the updated data
+    const updated = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
+    
+    // Reload all settings to update UI
     await loadSettings();
-    showModal("success", "Status refreshed", "Your subscription status has been updated.");
+    
+    // Show appropriate message based on subscription status
+    if (updated.subscription === "active" && updated.subscriptionPlan === "pro") {
+      showModal("success", "Status refreshed", "Your Pro subscription is active!");
+    } else {
+      showModal("success", "Status refreshed", "Your subscription status has been updated.");
+    }
   } catch (e) {
-    showModal("error", "Refresh failed", e?.message || "Failed to refresh status.");
+    console.error("[Options] Refresh error:", e);
+    showModal("error", "Refresh failed", e?.message || "Failed to refresh status. Please try again.");
   }
 });
 

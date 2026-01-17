@@ -127,7 +127,6 @@ function getLegalContentType(element) {
 
 function findModalContent(element) {
   const contentType = getLegalContentType(element);
-  console.log(`[T&C Summarizer] Looking for ${contentType} content for:`, element.textContent?.trim());
   
   // Strategy 1: Look for data-target or data-bs-target (Bootstrap)
   const modalTarget = element.getAttribute("data-target") || element.getAttribute("data-bs-target") || "";
@@ -174,7 +173,6 @@ function findModalContent(element) {
         if (candidate === element) continue;
         const text = (candidate.textContent || "").trim();
         if (text.length > 100) {
-          console.log(`[T&C Summarizer] Found ${contentType} content via selector:`, selector);
           return candidate;
         }
       }
@@ -201,7 +199,6 @@ function findModalContent(element) {
         if (modal && modal !== element) {
           const text = (modal.textContent || "").trim();
           if (text.length > 100) {
-            console.log(`[T&C Summarizer] Found content via ID pattern:`, selector);
             return modal;
           }
         }
@@ -263,7 +260,6 @@ function findModalContent(element) {
   }
   
   if (bestMatch && bestMatchScore > 0) {
-    console.log(`[T&C Summarizer] Found ${contentType} content via scoring:`, bestMatch.className || bestMatch.id);
     return bestMatch;
   }
   
@@ -446,7 +442,6 @@ function extractTextFromHtml(html, baseUrl) {
         .trim();
     }
 
-    console.log(`[T&C Summarizer] Extracted ${bestText.length} chars from HTML (${html.length} chars)`);
     return bestText;
   } catch (e) {
     console.error("[T&C Summarizer] extractTextFromHtml error:", e);
