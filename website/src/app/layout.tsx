@@ -2,19 +2,19 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "T&C Summarizer - Understand Legal Pages in Seconds",
+  title: "TermsDigest - Understand Legal Pages in Seconds",
   description: "AI-powered Chrome extension that summarizes Terms & Conditions, Privacy Policies, and other legal pages. Stop blindly accepting terms you don't understand.",
   keywords: ["terms and conditions", "privacy policy", "legal summarizer", "AI", "Chrome extension", "TLDR"],
-  authors: [{ name: "T&C Summarizer" }],
+  authors: [{ name: "TermsDigest" }],
   openGraph: {
-    title: "T&C Summarizer - Understand Legal Pages in Seconds",
+    title: "TermsDigest - Understand Legal Pages in Seconds",
     description: "AI-powered Chrome extension that summarizes Terms & Conditions, Privacy Policies, and other legal pages.",
     type: "website",
     locale: "en_GB",
   },
   twitter: {
     card: "summary_large_image",
-    title: "T&C Summarizer",
+    title: "TermsDigest",
     description: "AI-powered Chrome extension that summarizes Terms & Conditions and Privacy Policies.",
   },
 };

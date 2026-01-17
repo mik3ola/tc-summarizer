@@ -14,7 +14,7 @@
 1. Go to **Products** (left sidebar)
 2. Click **Add product**
 3. Fill in:
-   - **Name**: `T&C Summarizer Pro`
+   - **Name**: `TermsDigest Pro`
    - **Description**: `50 AI-powered summaries per month`
 4. Click **Add product**
 
@@ -120,7 +120,7 @@ We need to deploy two Edge Functions to Supabase:
 ## ✅ Checklist
 
 - [ ] Created Stripe account
-- [ ] Created "T&C Summarizer Pro" product
+- [ ] Created "TermsDigest Pro" product
 - [ ] Created £4.99/year price and noted the Price ID
 - [ ] Copied Stripe Secret Key
 - [ ] Created webhook endpoint

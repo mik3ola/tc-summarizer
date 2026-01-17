@@ -330,7 +330,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         if (!isLoggedIn) {
           sendResponse({
             ok: false,
-            error: "Please sign in to use T&C Summarizer!"
+            error: "Please sign in to use TermsDigest!"
           });
           return;
         }
@@ -366,7 +366,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
         // Always try backend first (for Pro users to consume quota, Free users have no choice)
         if (shouldTryBackendFirst) {
-          console.log("[T&C Summarizer] Using backend with:", {
+          console.log("[TermsDigest] Using backend with:", {
             supabaseUrl: settings.supabaseUrl,
             hasAnonKey: !!settings.supabaseAnonKey,
             hasAccessToken: !!settings.session?.access_token,
@@ -516,7 +516,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return;
       }
     } catch (e) {
-      console.error("[T&C Summarizer] Error:", e);
+      console.error("[TermsDigest] Error:", e);
       sendResponse({ ok: false, error: e?.message || String(e) });
     }
   })();

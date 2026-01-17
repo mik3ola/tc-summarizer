@@ -1,8 +1,8 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Support - T&C Summarizer",
-  description: "Get help with T&C Summarizer. FAQs, troubleshooting, and contact information.",
+  title: "Support - TermsDigest",
+  description: "Get help with TermsDigest. FAQs, troubleshooting, and contact information.",
 };
 
 export default function SupportPage() {
@@ -13,7 +13,7 @@ export default function SupportPage() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <span className="text-2xl">📋</span>
-            <span className="font-bold text-lg">T&C Summarizer</span>
+            <span className="font-bold text-lg">TermsDigest</span>
           </Link>
           <div className="flex items-center gap-6">
             <Link href="/#features" className="text-gray-400 hover:text-white transition-colors text-sm">Features</Link>
@@ -33,12 +33,12 @@ export default function SupportPage() {
           {/* Contact Cards */}
           <div className="grid md:grid-cols-3 gap-6 mb-16">
             <a 
-              href="mailto:support@tc-summarizer.com" 
+              href="mailto:support@termsdigest.com" 
               className="glass-card rounded-2xl p-6 text-center hover:border-blue-500/50 transition-colors group"
             >
               <div className="text-4xl mb-4">📧</div>
               <h3 className="font-semibold mb-2 group-hover:text-blue-400 transition-colors">Email Support</h3>
-              <p className="text-gray-400 text-sm">support@tc-summarizer.com</p>
+              <p className="text-gray-400 text-sm">support@termsdigest.com</p>
               <p className="text-gray-500 text-xs mt-2">Response within 24 hours</p>
             </a>
 
@@ -55,12 +55,12 @@ export default function SupportPage() {
             </a>
 
             <a 
-              href="mailto:enterprise@tc-summarizer.com" 
+              href="mailto:enterprise@termsdigest.com" 
               className="glass-card rounded-2xl p-6 text-center hover:border-blue-500/50 transition-colors group"
             >
               <div className="text-4xl mb-4">🏢</div>
               <h3 className="font-semibold mb-2 group-hover:text-blue-400 transition-colors">Enterprise</h3>
-              <p className="text-gray-400 text-sm">enterprise@tc-summarizer.com</p>
+              <p className="text-gray-400 text-sm">enterprise@termsdigest.com</p>
               <p className="text-gray-500 text-xs mt-2">Custom plans & SSO</p>
             </a>
           </div>
@@ -72,7 +72,7 @@ export default function SupportPage() {
             <div className="space-y-4">
               {[
                 {
-                  q: "How do I install T&C Summarizer?",
+                  q: "How do I install TermsDigest?",
                   a: "Visit the Chrome Web Store and click \"Add to Chrome\". The extension will be installed automatically and is ready to use immediately."
                 },
                 {
@@ -166,7 +166,7 @@ export default function SupportPage() {
           <div className="text-center mt-12">
             <p className="text-gray-400 mb-4">Still need help?</p>
             <a 
-              href="mailto:support@tc-summarizer.com"
+              href="mailto:support@termsdigest.com"
               className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-8 py-3 rounded-xl font-semibold transition-all"
             >
               Contact Support
@@ -181,7 +181,7 @@ export default function SupportPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
               <span className="text-xl">📋</span>
-              <span className="font-semibold">T&C Summarizer</span>
+              <span className="font-semibold">TermsDigest</span>
             </div>
             <div className="flex items-center gap-6 text-sm text-gray-400">
               <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
@@ -189,7 +189,7 @@ export default function SupportPage() {
               <Link href="/support" className="hover:text-white transition-colors">Support</Link>
             </div>
             <div className="text-sm text-gray-500">
-              © {new Date().getFullYear()} T&C Summarizer. All rights reserved.
+              © {new Date().getFullYear()} TermsDigest. All rights reserved.
             </div>
           </div>
         </div>

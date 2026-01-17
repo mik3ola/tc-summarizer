@@ -267,7 +267,7 @@ exportDataBtn.addEventListener("click", async () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `tc-summarizer-data-${Date.now()}.json`;
+  a.download = `termsdigest-data-${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(url);
   showStatus("Data exported!");

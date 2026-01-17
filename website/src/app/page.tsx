@@ -12,14 +12,14 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-2xl">📋</span>
-            <span className="font-bold text-lg">T&C Summarizer</span>
+            <span className="font-bold text-lg">TermsDigest</span>
           </div>
           <div className="flex items-center gap-6">
             <Link href="#features" className="text-gray-400 hover:text-white transition-colors text-sm">Features</Link>
             <Link href="#pricing" className="text-gray-400 hover:text-white transition-colors text-sm">Pricing</Link>
             <Link href="/support" className="text-gray-400 hover:text-white transition-colors text-sm">Support</Link>
             <a 
-              href="https://chrome.google.com/webstore/detail/tc-summarizer" 
+              href="https://chrome.google.com/webstore/detail/termsdigest" 
               target="_blank"
               rel="noopener noreferrer"
               className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -59,7 +59,7 @@ export default function Home() {
             
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <a 
-                href="https://chrome.google.com/webstore/detail/tc-summarizer" 
+                href="https://chrome.google.com/webstore/detail/termsdigest" 
                 target="_blank"
                 rel="noopener noreferrer"
                 className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-8 py-4 rounded-xl text-lg font-semibold transition-all glow hover:scale-105"
@@ -235,7 +235,7 @@ export default function Home() {
               </ul>
 
               <a 
-                href="https://chrome.google.com/webstore/detail/tc-summarizer" 
+                href="https://chrome.google.com/webstore/detail/termsdigest" 
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block w-full text-center py-3 rounded-xl border border-gray-700 hover:border-gray-500 transition-colors font-medium mt-auto"
@@ -284,7 +284,7 @@ export default function Home() {
               </ul>
 
               <a 
-                href="https://chrome.google.com/webstore/detail/tc-summarizer" 
+                href="https://chrome.google.com/webstore/detail/termsdigest" 
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block w-full text-center py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all font-semibold mt-auto"
@@ -345,12 +345,12 @@ export default function Home() {
               Join thousands of users who stopped blindly accepting legal terms.
             </p>
             <a 
-              href="https://chrome.google.com/webstore/detail/tc-summarizer" 
+              href="https://chrome.google.com/webstore/detail/termsdigest" 
               target="_blank"
               rel="noopener noreferrer"
               className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-8 py-4 rounded-xl text-lg font-semibold transition-all glow hover:scale-105"
             >
-              Install T&C Summarizer — Free
+              Install TermsDigest — Free
             </a>
           </div>
         </div>
@@ -362,7 +362,7 @@ export default function Home() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
               <span className="text-xl">📋</span>
-              <span className="font-semibold">T&C Summarizer</span>
+              <span className="font-semibold">TermsDigest</span>
             </div>
             
             <div className="flex items-center gap-6 text-sm text-gray-400">
@@ -372,7 +372,7 @@ export default function Home() {
             </div>
             
             <div className="text-sm text-gray-500">
-              © {new Date().getFullYear()} T&C Summarizer. All rights reserved.
+              © {new Date().getFullYear()} TermsDigest. All rights reserved.
             </div>
           </div>
         </div>

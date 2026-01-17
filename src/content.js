@@ -18,7 +18,7 @@ async function loadPreferences() {
       HOVER_DELAY_MS = parseInt(preferences.hoverDelay) || 750;
     }
   } catch (e) {
-    console.warn("[T&C Summarizer] Could not load preferences:", e);
+    console.warn("[TermsDigest] Could not load preferences:", e);
   }
 }
 
@@ -382,7 +382,7 @@ function toAbsoluteUrl(href) {
 function extractTextFromHtml(html, baseUrl) {
   try {
     if (!html || typeof html !== "string") {
-      console.warn("[T&C Summarizer] No HTML provided");
+      console.warn("[TermsDigest] No HTML provided");
       return "";
     }
     
@@ -395,7 +395,7 @@ function extractTextFromHtml(html, baseUrl) {
         doc.head.appendChild(base);
       } catch (e) {
         // CSP may block base-uri, but that's okay - we just won't have relative URL resolution
-        console.warn("[T&C Summarizer] Could not set base URL (CSP restriction):", e.message);
+        console.warn("[TermsDigest] Could not set base URL (CSP restriction):", e.message);
       }
     }
 
@@ -444,7 +444,7 @@ function extractTextFromHtml(html, baseUrl) {
 
     return bestText;
   } catch (e) {
-    console.error("[T&C Summarizer] extractTextFromHtml error:", e);
+    console.error("[TermsDigest] extractTextFromHtml error:", e);
     return "";
   }
 }
@@ -455,7 +455,7 @@ function clamp(n, min, max) {
 
 function createUi() {
   const host = document.createElement("div");
-  host.id = "tc-hover-summarizer-root";
+  host.id = "termsdigest-root";
   host.style.all = "initial";
   host.style.position = "fixed";
   host.style.zIndex = "2147483647";

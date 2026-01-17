@@ -7,7 +7,7 @@
 3. Copy and paste this **entire SQL script**:
 
 ```sql
--- Supabase schema for T&C Hover Summarizer
+-- Supabase schema for TermsDigest
 
 -- 1) Profiles (ties to auth.users)
 create table if not exists public.profiles (
