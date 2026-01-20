@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export const metadata = {
   title: "Support - TermsDigest",
@@ -12,7 +13,7 @@ export default function SupportPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 glass-card">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">📋</span>
+            <Image src="/logo.png" alt="TermsDigest" width={32} height={32} className="w-8 h-8" />
             <span className="font-bold text-lg">TermsDigest</span>
           </Link>
           <div className="flex items-center gap-6">
@@ -180,7 +181,7 @@ export default function SupportPage() {
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
-              <span className="text-xl">📋</span>
+              <Image src="/logo.png" alt="TermsDigest" width={24} height={24} className="w-6 h-6" />
               <span className="font-semibold">TermsDigest</span>
             </div>
             <div className="flex items-center gap-6 text-sm text-gray-400">

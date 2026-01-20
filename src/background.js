@@ -26,8 +26,6 @@ async function getSettings() {
     "openaiModel",
     "subscription",
     "subscriptionPlan",
-    "supabaseUrl",
-    "supabaseAnonKey",
     "supabaseSession",
     "preferences"
   ]);
@@ -40,8 +38,8 @@ async function getSettings() {
   return {
     openaiApiKey: typeof data.openaiApiKey === "string" ? data.openaiApiKey.trim() : "",
     openaiModel: typeof data.openaiModel === "string" && data.openaiModel.trim() ? data.openaiModel.trim() : DEFAULT_MODEL,
-    supabaseUrl: (data.supabaseUrl || DEFAULT_SUPABASE_URL).trim(),
-    supabaseAnonKey: (data.supabaseAnonKey || DEFAULT_SUPABASE_ANON_KEY).trim(),
+    supabaseUrl: DEFAULT_SUPABASE_URL.trim(), // Always use default
+    supabaseAnonKey: DEFAULT_SUPABASE_ANON_KEY.trim(), // Always use default
     session: session,
     isSessionExpired: isSessionExpired,
     subscription: data.subscription || null,
@@ -506,8 +504,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
               };
         }
 
-        // Cache the result
-        await setCache(cacheKey, { createdAt: nowMs(), summary });
+        // Cache the result (store original text length for minutes saved calculation)
+        await setCache(cacheKey, { 
+          createdAt: nowMs(), 
+          summary,
+          originalTextLength: text.length 
+        });
         
         // Increment usage stats
         await incrementStats();

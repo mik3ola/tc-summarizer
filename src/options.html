@@ -33,9 +33,13 @@
         margin: 0 0 8px;
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
       }
-      .logo { font-size: 1.75rem; }
+      .logo { 
+        width: 32px;
+        height: 32px;
+        vertical-align: middle;
+      }
       .subtitle { color: var(--text-muted); margin-bottom: 24px; font-size: 0.9rem; }
       
       .card {
@@ -269,7 +273,7 @@
       </div>
     </div>
     <div class="container">
-      <h1><span class="logo">📜</span> TermsDigest</h1>
+      <h1><img id="logoImg" src="" alt="TermsDigest" class="logo" /> TermsDigest</h1>
       <p class="subtitle">Quickly understand Terms & Conditions before you agree</p>
       
       <!-- Subscription Status Card -->
@@ -364,26 +368,6 @@
         </div>
       </div>
 
-      <!-- Backend connection (developer) -->
-      <div class="card" id="backendCard">
-        <div class="card-header">
-          <div class="card-title">🧩 Backend connection</div>
-          <span class="badge badge-info">Dev</span>
-        </div>
-        <div class="input-group">
-          <label for="supabaseUrl">Supabase Project URL</label>
-          <input id="supabaseUrl" type="text" placeholder="https://xxxxx.supabase.co" autocomplete="off" />
-        </div>
-        <div class="input-group">
-          <label for="supabaseAnonKey">Supabase anon key</label>
-          <input id="supabaseAnonKey" type="password" placeholder="eyJhbGciOi..." autocomplete="off" />
-          <div class="input-hint">This is a public key used by the extension to talk to Supabase. For Chrome Web Store release we can bake this in.</div>
-        </div>
-        <div class="btn-row">
-          <button id="saveBackend" class="primary">Save backend settings</button>
-        </div>
-      </div>
-      
       <!-- Preferences -->
       <div class="card">
         <div class="card-title" style="margin-bottom: 12px;">⚙️ Preferences</div>

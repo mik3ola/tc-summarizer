@@ -20,10 +20,11 @@ const signUpBtn = document.getElementById("signUpBtn");
 const cancelAuthBtn = document.getElementById("cancelAuthBtn");
 const planHintEl = document.getElementById("planHint");
 
-// Backend config
-const supabaseUrlEl = document.getElementById("supabaseUrl");
-const supabaseAnonKeyEl = document.getElementById("supabaseAnonKey");
-const saveBackendBtn = document.getElementById("saveBackend");
+// Backend config - removed (always use defaults)
+
+// Default Supabase configuration (same as background.js)
+const DEFAULT_SUPABASE_URL = "https://rsxvxezucgczesplmjiw.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzeHZ4ZXp1Y2djemVzcGxtaml3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjcwNjYsImV4cCI6MjA4MzU0MzA2Nn0.1umoIH60gsytGtmfbgfxr1OZJs_L-62wT_BWVaMt5lw";
 
 // Toggles
 const autoHoverEl = document.getElementById("autoHover");
@@ -110,8 +111,6 @@ async function loadSettings() {
     "subscription",
     "subscriptionPlan",
     "userEmail",
-    "supabaseUrl",
-    "supabaseAnonKey",
     "supabaseSession",
     "preferences",
     "summariesCache",
@@ -133,15 +132,13 @@ async function loadSettings() {
 
   // Subscription status
   // Prefer real session if present
-  await refreshSupabaseStatusIfPossible(data);
+  await refreshSupabaseStatusIfPossible({ supabaseSession: data.supabaseSession });
   
   // Refresh data after status update
   const refreshedData = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
   updateSubscriptionUI(refreshedData.subscription, refreshedData.userEmail, refreshedData.subscriptionPlan);
 
-  // Backend config
-  supabaseUrlEl.value = data.supabaseUrl || "https://rsxvxezucgczesplmjiw.supabase.co";
-  supabaseAnonKeyEl.value = data.supabaseAnonKey || "";
+  // Backend config - always use defaults (not user-configurable)
 
   // Stats - pass monthly usage and plan
   updateStats(data.summariesCache, data.usageStats, refreshedData.monthlyUsage, refreshedData.subscriptionPlan);
@@ -170,7 +167,6 @@ function updateSubscriptionUI(subscription, email, plan) {
     // Show stats and API card for Pro users
     statsCardEl?.classList.remove("hidden");
     apiCardEl?.classList.remove("hidden");
-    backendCardEl?.classList.add("hidden");
     
     // Update API hint for Pro users
     if (apiKeyHint) apiKeyHint.innerHTML = "Your Pro plan is active. Add your own key for <strong>unlimited</strong> usage.";
@@ -189,7 +185,6 @@ function updateSubscriptionUI(subscription, email, plan) {
     // Show stats, HIDE API card for free tier (Pro only feature)
     statsCardEl?.classList.remove("hidden");
     apiCardEl?.classList.add("hidden"); // API key is Pro-only
-    backendCardEl?.classList.add("hidden");
   } else {
     // Not logged in → prompt to sign in/up
     subBadgeEl.textContent = "Guest";
@@ -197,17 +192,28 @@ function updateSubscriptionUI(subscription, email, plan) {
     subStatusEl.classList.remove("hidden");
     subActiveEl.classList.add("hidden");
     
-    // Hide stats, API card, and backend config for guests - they need to sign in first
+    // Hide stats, API card for guests - they need to sign in first
     statsCardEl?.classList.add("hidden");
     apiCardEl?.classList.add("hidden"); // Must sign in to use API key
-    backendCardEl?.classList.add("hidden"); // Backend config is baked in
   }
 }
 
 function updateStats(cache, stats, monthlyUsage, plan) {
   const cacheCount = cache ? Object.keys(cache).length : 0;
   const totalSummaries = stats?.totalSummaries || 0;
-  const avgReadTime = 5; // Assume 5 min saved per summary
+  
+  // Calculate minutes saved based on actual word count from cached summaries
+  // Average reading speed: ~200 words per minute
+  let totalWords = 0;
+  if (cache) {
+    Object.values(cache).forEach(entry => {
+      if (entry?.originalTextLength) {
+        // Estimate words from character count (average 5 chars per word)
+        totalWords += Math.floor(entry.originalTextLength / 5);
+      }
+    });
+  }
+  const minutesSaved = Math.floor(totalWords / 200); // 200 words per minute reading speed
   
   // Determine quota based on plan
   let quota = 5; // Free tier default
@@ -220,7 +226,7 @@ function updateStats(cache, stats, monthlyUsage, plan) {
   
   statSummariesEl.textContent = `${used}/${quota}`;
   statCachedEl.textContent = cacheCount;
-  statSavedEl.textContent = `~${totalSummaries * avgReadTime}`;
+  statSavedEl.textContent = `~${minutesSaved}`;
   
   // Update hint
   if (usageHintEl) {
@@ -232,7 +238,7 @@ function updateStats(cache, stats, monthlyUsage, plan) {
       usageHintEl.style.color = "#f59e0b";
     } else {
       usageHintEl.textContent = `${remaining} ${remaining === 1 ? "summary" : "summaries"} remaining this month.`;
-      usageHintEl.style.color = "";
+      usageHintEl.style.color = "var(--text-muted)";
     }
   }
 }
@@ -257,6 +263,7 @@ clearApiBtn.addEventListener("click", async () => {
 clearCacheBtn.addEventListener("click", async () => {
   await chrome.storage.local.set({ summariesCache: {} });
   statCachedEl.textContent = "0";
+  statSavedEl.textContent = "~0"; // Also clear minutes saved
   showStatus("Summary cache cleared!");
 });
 
@@ -291,16 +298,16 @@ showQuotesEl.addEventListener("change", savePreferences);
 enableCachingEl.addEventListener("change", savePreferences);
 hoverDelayEl.addEventListener("change", savePreferences);
 
-function requireBackendConfigOrThrow() {
-  const url = (supabaseUrlEl.value || "").trim();
-  const anon = (supabaseAnonKeyEl.value || "").trim();
-  if (!url) throw new Error("Missing Supabase Project URL (Backend connection section).");
-  if (!anon) throw new Error("Missing Supabase anon key (Backend connection section).");
+async function requireBackendConfigOrThrow() {
+  // Always use hardcoded defaults (not user-configurable)
+  const url = DEFAULT_SUPABASE_URL.trim();
+  const anon = DEFAULT_SUPABASE_ANON_KEY.trim();
+  if (!url || !anon) throw new Error("Backend configuration error. Please contact support.");
   return { url, anon };
 }
 
 async function signInOrUp(mode) {
-  const { url, anon } = requireBackendConfigOrThrow();
+  const { url, anon } = await requireBackendConfigOrThrow();
   const email = (authEmailEl.value || "").trim();
   const password = (authPasswordEl.value || "").trim();
   if (!email || !password) throw new Error("Please enter both email and password.");
@@ -362,14 +369,12 @@ async function signInOrUp(mode) {
   };
 
   await chrome.storage.local.set({
-    supabaseUrl: url,
-    supabaseAnonKey: anon,
     supabaseSession: session
   });
 
   authFormEl.classList.add("hidden");
   showModal("success", "Signed in!", `Welcome back, ${email}!`);
-  await refreshSupabaseStatusIfPossible({ supabaseUrl: url, supabaseAnonKey: anon, supabaseSession: session });
+  await refreshSupabaseStatusIfPossible({ supabaseSession: session });
   await loadSettings();
 }
 
@@ -399,16 +404,7 @@ signUpBtn?.addEventListener("click", async () => {
   }
 });
 
-saveBackendBtn?.addEventListener("click", async () => {
-  try {
-    const url = (supabaseUrlEl.value || "").trim();
-    const anon = (supabaseAnonKeyEl.value || "").trim();
-    await chrome.storage.local.set({ supabaseUrl: url, supabaseAnonKey: anon });
-    showStatus("Backend settings saved!");
-  } catch (e) {
-    showStatus(e?.message || "Failed to save backend settings", "error");
-  }
-});
+// Backend settings save removed - always use hardcoded defaults
 
 async function refreshSessionToken(supabaseUrl, anon, session) {
   if (!session?.refresh_token) return null;
@@ -442,10 +438,10 @@ async function refreshSessionToken(supabaseUrl, anon, session) {
 }
 
 async function refreshSupabaseStatusIfPossible(data) {
-  const supabaseUrl = (data.supabaseUrl || "").trim();
-  const anon = (data.supabaseAnonKey || "").trim();
+  const supabaseUrl = DEFAULT_SUPABASE_URL.trim();
+  const anon = DEFAULT_SUPABASE_ANON_KEY.trim();
   let session = data.supabaseSession;
-  if (!supabaseUrl || !anon || !session?.access_token) {
+  if (!session?.access_token) {
     return;
   }
 
@@ -590,14 +586,12 @@ async function refreshSupabaseStatusIfPossible(data) {
 
 upgradeBtn?.addEventListener("click", async () => {
   try {
-    const { supabaseUrl, supabaseAnonKey, supabaseSession } = await chrome.storage.local.get([
-      "supabaseUrl",
-      "supabaseAnonKey",
-      "supabaseSession"
-    ]);
-    if (!supabaseUrl || !supabaseAnonKey || !supabaseSession?.access_token) {
+    const { supabaseSession } = await chrome.storage.local.get(["supabaseSession"]);
+    if (!supabaseSession?.access_token) {
       throw new Error("Please sign in first.");
     }
+    const supabaseUrl = DEFAULT_SUPABASE_URL.trim();
+    const supabaseAnonKey = DEFAULT_SUPABASE_ANON_KEY.trim();
 
     showModal("loading", "Preparing checkout...", "Please wait while we create your payment link.");
 
@@ -629,7 +623,7 @@ upgradeBtn?.addEventListener("click", async () => {
       
       try {
         // Refresh subscription status from backend
-        await refreshSupabaseStatusIfPossible({ supabaseUrl, supabaseAnonKey, supabaseSession });
+        await refreshSupabaseStatusIfPossible({ supabaseSession });
         
         // Get updated data immediately after refresh
         const updated = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
@@ -668,7 +662,7 @@ upgradeBtn?.addEventListener("click", async () => {
     // Also listen for window focus (user might have switched back after payment)
     const focusHandler = async () => {
       try {
-        await refreshSupabaseStatusIfPossible({ supabaseUrl, supabaseAnonKey, supabaseSession });
+        await refreshSupabaseStatusIfPossible({ supabaseSession });
         const updated = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
         
         // Check if subscription is now active (be flexible - plan="pro" is enough)
@@ -701,7 +695,7 @@ upgradeBtn?.addEventListener("click", async () => {
 refreshStatusBtn?.addEventListener("click", async () => {
   try {
     showModal("loading", "Refreshing...", "Checking your subscription status.");
-    const data = await chrome.storage.local.get(["supabaseUrl", "supabaseAnonKey", "supabaseSession"]);
+    const data = await chrome.storage.local.get(["supabaseSession"]);
     
     // Force refresh from backend
     await refreshSupabaseStatusIfPossible(data);
@@ -759,6 +753,12 @@ function handleQueryParams() {
       window.history.replaceState({}, document.title, window.location.pathname);
     }, 500);
   }
+}
+
+// Initialize logo
+const logoImg = document.getElementById("logoImg");
+if (logoImg) {
+  logoImg.src = chrome.runtime.getURL("icons/icon48.png");
 }
 
 // Initialize
