@@ -6,6 +6,10 @@ export const metadata: Metadata = {
   description: "AI-powered Chrome extension that summarizes Terms & Conditions, Privacy Policies, and other legal pages. Stop blindly accepting terms you don't understand.",
   keywords: ["terms and conditions", "privacy policy", "legal summarizer", "AI", "Chrome extension", "TLDR"],
   authors: [{ name: "TermsDigest" }],
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
   openGraph: {
     title: "TermsDigest - Understand Legal Pages in Seconds",
     description: "AI-powered Chrome extension that summarizes Terms & Conditions, Privacy Policies, and other legal pages.",

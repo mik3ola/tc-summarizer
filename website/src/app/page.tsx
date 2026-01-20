@@ -351,7 +351,7 @@ export default function Home() {
               rel="noopener noreferrer"
               className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-8 py-4 rounded-xl text-lg font-semibold transition-all glow hover:scale-105"
             >
-              Install TermsDigest — Free
+              Install TermsDigest - Free
             </a>
           </div>
         </div>

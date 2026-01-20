@@ -124,7 +124,7 @@ function buildPrompt() {
 Requirements:
 - Output STRICT JSON only (no markdown, no extra text).
 - Be factual; do not invent clauses.
-- Focus on costs/renewals, cancellation/refunds, liability, arbitration/jurisdiction, data sharing/ads, auto-renew, trials, termination, and unusual restrictions.
+- Focus on costs/renewals, cancellation/refunds/returns/exchanges, liability, arbitration/jurisdiction, data sharing/ads, auto-renew, trials, termination, and unusual restrictions.
 - Include a short list of quotes to support the biggest risks.
 
 Return JSON with this schema:
