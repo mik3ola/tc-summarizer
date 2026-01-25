@@ -188,7 +188,7 @@ export default function SupportPage() {
               <Image src="/logo.png" alt="TermsDigest" width={24} height={24} className="w-6 h-6" />
               <span className="font-semibold">TermsDigest</span>
             </div>
-            <div className="flex items-center gap-6 text-sm text-gray-400">
+            <div className="flex items-center gap-6 text-sm text-gray-500">
               <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
               <Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link>
               <Link href="/support" className="hover:text-white transition-colors">Support</Link>

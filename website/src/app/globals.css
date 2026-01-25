@@ -90,22 +90,104 @@ body {
 /* Light theme specific overrides */
 [data-theme="light"] .glass-card {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="light"] .text-gray-300 {
+  color: #374151;
 }
 
 [data-theme="light"] .text-gray-400 {
-  color: var(--foreground-muted);
+  color: #4b5563;
 }
 
 [data-theme="light"] .text-gray-500 {
-  color: #9ca3af;
+  color: #6b7280;
 }
 
 [data-theme="light"] .border-gray-700 {
-  border-color: var(--border);
+  border-color: #e5e7eb;
 }
 
 [data-theme="light"] .border-gray-800 {
-  border-color: var(--border);
+  border-color: #e5e7eb;
+}
+
+[data-theme="light"] .bg-gray-800 {
+  background-color: #f3f4f6;
+}
+
+[data-theme="light"] .bg-gray-900 {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+}
+
+/* Keep gradient button text white in light mode */
+[data-theme="light"] .bg-gradient-to-r {
+  color: #ffffff;
+}
+
+/* Fix hover states for light mode */
+[data-theme="light"] .hover\:text-white:hover {
+  color: var(--foreground);
+}
+
+/* Support hover:text-foreground class */
+.hover\:text-foreground:hover {
+  color: var(--foreground);
+}
+
+/* Fix secondary buttons in light mode */
+[data-theme="light"] .border-gray-700.hover\:border-gray-500:hover {
+  border-color: #9ca3af;
+}
+
+/* Ensure gradient buttons always have white text */
+.from-blue-600.to-purple-600,
+.from-blue-500.to-purple-500 {
+  color: #ffffff !important;
+}
+
+/* Light mode blue text adjustments */
+[data-theme="light"] .text-blue-400 {
+  color: #2563eb;
+}
+
+[data-theme="light"] .text-blue-300 {
+  color: #3b82f6;
+}
+
+/* Light mode badge pill in hero */
+[data-theme="light"] .bg-blue-600\/20 {
+  background-color: rgba(37, 99, 235, 0.1);
+}
+
+[data-theme="light"] .border-blue-500\/30 {
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+/* Light mode green text */
+[data-theme="light"] .text-green-400 {
+  color: #16a34a;
+}
+
+[data-theme="light"] .text-green-500 {
+  color: #22c55e;
+}
+
+/* Light mode red text */
+[data-theme="light"] .text-red-400 {
+  color: #dc2626;
+}
+
+/* Light mode demo browser mockup */
+[data-theme="light"] .bg-gray-800.px-4.py-3 {
+  background-color: #e5e7eb;
+}
+
+/* Ensure proper contrast for FAQ answers */
+[data-theme="light"] details .text-gray-400 {
+  color: #374151;
 }
 
 /* Animation */
