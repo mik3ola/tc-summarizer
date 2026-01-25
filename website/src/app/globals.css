@@ -265,109 +265,11 @@ body {
 }
 
 /* ========================================
-   INTRO ANIMATION
+   ADDITIONAL UTILITIES
    ======================================== */
 
-/* Intro overlay that covers the entire page during animation */
-.intro-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--background);
-  pointer-events: none;
-  transition: background 0.8s ease-out;
-}
-
-/* When transitioning, fade the background to transparent */
-.intro-overlay.intro-transitioning {
-  background: transparent;
-}
-
-.intro-overlay.intro-complete {
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease-out, visibility 0.3s ease-out;
-}
-
-/* Intro headline container */
-.intro-headline {
-  text-align: center;
-  opacity: 0;
-  transform: scale(1.2);
-  transition: none;
-}
-
-/* Phase 1: Headline fades in at center, slightly enlarged */
-.intro-headline.intro-visible {
-  opacity: 1;
-  transform: scale(1.2);
-  animation: intro-headline-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes intro-headline-in {
-  0% {
-    opacity: 0;
-    transform: scale(1.4);
-    letter-spacing: 0.02em;
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1.2);
-    letter-spacing: -0.02em;
-  }
-}
-
-/* Phase 2: Headline settles into its final position (scales down to 1, moves up) */
-.intro-headline.intro-settle {
-  animation: intro-settle 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes intro-settle {
-  0% {
-    opacity: 1;
-    transform: scale(1.2) translateY(0);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(-15vh);
-  }
-}
-
-/* Main content starts hidden */
-.main-content {
-  opacity: 0;
-}
-
-/* Main content fades in as intro settles */
-.main-content.intro-revealed {
-  animation: main-content-reveal 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: 0.2s;
-}
-
-@keyframes main-content-reveal {
-  0% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-
-/* Skip intro for users who've seen it */
-.intro-skip .intro-overlay {
-  display: none !important;
-}
-
-.intro-skip .main-content {
-  opacity: 1;
-  animation: none;
-}
-
-/* Intro headline gradient */
-.intro-gradient-text {
+/* Hero gradient text animation */
+.gradient-text-animated {
   background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
   background-size: 200% 200%;
   -webkit-background-clip: text;
@@ -379,4 +281,15 @@ body {
 @keyframes gradient-shift {
   0%, 100% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
+}
+
+/* Smooth visibility transitions */
+.visibility-hidden {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.visibility-visible {
+  visibility: visible;
+  opacity: 1;
 }
