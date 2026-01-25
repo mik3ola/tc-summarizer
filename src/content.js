@@ -81,6 +81,16 @@ function isLikelyLegalLink(el) {
   
   if (!isLink && !isButton && !isClickable) return false;
   
+  // Skip code elements - avoid false positives from code snippets containing "return", "terms", etc.
+  const isInsideCode = el.closest("pre, code, .hljs, .highlight, .prism-code, [class*='code'], [class*='syntax']");
+  if (isInsideCode) return false;
+  
+  // Skip if element itself looks like code
+  const elClass = (el.className || "").toLowerCase();
+  if (elClass.includes("code") || elClass.includes("syntax") || elClass.includes("hljs") || elClass.includes("prism")) {
+    return false;
+  }
+  
   // Get the URL (if any)
   const href = el.getAttribute("href") || el.getAttribute("data-href") || "";
   
@@ -100,6 +110,9 @@ function isLikelyLegalLink(el) {
   
   const combined = `${txt} ${aria} ${title} ${hrefLower} ${id}`;
   if (!combined.trim()) return false;
+  
+  // Skip if the text is too long (likely a code block or paragraph, not a link label)
+  if (txt.length > 100) return false;
   
   return KEYWORDS.some((k) => combined.includes(k));
 }
@@ -1402,6 +1415,188 @@ UI.popover.addEventListener("click", (e) => {
     e.stopPropagation();
     chrome.runtime.sendMessage({ type: "open_options" });
     return;
+  }
+});
+
+
+// ========================================
+// AUTO-HIGHLIGHT DETECTED LEGAL LINKS
+// ========================================
+
+// Track highlighted elements to avoid re-processing
+const highlightedElements = new WeakSet();
+
+// Inject highlight styles into the main document
+function injectHighlightStyles() {
+  if (document.getElementById("termsdigest-highlight-styles")) return;
+  
+  const style = document.createElement("style");
+  style.id = "termsdigest-highlight-styles";
+  style.textContent = `
+    /* TermsDigest link highlight - animated underline */
+    .td-highlighted {
+      position: relative;
+      display: inline;
+      text-decoration: none !important;
+    }
+    
+    /* Animated underline that draws from left to right */
+    .td-highlighted::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: 1.5px;
+      background: currentColor;
+      transform-origin: left center;
+      animation: td-underline-draw 5.6s linear infinite;
+    }
+    
+    @keyframes td-underline-draw {
+      0% {
+        transform: scaleX(0);
+        transform-origin: left center;
+      }
+      8% {
+        transform: scaleX(1);
+        transform-origin: left center;
+      }
+      8.1% {
+        transform-origin: right center;
+      }
+      16% {
+        transform: scaleX(0);
+        transform-origin: right center;
+      }
+      100% {
+        transform: scaleX(0);
+        transform-origin: right center;
+      }
+    }
+  `;
+  
+  document.head.appendChild(style);
+}
+
+// Highlight a legal link element
+function highlightLegalLink(element) {
+  if (highlightedElements.has(element)) return;
+  if (!element || !element.isConnected) return;
+  
+  highlightedElements.add(element);
+  
+  // Use requestAnimationFrame for smooth DOM updates
+  requestAnimationFrame(() => {
+    element.classList.add("td-highlighted");
+  });
+}
+
+// IntersectionObserver to trigger animations when links enter viewport
+let highlightObserver = null;
+
+function setupHighlightObserver() {
+  if (highlightObserver) return;
+  
+  highlightObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const element = entry.target;
+          highlightLegalLink(element);
+          // Stop observing once highlighted
+          highlightObserver.unobserve(element);
+        }
+      });
+    },
+    {
+      root: null,
+      rootMargin: "50px",
+      threshold: 0.1
+    }
+  );
+}
+
+// Scan the page for legal links and set up observation
+function scanAndObserveLegalLinks() {
+  // Find all potential link/button elements
+  const elements = document.querySelectorAll('a, button, [role="link"], [role="button"]');
+  
+  elements.forEach((el) => {
+    // Skip already processed elements
+    if (highlightedElements.has(el)) return;
+    if (el.classList.contains("td-highlighted")) return;
+    
+    // Check if it's a legal link
+    if (isLikelyLegalLink(el)) {
+      // Observe for viewport entry
+      highlightObserver.observe(el);
+    }
+  });
+}
+
+// Watch for dynamically added content
+let mutationObserverForHighlight = null;
+
+function setupMutationObserverForHighlight() {
+  if (mutationObserverForHighlight) return;
+  
+  mutationObserverForHighlight = new MutationObserver((mutations) => {
+    let shouldScan = false;
+    
+    for (const mutation of mutations) {
+      if (mutation.type === "childList" && mutation.addedNodes.length > 0) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            // Check if the added node or its children might contain legal links
+            if (node.matches && (node.matches('a, button, [role="link"], [role="button"]') || 
+                node.querySelector('a, button, [role="link"], [role="button"]'))) {
+              shouldScan = true;
+              break;
+            }
+          }
+        }
+      }
+      if (shouldScan) break;
+    }
+    
+    if (shouldScan) {
+      // Debounce scanning for performance
+      clearTimeout(mutationObserverForHighlight._scanTimeout);
+      mutationObserverForHighlight._scanTimeout = setTimeout(scanAndObserveLegalLinks, 100);
+    }
+  });
+  
+  mutationObserverForHighlight.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+}
+
+// Initialize highlighting when DOM is ready
+function initLinkHighlighting() {
+  // Don't highlight if auto-hover is disabled (user preference)
+  if (!preferences.autoHover) return;
+  
+  injectHighlightStyles();
+  setupHighlightObserver();
+  scanAndObserveLegalLinks();
+  setupMutationObserverForHighlight();
+}
+
+// Initialize after a short delay to let page settle
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(initLinkHighlighting, 500);
+  });
+} else {
+  setTimeout(initLinkHighlighting, 500);
+}
+
+// Re-initialize when preferences are loaded (in case autoHover was false initially)
+loadPreferences().then(() => {
+  if (preferences.autoHover) {
+    initLinkHighlighting();
   }
 });
 

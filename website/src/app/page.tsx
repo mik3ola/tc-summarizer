@@ -1,13 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import ScrollAnimations from "@/components/ScrollAnimations";
+import ThemeToggle from "@/components/ThemeToggle";
+import IntroAnimation from "@/components/IntroAnimation";
 
 export default function Home() {
+  const [introComplete, setIntroComplete] = useState(false);
+
   return (
-    <main className="min-h-screen">
-      <ScrollAnimations />
+    <>
+      <IntroAnimation onComplete={() => setIntroComplete(true)} />
+      <main className={`min-h-screen main-content ${introComplete ? "intro-revealed" : ""}`}>
+        <ScrollAnimations />
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 glass-card">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -16,14 +23,15 @@ export default function Home() {
             <span className="font-bold text-lg">TermsDigest</span>
           </div>
           <div className="flex items-center gap-6">
-            <Link href="#features" className="text-gray-400 hover:text-white transition-colors text-sm">Features</Link>
-            <Link href="#pricing" className="text-gray-400 hover:text-white transition-colors text-sm">Pricing</Link>
-            <Link href="/support" className="text-gray-400 hover:text-white transition-colors text-sm">Support</Link>
+            <Link href="#features" className="text-gray-400 hover:text-foreground transition-colors text-sm">Features</Link>
+            <Link href="#pricing" className="text-gray-400 hover:text-foreground transition-colors text-sm">Pricing</Link>
+            <Link href="/support" className="text-gray-400 hover:text-foreground transition-colors text-sm">Support</Link>
+            <ThemeToggle />
             <a 
               href="https://chrome.google.com/webstore/detail/termsdigest" 
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-medium transition-colors text-white"
             >
               Install Free
             </a>
@@ -48,7 +56,7 @@ export default function Home() {
               Now with AI-powered summaries
             </div>
             
-            <h1 className="text-5xl md:text-6xl font-bold leading-tight mb-6">
+            <h1 className="text-5xl md:text-6xl font-bold font-display leading-tight mb-6 tracking-tight">
               Stop Blindly Accepting{" "}
               <span className="gradient-text">Terms & Conditions</span>
             </h1>
@@ -367,9 +375,9 @@ export default function Home() {
             </div>
             
             <div className="flex items-center gap-6 text-sm text-gray-400">
-              <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
-              <Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link>
-              <Link href="/support" className="hover:text-white transition-colors">Support</Link>
+              <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
+              <Link href="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
+              <Link href="/support" className="hover:text-foreground transition-colors">Support</Link>
             </div>
             
             <div className="text-sm text-gray-500">
@@ -378,6 +386,7 @@ export default function Home() {
           </div>
         </div>
       </footer>
-    </main>
+      </main>
+    </>
   );
 }

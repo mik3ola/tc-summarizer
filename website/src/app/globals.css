@@ -1,20 +1,51 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
 @import "tailwindcss";
 
-:root {
+/* Dark theme (default) */
+:root,
+[data-theme="dark"] {
   --background: #030712;
   --foreground: #f9fafb;
+  --foreground-muted: #9ca3af;
   --primary: #3b82f6;
   --primary-dark: #2563eb;
   --accent: #8b5cf6;
   --card-bg: #111827;
+  --card-bg-alpha: rgba(17, 24, 39, 0.7);
   --border: rgba(148, 163, 184, 0.15);
+  --glow-primary: rgba(59, 130, 246, 0.3);
+  --glow-accent: rgba(139, 92, 246, 0.2);
+  --scrollbar-thumb: rgba(148, 163, 184, 0.3);
+  --scrollbar-thumb-hover: rgba(148, 163, 184, 0.5);
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --background: #ffffff;
+  --foreground: #111827;
+  --foreground-muted: #6b7280;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --accent: #7c3aed;
+  --card-bg: #f3f4f6;
+  --card-bg-alpha: rgba(243, 244, 246, 0.9);
+  --border: rgba(0, 0, 0, 0.1);
+  --glow-primary: rgba(59, 130, 246, 0.15);
+  --glow-accent: rgba(139, 92, 246, 0.1);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.2);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.35);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: 'DM Sans', system-ui, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Headline font */
+.font-display {
+  font-family: 'Space Grotesk', 'DM Sans', system-ui, sans-serif;
 }
 
 /* Custom scrollbar */
@@ -27,12 +58,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.3);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.5);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Gradient text */
@@ -45,14 +76,36 @@ body {
 
 /* Glow effect */
 .glow {
-  box-shadow: 0 0 60px rgba(59, 130, 246, 0.3), 0 0 100px rgba(139, 92, 246, 0.2);
+  box-shadow: 0 0 60px var(--glow-primary), 0 0 100px var(--glow-accent);
 }
 
 /* Glass card */
 .glass-card {
-  background: rgba(17, 24, 39, 0.7);
+  background: var(--card-bg-alpha);
   backdrop-filter: blur(20px);
   border: 1px solid var(--border);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Light theme specific overrides */
+[data-theme="light"] .glass-card {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .text-gray-400 {
+  color: var(--foreground-muted);
+}
+
+[data-theme="light"] .text-gray-500 {
+  color: #9ca3af;
+}
+
+[data-theme="light"] .border-gray-700 {
+  border-color: var(--border);
+}
+
+[data-theme="light"] .border-gray-800 {
+  border-color: var(--border);
 }
 
 /* Animation */
@@ -127,4 +180,121 @@ body {
 .animate-scale.visible {
   opacity: 1;
   transform: scale(1);
+}
+
+/* ========================================
+   INTRO ANIMATION
+   ======================================== */
+
+/* Intro overlay that covers the entire page during animation */
+.intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background);
+  pointer-events: none;
+  transition: background 0.8s ease-out;
+}
+
+/* When transitioning, fade the background to transparent */
+.intro-overlay.intro-transitioning {
+  background: transparent;
+}
+
+.intro-overlay.intro-complete {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease-out, visibility 0.3s ease-out;
+}
+
+/* Intro headline container */
+.intro-headline {
+  text-align: center;
+  opacity: 0;
+  transform: scale(1.2);
+  transition: none;
+}
+
+/* Phase 1: Headline fades in at center, slightly enlarged */
+.intro-headline.intro-visible {
+  opacity: 1;
+  transform: scale(1.2);
+  animation: intro-headline-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes intro-headline-in {
+  0% {
+    opacity: 0;
+    transform: scale(1.4);
+    letter-spacing: 0.02em;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.2);
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Phase 2: Headline settles into its final position (scales down to 1, moves up) */
+.intro-headline.intro-settle {
+  animation: intro-settle 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes intro-settle {
+  0% {
+    opacity: 1;
+    transform: scale(1.2) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(-15vh);
+  }
+}
+
+/* Main content starts hidden */
+.main-content {
+  opacity: 0;
+}
+
+/* Main content fades in as intro settles */
+.main-content.intro-revealed {
+  animation: main-content-reveal 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 0.2s;
+}
+
+@keyframes main-content-reveal {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Skip intro for users who've seen it */
+.intro-skip .intro-overlay {
+  display: none !important;
+}
+
+.intro-skip .main-content {
+  opacity: 1;
+  animation: none;
+}
+
+/* Intro headline gradient */
+.intro-gradient-text {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradient-shift 3s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
