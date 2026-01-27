@@ -1,8 +1,9 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export const metadata = {
-  title: "Terms of Service - T&C Summarizer",
-  description: "Terms and conditions for using T&C Summarizer.",
+  title: "Terms of Service - TermsDigest",
+  description: "Terms and conditions for using TermsDigest.",
 };
 
 export default function TermsPage() {
@@ -12,8 +13,8 @@ export default function TermsPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 glass-card">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">📋</span>
-            <span className="font-bold text-lg">T&C Summarizer</span>
+            <Image src="/logo.png" alt="TermsDigest" width={32} height={32} className="w-8 h-8" />
+            <span className="font-bold text-lg">TermsDigest</span>
           </Link>
           <div className="flex items-center gap-6">
             <Link href="/#features" className="text-gray-400 hover:text-white transition-colors text-sm">Features</Link>
@@ -32,7 +33,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-2xl font-semibold mb-4">1. Agreement to Terms</h2>
               <p className="text-gray-300 leading-relaxed">
-                By installing or using T&C Summarizer (&quot;the Extension&quot;, &quot;the Service&quot;), you agree 
+                By installing or using TermsDigest (&quot;the Extension&quot;, &quot;the Service&quot;), you agree 
                 to be bound by these Terms of Service. If you disagree with any part of these terms, 
                 you may not use the Service.
               </p>
@@ -41,7 +42,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-2xl font-semibold mb-4">2. Description of Service</h2>
               <p className="text-gray-300 leading-relaxed">
-                T&C Summarizer is a browser extension that provides AI-generated summaries of legal 
+                TermsDigest is a browser extension that provides AI-generated summaries of legal 
                 documents such as Terms of Service, Privacy Policies, and similar legal text. The 
                 summaries are for informational purposes only.
               </p>
@@ -51,7 +52,7 @@ export default function TermsPage() {
               <h2 className="text-2xl font-semibold mb-4">3. Disclaimer</h2>
               <div className="glass-card rounded-xl p-4 border-yellow-500/50">
                 <p className="text-yellow-200 leading-relaxed">
-                  <strong>⚠️ Important:</strong> T&C Summarizer provides AI-generated summaries for 
+                  <strong>⚠️ Important:</strong> TermsDigest provides AI-generated summaries for 
                   convenience only. These summaries are NOT legal advice and should NOT be relied 
                   upon as a substitute for reading the full legal document or consulting with a 
                   qualified legal professional. We do not guarantee completeness of any summary.
@@ -117,7 +118,7 @@ export default function TermsPage() {
               <h2 className="text-2xl font-semibold mb-4">8. Intellectual Property</h2>
               <p className="text-gray-300 leading-relaxed">
                 The Service, including its original content, features, and functionality, is owned 
-                by T&C Summarizer and is protected by international copyright, trademark, and other 
+                by TermsDigest and is protected by international copyright, trademark, and other 
                 intellectual property laws. Generated summaries are provided for your personal use 
                 and may not be commercially redistributed.
               </p>
@@ -126,7 +127,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-2xl font-semibold mb-4">9. Limitation of Liability</h2>
               <p className="text-gray-300 leading-relaxed">
-                To the maximum extent permitted by law, T&C Summarizer shall not be liable for any 
+                To the maximum extent permitted by law, TermsDigest shall not be liable for any 
                 indirect, incidental, special, consequential, or punitive damages, including loss 
                 of profits, data, or other intangible losses, resulting from your use of or inability 
                 to use the Service.
@@ -172,8 +173,8 @@ export default function TermsPage() {
               <h2 className="text-2xl font-semibold mb-4">14. Contact Us</h2>
               <p className="text-gray-300 leading-relaxed">
                 For questions about these Terms, contact us at:{" "}
-                <a href="mailto:legal@tc-summarizer.com" className="text-blue-400 hover:underline">
-                  legal@tc-summarizer.com
+                <a href="mailto:legal@termsdigest.com" className="text-blue-400 hover:underline">
+                  legal@termsdigest.com
                 </a>
               </p>
             </section>
@@ -186,8 +187,8 @@ export default function TermsPage() {
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
-              <span className="text-xl">📋</span>
-              <span className="font-semibold">T&C Summarizer</span>
+              <Image src="/logo.png" alt="TermsDigest" width={24} height={24} className="w-6 h-6" />
+              <span className="font-semibold">TermsDigest</span>
             </div>
             <div className="flex items-center gap-6 text-sm text-gray-400">
               <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
@@ -195,7 +196,7 @@ export default function TermsPage() {
               <Link href="/support" className="hover:text-white transition-colors">Support</Link>
             </div>
             <div className="text-sm text-gray-500">
-              © {new Date().getFullYear()} T&C Summarizer. All rights reserved.
+              © {new Date().getFullYear()} TermsDigest. All rights reserved.
             </div>
           </div>
         </div>

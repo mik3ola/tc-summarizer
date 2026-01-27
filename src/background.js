@@ -26,8 +26,6 @@ async function getSettings() {
     "openaiModel",
     "subscription",
     "subscriptionPlan",
-    "supabaseUrl",
-    "supabaseAnonKey",
     "supabaseSession",
     "preferences"
   ]);
@@ -40,8 +38,8 @@ async function getSettings() {
   return {
     openaiApiKey: typeof data.openaiApiKey === "string" ? data.openaiApiKey.trim() : "",
     openaiModel: typeof data.openaiModel === "string" && data.openaiModel.trim() ? data.openaiModel.trim() : DEFAULT_MODEL,
-    supabaseUrl: (data.supabaseUrl || DEFAULT_SUPABASE_URL).trim(),
-    supabaseAnonKey: (data.supabaseAnonKey || DEFAULT_SUPABASE_ANON_KEY).trim(),
+    supabaseUrl: DEFAULT_SUPABASE_URL.trim(), // Always use default
+    supabaseAnonKey: DEFAULT_SUPABASE_ANON_KEY.trim(), // Always use default
     session: session,
     isSessionExpired: isSessionExpired,
     subscription: data.subscription || null,
@@ -126,7 +124,7 @@ function buildPrompt() {
 Requirements:
 - Output STRICT JSON only (no markdown, no extra text).
 - Be factual; do not invent clauses.
-- Focus on costs/renewals, cancellation/refunds, liability, arbitration/jurisdiction, data sharing/ads, auto-renew, trials, termination, and unusual restrictions.
+- Focus on costs/renewals, cancellation/refunds/returns/exchanges, liability, arbitration/jurisdiction, data sharing/ads, auto-renew, trials, termination, and unusual restrictions.
 - Include a short list of quotes to support the biggest risks.
 
 Return JSON with this schema:
@@ -166,7 +164,18 @@ async function callSupabaseFunction({ supabaseUrl, anonKey, accessToken, input }
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`Backend error (${res.status}): ${txt.slice(0, 200)}`);
+    // Try to parse error as JSON to preserve quotaExceeded flag
+    let errorData = null;
+    try {
+      errorData = JSON.parse(txt);
+    } catch {}
+    
+    // Create error with both message and structured data
+    const error = new Error(`Backend error (${res.status}): ${txt.slice(0, 200)}`);
+    error.status = res.status;
+    error.data = errorData;
+    error.quotaExceeded = errorData?.quotaExceeded === true;
+    throw error;
   }
 
   const data = await res.json();
@@ -298,7 +307,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
         // If session is expired, try to refresh proactively
         if (settings.session?.access_token && settings.isSessionExpired && settings.supabaseAnonKey) {
-          console.log("[T&C Summarizer] Session expired, refreshing...");
           const refreshed = await refreshSessionIfPossible({
             supabaseUrl: settings.supabaseUrl,
             anonKey: settings.supabaseAnonKey,
@@ -318,10 +326,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const isLoggedIn = !!settings.session?.access_token;
         
         if (!isLoggedIn) {
-          console.log("[T&C Summarizer] Guest blocked - must sign in");
           sendResponse({
             ok: false,
-            error: "Please sign in to use T&C Summarizer or create an account for free summaries!"
+            error: "Please sign in to use TermsDigest!"
           });
           return;
         }
@@ -331,12 +338,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const isPro = settings.subscription === "active" && settings.subscriptionPlan === "pro";
         const hasBackendAccess = !!settings.supabaseAnonKey;
         
-        // Pro users can use their own API key for unlimited usage
+        // Priority: Pro users should use backend first (to consume their 50/month quota)
+        // Only fall back to their own API key when quota is exhausted or backend fails
         // Free users must use backend (quota enforced server-side)
-        const useDirectApi = isPro && hasOwnApiKey;
-        const useBackend = !useDirectApi && hasBackendAccess;
+        const shouldTryBackendFirst = hasBackendAccess;
+        const canFallbackToOwnKey = isPro && hasOwnApiKey;
 
-        if (!useBackend && !useDirectApi) {
+        if (!shouldTryBackendFirst && !canFallbackToOwnKey) {
           sendResponse({
             ok: false,
             error: "Backend configuration error. Please contact support."
@@ -352,14 +360,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         let summary;
+        let usedBackend = false;
 
-        if (useBackend) {
-          // Use Supabase Edge Function (free or pro; quotas enforced server-side)
-          console.log("[T&C Summarizer] Using backend with:", {
+        // Always try backend first (for Pro users to consume quota, Free users have no choice)
+        if (shouldTryBackendFirst) {
+          console.log("[TermsDigest] Using backend with:", {
             supabaseUrl: settings.supabaseUrl,
             hasAnonKey: !!settings.supabaseAnonKey,
             hasAccessToken: !!settings.session?.access_token,
-            tokenPreview: settings.session?.access_token?.slice(0, 20) + "..."
+            tokenPreview: settings.session?.access_token?.slice(0, 20) + "...",
+            isPro,
+            canFallbackToOwnKey
           });
           
           try {
@@ -369,30 +380,50 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
               accessToken: settings.session.access_token,
               input: { url, text }
             });
+            usedBackend = true;
           } catch (e) {
             // On 401/unauthorized, try refresh once then retry
             const msg = e?.message || String(e);
-            console.log("[T&C Summarizer] Backend error:", msg);
+            // Check if error has quotaExceeded flag (from callSupabaseFunction)
+            const isQuotaExceeded = e?.quotaExceeded === true || e?.status === 429 || msg.includes("Quota exceeded") || msg.includes("quota exceeded");
             
-            if (msg.includes("401") || msg.includes("Invalid JWT") || msg.includes("Unauthorized") || msg.includes("Auth failed")) {
-              console.log("[T&C Summarizer] Got auth error, attempting token refresh...");
+            // If quota exceeded and Pro user has own API key, fall back to it
+            if (isQuotaExceeded && canFallbackToOwnKey) {
+              const outputText = await callOpenAI({
+                apiKey: settings.openaiApiKey,
+                model: settings.openaiModel,
+                input: { url, text }
+              });
+              const parsed = safeJsonParse(outputText);
+              summary = parsed.ok ? parsed.value : {
+                title: "",
+                tldr: outputText.trim(),
+                costs_and_renewal: [],
+                cancellation_and_refunds: [],
+                liability_and_disputes: [],
+                privacy_and_data: [],
+                red_flags: [],
+                quotes: [],
+                confidence: "low",
+                _note: "Model did not return valid JSON; showing raw output."
+              };
+            } else if (msg.includes("401") || msg.includes("Invalid JWT") || msg.includes("Unauthorized") || msg.includes("Auth failed")) {
               const refreshed = await refreshSessionIfPossible({
                 supabaseUrl: settings.supabaseUrl,
                 anonKey: settings.supabaseAnonKey,
                 session: settings.session
               });
               if (refreshed?.access_token) {
-                console.log("[T&C Summarizer] Token refreshed, retrying...");
                 summary = await callSupabaseFunction({
                   supabaseUrl: settings.supabaseUrl,
                   anonKey: settings.supabaseAnonKey,
                   accessToken: refreshed.access_token,
                   input: { url, text }
                 });
+                usedBackend = true;
               } else {
-                // Token refresh failed - if user has own API key, use that as fallback
-                if (hasOwnApiKey) {
-                  console.log("[T&C Summarizer] Token refresh failed, falling back to own API key");
+                // Token refresh failed - if Pro user has own API key, use that as fallback
+                if (canFallbackToOwnKey) {
                   const outputText = await callOpenAI({
                     apiKey: settings.openaiApiKey,
                     model: settings.openaiModel,
@@ -412,7 +443,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                     _note: "Model did not return valid JSON; showing raw output."
                   };
                 } else {
-                  console.log("[T&C Summarizer] Token refresh failed, clearing session");
                   await chrome.storage.local.set({ 
                     supabaseSession: null, 
                     subscription: null, 
@@ -424,11 +454,33 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                 }
               }
             } else {
-              throw e;
+              // Other backend errors - if Pro user has own API key, fall back to it
+              if (canFallbackToOwnKey) {
+                const outputText = await callOpenAI({
+                  apiKey: settings.openaiApiKey,
+                  model: settings.openaiModel,
+                  input: { url, text }
+                });
+                const parsed = safeJsonParse(outputText);
+                summary = parsed.ok ? parsed.value : {
+                  title: "",
+                  tldr: outputText.trim(),
+                  costs_and_renewal: [],
+                  cancellation_and_refunds: [],
+                  liability_and_disputes: [],
+                  privacy_and_data: [],
+                  red_flags: [],
+                  quotes: [],
+                  confidence: "low",
+                  _note: "Model did not return valid JSON; showing raw output."
+                };
+              } else {
+                throw e;
+              }
             }
           }
-        } else {
-          // Use direct OpenAI API (free tier)
+        } else if (canFallbackToOwnKey) {
+          // No backend access but Pro user has own API key - use it directly
           const outputText = await callOpenAI({
             apiKey: settings.openaiApiKey,
             model: settings.openaiModel,
@@ -452,8 +504,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
               };
         }
 
-        // Cache the result
-        await setCache(cacheKey, { createdAt: nowMs(), summary });
+        // Cache the result (store original text length for minutes saved calculation)
+        await setCache(cacheKey, { 
+          createdAt: nowMs(), 
+          summary,
+          originalTextLength: text.length 
+        });
         
         // Increment usage stats
         await incrementStats();
@@ -462,7 +518,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return;
       }
     } catch (e) {
-      console.error("[T&C Summarizer] Error:", e);
+      console.error("[TermsDigest] Error:", e);
       sendResponse({ ok: false, error: e?.message || String(e) });
     }
   })();

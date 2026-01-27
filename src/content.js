@@ -18,7 +18,7 @@ async function loadPreferences() {
       HOVER_DELAY_MS = parseInt(preferences.hoverDelay) || 750;
     }
   } catch (e) {
-    console.warn("[T&C Summarizer] Could not load preferences:", e);
+    console.warn("[TermsDigest] Could not load preferences:", e);
   }
 }
 
@@ -37,8 +37,11 @@ const KEYWORDS = [
   "privacy statement",
   "refund",
   "refund policy",
+  "return",
   "returns",
   "return policy",
+  "exchange",
+  "exchanges",
   "cancellation",
   "cancellation policy",
   "billing",
@@ -78,6 +81,16 @@ function isLikelyLegalLink(el) {
   
   if (!isLink && !isButton && !isClickable) return false;
   
+  // Skip code elements - avoid false positives from code snippets containing "return", "terms", etc.
+  const isInsideCode = el.closest("pre, code, .hljs, .highlight, .prism-code, [class*='code'], [class*='syntax']");
+  if (isInsideCode) return false;
+  
+  // Skip if element itself looks like code
+  const elClass = (el.className || "").toLowerCase();
+  if (elClass.includes("code") || elClass.includes("syntax") || elClass.includes("hljs") || elClass.includes("prism")) {
+    return false;
+  }
+  
   // Get the URL (if any)
   const href = el.getAttribute("href") || el.getAttribute("data-href") || "";
   
@@ -95,8 +108,14 @@ function isLikelyLegalLink(el) {
   const hrefLower = normalizeText(href);
   const id = normalizeText(el.getAttribute("id") || "");
   
-  const combined = `${txt} ${aria} ${title} ${hrefLower} ${id}`;
+  let combined = `${txt} ${aria} ${title} ${hrefLower} ${id}`;
   if (!combined.trim()) return false;
+  
+  // Skip if the text is too long (likely a code block or paragraph, not a link label)
+  if (txt.length > 100) return false;
+  
+  // Filter out "termsdigest" to avoid false positives on our own branding
+  combined = combined.replace(/termsdigest/gi, "");
   
   return KEYWORDS.some((k) => combined.includes(k));
 }
@@ -127,7 +146,6 @@ function getLegalContentType(element) {
 
 function findModalContent(element) {
   const contentType = getLegalContentType(element);
-  console.log(`[T&C Summarizer] Looking for ${contentType} content for:`, element.textContent?.trim());
   
   // Strategy 1: Look for data-target or data-bs-target (Bootstrap)
   const modalTarget = element.getAttribute("data-target") || element.getAttribute("data-bs-target") || "";
@@ -174,7 +192,6 @@ function findModalContent(element) {
         if (candidate === element) continue;
         const text = (candidate.textContent || "").trim();
         if (text.length > 100) {
-          console.log(`[T&C Summarizer] Found ${contentType} content via selector:`, selector);
           return candidate;
         }
       }
@@ -201,7 +218,6 @@ function findModalContent(element) {
         if (modal && modal !== element) {
           const text = (modal.textContent || "").trim();
           if (text.length > 100) {
-            console.log(`[T&C Summarizer] Found content via ID pattern:`, selector);
             return modal;
           }
         }
@@ -263,7 +279,6 @@ function findModalContent(element) {
   }
   
   if (bestMatch && bestMatchScore > 0) {
-    console.log(`[T&C Summarizer] Found ${contentType} content via scoring:`, bestMatch.className || bestMatch.id);
     return bestMatch;
   }
   
@@ -386,7 +401,7 @@ function toAbsoluteUrl(href) {
 function extractTextFromHtml(html, baseUrl) {
   try {
     if (!html || typeof html !== "string") {
-      console.warn("[T&C Summarizer] No HTML provided");
+      console.warn("[TermsDigest] No HTML provided");
       return "";
     }
     
@@ -399,7 +414,7 @@ function extractTextFromHtml(html, baseUrl) {
         doc.head.appendChild(base);
       } catch (e) {
         // CSP may block base-uri, but that's okay - we just won't have relative URL resolution
-        console.warn("[T&C Summarizer] Could not set base URL (CSP restriction):", e.message);
+        console.warn("[TermsDigest] Could not set base URL (CSP restriction):", e.message);
       }
     }
 
@@ -446,10 +461,9 @@ function extractTextFromHtml(html, baseUrl) {
         .trim();
     }
 
-    console.log(`[T&C Summarizer] Extracted ${bestText.length} chars from HTML (${html.length} chars)`);
     return bestText;
   } catch (e) {
-    console.error("[T&C Summarizer] extractTextFromHtml error:", e);
+    console.error("[TermsDigest] extractTextFromHtml error:", e);
     return "";
   }
 }
@@ -460,7 +474,7 @@ function clamp(n, min, max) {
 
 function createUi() {
   const host = document.createElement("div");
-  host.id = "tc-hover-summarizer-root";
+  host.id = "termsdigest-root";
   host.style.all = "initial";
   host.style.position = "fixed";
   host.style.zIndex = "2147483647";
@@ -478,7 +492,8 @@ function createUi() {
       min-width: 300px;
       max-height: 70vh;
       overflow-y: auto;
-      background: #0b1220;
+      background: rgba(11, 18, 32, 0.75);
+      backdrop-filter: blur(10px);
       color: #e5e7eb;
       border: 1px solid rgba(148,163,184,0.25);
       border-radius: 12px;
@@ -486,13 +501,13 @@ function createUi() {
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
       font-size: 12.5px;
       line-height: 1.4;
-      padding: 12px 12px 10px;
+      padding: 0;
     }
     .popover::-webkit-scrollbar { width: 6px; }
     .popover::-webkit-scrollbar-track { background: transparent; }
     .popover::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.35); border-radius: 3px; }
     .popover::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.5); }
-    .header { display: flex; align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: -12px; background: #0b1220; padding: 12px 0 8px; margin: -12px 0 0; z-index: 1; }
+    .header { display: flex; align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: 0; background: rgba(11, 18, 32, 0.75); backdrop-filter: blur(10px); padding: 12px 12px 8px; margin: 0; z-index: 1; border-radius: 12px 12px 0 0; }
     .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .title {
       font-size: 12px;
@@ -531,40 +546,115 @@ function createUi() {
       border-color: rgba(239,68,68,0.35);
     }
     .muted { color: rgba(226,232,240,0.72); }
-    .section { margin-top: 10px; }
+    .section { margin-top: 10px; padding: 0 12px; }
+    .popover > .section:first-of-type { margin-top: 0; }
     .h { font-weight: 700; color: rgba(226,232,240,0.95); margin-bottom: 4px; }
     ul { margin: 0; padding-left: 18px; }
     li { margin: 2px 0; }
-    .divider { height: 1px; background: rgba(148,163,184,0.18); margin: 10px 0 8px; }
-    .buttons { display:flex; gap: 8px; margin-top: 10px; }
+    .divider { height: 1px; background: rgba(148,163,184,0.18); margin: 10px 12px 8px; }
+    .buttons { display:flex; gap: 8px; margin-top: 12px; padding: 0 12px 12px; }
+    .buttons button { flex: 1; }
+    .footer-stats {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 12px 12px;
+      margin-top: 0;
+      gap: 12px;
+    }
+    .footer-stat {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+    .footer-stat-value {
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(96,165,250,0.95);
+      line-height: 1;
+    }
+    .footer-stat-label {
+      font-size: 10px;
+      color: rgba(226,232,240,0.6);
+      line-height: 1;
+    }
+    .footer-settings {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      color: rgba(148,163,184,0.7);
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .footer-settings:hover {
+      color: rgba(148,163,184,0.95);
+      background: rgba(148,163,184,0.1);
+    }
+    .footer-settings svg {
+      width: 16px;
+      height: 16px;
+    }
     button {
       all: unset;
       cursor: pointer;
       border: 1px solid rgba(148,163,184,0.25);
-      border-radius: 10px;
-      padding: 6px 10px;
-      font-size: 12px;
-      color: rgba(226,232,240,0.92);
-      background: rgba(15,23,42,0.8);
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(226,232,240,0.95);
+      background: rgba(30,41,59,0.9);
+      transition: all 0.15s;
     }
-    button:hover { background: rgba(30,41,59,0.85); }
+    button:hover { 
+      background: rgba(51,65,85,0.95); 
+      border-color: rgba(148,163,184,0.4);
+    }
+    button.primary {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border-color: rgba(59,130,246,0.5);
+      color: #fff;
+      font-weight: 600;
+    }
+    button.primary:hover {
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+    }
     a.link { color: rgba(96,165,250,0.95); text-decoration: none; }
     a.link:hover { text-decoration: underline; }
-    .error {
-      border: 1px solid rgba(248,113,113,0.35);
-      background: rgba(127,29,29,0.25);
-      padding: 8px 10px;
-      border-radius: 10px;
+    .error-banner {
+      border: 1px solid rgba(248,113,113,0.4);
+      background: rgba(127,29,29,0.3);
+      padding: 12px 16px;
+      border-radius: 8px;
       color: rgba(254,226,226,0.95);
-      margin-top: 10px;
+      margin: 12px 12px 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 500;
     }
-    .spinner {
-      width: 14px;
-      height: 14px;
-      border-radius: 999px;
-      border: 2px solid rgba(148,163,184,0.3);
-      border-top-color: rgba(96,165,250,0.95);
+    .error-icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+    .spinner-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 6px;
       animation: spin 0.8s linear infinite;
+      opacity: 0.95;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
   `;
@@ -594,6 +684,8 @@ function setPopoverPositionNearAnchor(anchor) {
   const padding = 10;
   const vpW = window.innerWidth;
   const vpH = window.innerHeight;
+  const scrollX = window.scrollX || window.pageXOffset;
+  const scrollY = window.scrollY || window.pageYOffset;
 
   // default right/below the link
   const desiredLeft = rect.left + Math.min(rect.width, 40) + 12;
@@ -603,33 +695,76 @@ function setPopoverPositionNearAnchor(anchor) {
   UI.popover.style.left = "0px";
   UI.popover.style.top = "0px";
 
-  // measure
+  // measure after rendering
   const popRect = UI.popover.getBoundingClientRect();
-  let left = clamp(desiredLeft, padding, vpW - popRect.width - padding);
-  let top = clamp(desiredTop, padding, vpH - popRect.height - padding);
-
-  // if would cover the link area too much, try above
-  if (top > rect.top - popRect.height - 10 && rect.bottom + popRect.height > vpH - padding) {
-    top = clamp(rect.top - popRect.height - 10, padding, vpH - popRect.height - padding);
+  const popWidth = popRect.width;
+  const popHeight = popRect.height;
+  
+  // Calculate horizontal position - ensure fully visible
+  let left = desiredLeft;
+  const rightEdge = left + popWidth;
+  
+  if (rightEdge > vpW - padding) {
+    // Doesn't fit on right, try left side
+    left = rect.left - popWidth - 12;
+    if (left < padding) {
+      // Still doesn't fit, position to fit within viewport
+      left = Math.max(padding, vpW - popWidth - padding);
+    }
+  }
+  
+  // Ensure left edge is visible
+  if (left < padding) {
+    left = padding;
+  }
+  
+  // Calculate vertical position - ensure fully visible
+  let top = desiredTop;
+  const bottomEdge = top + popHeight;
+  
+  if (bottomEdge > vpH - padding) {
+    // Doesn't fit below, try above
+    top = rect.top - popHeight - 10;
+    if (top < padding) {
+      // Still doesn't fit, position to fit within viewport
+      top = Math.max(padding, vpH - popHeight - padding);
+    }
+  }
+  
+  // Ensure top edge is visible
+  if (top < padding) {
+    top = padding;
+  }
+  
+  // Final check: ensure both edges are within bounds
+  if (left + popWidth > vpW - padding) {
+    left = vpW - popWidth - padding;
+  }
+  if (top + popHeight > vpH - padding) {
+    top = vpH - popHeight - padding;
   }
 
   UI.popover.style.left = `${left}px`;
   UI.popover.style.top = `${top}px`;
 }
 
-function renderLoading(url) {
+async function renderLoading(url) {
+  // Get icon URL fresh each time to ensure it's available
+  const iconUrl = chrome.runtime.getURL("icons/icon16.png");
+  const footer = await getStatsFooter();
   UI.popover.innerHTML = `
     <div class="header">
       <div class="title">Summarizing…</div>
       <div class="header-right">
-        <div class="spinner" aria-label="Loading"></div>
+        <img class="spinner-icon" src="${iconUrl}" alt="" aria-label="Loading" />
       </div>
     </div>
     <div class="section muted" style="margin-top:8px;">
       Fetching <span title="${escapeHtml(url)}">${escapeHtml(truncateUrl(url))}</span>
     </div>
     <div class="divider"></div>
-    <div class="muted">Keep your mouse over the popover to view the summary.</div>
+    <div class="section muted" style="padding-bottom: 12px; margin-top: 0;">Keep your mouse over the popover to view the summary.</div>
+    ${footer}
   `;
 }
 
@@ -638,72 +773,199 @@ function truncateUrl(url, maxLen = 50) {
   return url.slice(0, maxLen - 3) + "…";
 }
 
-function renderError(errMsg, url) {
+// Get usage stats and render footer
+async function getStatsFooter(currentSummaryUrl = null) {
+  try {
+    const data = await chrome.storage.local.get([
+      "usageStats", 
+      "summariesCache", 
+      "monthlyUsage", 
+      "subscriptionPlan"
+    ]);
+    
+    const stats = data.usageStats || { totalSummaries: 0 };
+    const cache = data.summariesCache || {};
+    const monthlyUsage = data.monthlyUsage ?? stats.totalSummaries ?? 0;
+    const plan = data.subscriptionPlan || "free";
+    
+    // Determine quota based on plan
+    let quota = 5; // Free tier default
+    if (plan === "pro") quota = 50;
+    else if (plan === "enterprise") quota = 5000;
+    
+    // Calculate minutes saved for current summary only
+    let minutesSaved = 0;
+    if (currentSummaryUrl && cache) {
+      // Normalize URL to match cache key format (same as background.js)
+      const normalizedUrl = currentSummaryUrl.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();
+      // Try multiple cache key formats
+      const possibleKeys = [
+        `summary:${normalizedUrl}`,
+        `summary:${currentSummaryUrl}`,
+        `summary:${currentSummaryUrl.toLowerCase()}`
+      ];
+      
+      // Also check for partial matches (for modal content with hash fragments)
+      const matchingKey = possibleKeys.find(key => cache[key]) || 
+        Object.keys(cache).find(key => {
+          if (!key.startsWith("summary:")) return false;
+          const keyUrl = key.replace(/^summary:/, "").toLowerCase();
+          return keyUrl === normalizedUrl || 
+                 keyUrl.includes(normalizedUrl) || 
+                 normalizedUrl.includes(keyUrl) ||
+                 keyUrl.split("#")[0] === normalizedUrl.split("#")[0];
+        });
+      
+      if (matchingKey && cache[matchingKey]?.originalTextLength) {
+        const words = Math.floor(cache[matchingKey].originalTextLength / 5); // ~5 chars per word
+        minutesSaved = Math.floor(words / 200); // 200 words per minute reading speed
+      }
+    }
+    
+    const used = monthlyUsage;
+    
+    return `
+      <div class="footer-stats">
+        <div class="footer-stat">
+          <span class="footer-stat-value">${used}/${quota}</span>
+          <span class="footer-stat-label">Used</span>
+        </div>
+        <div class="footer-stat">
+          <span class="footer-stat-value">~${minutesSaved}</span>
+          <span class="footer-stat-label">Mins saved</span>
+        </div>
+        <a class="footer-settings" data-action="open-options" title="Open extension options">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M13.6569 8.65685C13.6569 8.65685 12.2426 10.0711 10.8284 11.4853C10.4142 11.8995 10.4142 12.5355 10.8284 12.9497C11.2426 13.364 11.8787 13.364 12.2929 12.9497C13.7071 11.5355 15.1213 10.1213 15.1213 10.1213C15.5355 9.70711 15.5355 9.07107 15.1213 8.65685C15.1213 8.65685 13.7071 7.24264 12.2929 5.82843C11.8787 5.41421 11.2426 5.41421 10.8284 5.82843C10.4142 6.24264 10.4142 6.87868 10.8284 7.29289C12.2426 8.70711 13.6569 10.1213 13.6569 10.1213L13.6569 8.65685Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2.34315 7.34315C2.34315 7.34315 3.75736 5.92893 5.17157 4.51472C5.58579 4.1005 5.58579 3.46447 5.17157 3.05025C4.75736 2.63604 4.12132 2.63604 3.70711 3.05025C2.29289 4.46447 0.87868 5.87868 0.87868 5.87868C0.464466 6.29289 0.464466 6.92893 0.87868 7.34315C0.87868 7.34315 2.29289 8.75736 3.70711 10.1716C4.12132 10.5858 4.75736 10.5858 5.17157 10.1716C5.58579 9.75736 5.58579 9.12132 5.17157 8.70711C3.75736 7.29289 2.34315 5.87868 2.34315 5.87868L2.34315 7.34315Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+      </div>
+    `;
+  } catch (e) {
+    console.warn("[TermsDigest] Could not load stats:", e);
+    return `
+      <div class="footer-stats">
+        <a class="footer-settings" data-action="open-options" title="Open extension options">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M13.6569 8.65685C13.6569 8.65685 12.2426 10.0711 10.8284 11.4853C10.4142 11.8995 10.4142 12.5355 10.8284 12.9497C11.2426 13.364 11.8787 13.364 12.2929 12.9497C13.7071 11.5355 15.1213 10.1213 15.1213 10.1213C15.5355 9.70711 15.5355 9.07107 15.1213 8.65685C15.1213 8.65685 13.7071 7.24264 12.2929 5.82843C11.8787 5.41421 11.2426 5.41421 10.8284 5.82843C10.4142 6.24264 10.4142 6.87868 10.8284 7.29289C12.2426 8.70711 13.6569 10.1213 13.6569 10.1213L13.6569 8.65685Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2.34315 7.34315C2.34315 7.34315 3.75736 5.92893 5.17157 4.51472C5.58579 4.1005 5.58579 3.46447 5.17157 3.05025C4.75736 2.63604 4.12132 2.63604 3.70711 3.05025C2.29289 4.46447 0.87868 5.87868 0.87868 5.87868C0.464466 6.29289 0.464466 6.92893 0.87868 7.34315C0.87868 7.34315 2.29289 8.75736 3.70711 10.1716C4.12132 10.5858 4.75736 10.5858 5.17157 10.1716C5.58579 9.75736 5.58579 9.12132 5.17157 8.70711C3.75736 7.29289 2.34315 5.87868 2.34315 5.87868L2.34315 7.34315Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+      </div>
+    `;
+  }
+}
+
+async function renderError(errMsg, url) {
   const msg = errMsg || "Unknown error";
   
-  // Check for common errors and provide helpful messages
-  let helpText = "Click \"Open link directly\" to view the original page.";
-  let showRefreshHint = false;
-  let showUpgradeButton = false;
+  // Check subscription status for Pro users
+  let isProUser = false;
+  let hasOpenAIKey = false;
+  try {
+    const data = await chrome.storage.local.get(["subscription", "subscriptionPlan", "openaiApiKey"]);
+    isProUser = (data.subscription === "active" && data.subscriptionPlan === "pro") || data.subscriptionPlan === "pro";
+    hasOpenAIKey = !!data.openaiApiKey && data.openaiApiKey.trim().length > 0;
+  } catch (e) {
+    console.warn("[TermsDigest] Could not check subscription status:", e);
+  }
+  
+  // Determine error type and icon
   let displayMsg = msg;
+  let errorIcon = "⚠️";
+  let headerTitle = "Summary unavailable";
+  let showUpgradeButton = false;
+  let showRefreshButton = false;
+  let isSignInIssue = false;
+  let isProQuotaExceeded = false;
   
   if (msg.includes("Extension context invalidated") || msg.includes("message port closed")) {
-    helpText = "The extension was updated. Please refresh this page (Ctrl+R or Cmd+R) and try again.";
-    showRefreshHint = true;
     displayMsg = "Extension needs page refresh";
-  } else if (msg.includes("No API access") || msg.includes("Please login")) {
-    helpText = "You need to sign in first. Click \"Open Options\" to login or create an account.";
-    displayMsg = "Please sign in first";
+    errorIcon = "⚠️";
+    headerTitle = "Summary unavailable";
+    showRefreshButton = true;
+  } else if (msg.includes("No API access") || msg.includes("Please login") || msg.includes("sign in")) {
+    displayMsg = "Please sign in to continue";
+    errorIcon = "🔒";
+    headerTitle = "Sign in required";
+    isSignInIssue = true;
   } else if (msg.includes("Quota exceeded") || msg.includes("quotaExceeded")) {
-    helpText = "You've used all your summaries this month. Upgrade to Pro for more!";
-    displayMsg = "Monthly quota exceeded";
-    showUpgradeButton = true;
-  } else if (msg.includes("Session expired") || msg.includes("sign in again")) {
-    helpText = "Your session has expired. Click \"Open Options\" to sign in again.";
-    displayMsg = "Session expired - please sign in again";
-  } else if (msg.includes("Invalid JWT") || msg.includes("401") || msg.includes("Unauthorized")) {
-    helpText = "Authentication failed. Click \"Open Options\" to sign in again.";
-    displayMsg = "Please sign in again";
+    if (isProUser && hasOpenAIKey) {
+      // Pro user with API key - should work automatically, don't show error
+      // This case shouldn't happen, but if it does, just return early
+      return;
+    } else if (isProUser) {
+      // Pro user without API key hit quota
+      isProQuotaExceeded = true;
+      displayMsg = "Monthly limit reached. Add your OpenAI API key for unlimited summaries, or contact support.";
+      errorIcon = "⚠️";
+      headerTitle = "Usage limit reached";
+    } else {
+      // Free user hit quota
+      displayMsg = "You've hit your usage limit";
+      errorIcon = "⚠️";
+      headerTitle = "Usage limit reached";
+      showUpgradeButton = true;
+    }
+  } else if (msg.includes("Session expired") || msg.includes("Invalid JWT") || msg.includes("401") || msg.includes("Unauthorized")) {
+    displayMsg = "Session expired";
+    errorIcon = "🔒";
+    headerTitle = "Sign in required";
+    isSignInIssue = true;
   }
   
   // Build buttons based on error type
   let buttonsHtml;
-  if (showRefreshHint) {
+  if (showRefreshButton) {
     buttonsHtml = `
       <button onclick="location.reload()">Refresh page</button>
-      <button data-action="open-link">Open link directly</button>
+      <button data-action="open-link">View page</button>
+    `;
+  } else if (isProQuotaExceeded) {
+    // Pro user without API key - show add key or contact support
+    buttonsHtml = `
+      <button class="primary" data-action="open-options">Add API Key</button>
+      <button data-action="open-support">Contact Support</button>
     `;
   } else if (showUpgradeButton) {
     buttonsHtml = `
-      <button data-action="upgrade-to-pro" style="background: linear-gradient(135deg, #3b82f6, #8b5cf6); border: none; font-weight: 600;">⚡ Upgrade to Pro</button>
+      <button class="primary" data-action="upgrade-to-pro">Upgrade to Pro</button>
       <button data-action="open-options">Open Options</button>
+    `;
+  } else if (isSignInIssue) {
+    buttonsHtml = `
+      <button data-action="open-options">Sign in</button>
+      <button data-action="open-link">View page</button>
     `;
   } else {
     buttonsHtml = `
       <button data-action="open-options">Open Options</button>
-      <button data-action="open-link">Open link directly</button>
+      <button data-action="open-link">View page</button>
     `;
   }
   
+  const footer = await getStatsFooter();
   UI.popover.innerHTML = `
     <div class="header">
-      <div class="title">Couldn't summarize</div>
-      <div class="header-right">
-        <div class="badge">error</div>
-      </div>
+      <div class="title">${escapeHtml(headerTitle)}</div>
     </div>
-    <div class="error">${escapeHtml(displayMsg)}</div>
+    <div class="error-banner">
+      <span class="error-icon">${errorIcon}</span>
+      <span>${escapeHtml(displayMsg)}</span>
+    </div>
     <div class="buttons">
       ${buttonsHtml}
     </div>
-    <div class="section muted" style="margin-top:8px;">
-      ${escapeHtml(helpText)}
-    </div>
+    ${footer}
   `;
 }
 
-function renderClickToLoad(element) {
+async function renderClickToLoad(element) {
   const linkText = (element.textContent || "").trim();
+  const footer = await getStatsFooter();
   UI.popover.innerHTML = `
     <div class="header">
       <div class="title">Click to load content</div>
@@ -720,6 +982,7 @@ function renderClickToLoad(element) {
     <div class="section muted" style="margin-top:8px;">
       This will click the button to load the content, then summarize it.
     </div>
+    ${footer}
   `;
 }
 
@@ -732,12 +995,13 @@ function getConfidenceTooltip(confidence) {
   return tips[confidence] || tips.medium;
 }
 
-function renderSummary(summary, url, fromCache) {
+async function renderSummary(summary, url, fromCache) {
   const title = typeof summary?.title === "string" && summary.title.trim() ? summary.title.trim() : "Summary";
   const confidence = summary?.confidence || "medium";
   const badgeText = fromCache ? `${confidence} • cached` : confidence;
   const badgeTooltip = getConfidenceTooltip(confidence);
   const badgeColorClass = confidence === "high" ? "badge-high" : confidence === "low" ? "badge-low" : "badge-medium";
+  const footer = await getStatsFooter(url);
 
   UI.popover.innerHTML = `
     <div class="header">
@@ -758,9 +1022,10 @@ function renderSummary(summary, url, fromCache) {
     ${preferences.showRedFlags ? renderListSection("🚩 Red flags", summary?.red_flags) : ""}
     ${preferences.showQuotes ? renderQuotes(summary?.quotes) : ""}
     <div class="divider"></div>
-    <div class="muted">
+    <div class="section muted" style="padding-bottom: 4px; margin-top: 0;">
       Note: This is an automated summary. <a class="link" data-action="view-source" href="${escapeAttr(url)}" target="_blank" rel="noreferrer">View full content</a>.
     </div>
+    ${footer}
   `;
 }
 
@@ -810,6 +1075,12 @@ function escapeAttr(s) {
 function showPopover(anchor) {
   UI.popover.style.display = "block";
   setPopoverPositionNearAnchor(anchor);
+  // Recalculate position after content is fully rendered to ensure it stays in view
+  setTimeout(() => {
+    if (current.anchor === anchor && UI.popover.style.display === "block") {
+      setPopoverPositionNearAnchor(anchor);
+    }
+  }, 10);
 }
 
 function hidePopover() {
@@ -1081,6 +1352,12 @@ UI.popover.addEventListener("click", (e) => {
       chrome.runtime.sendMessage({ type: "open_options_upgrade" });
       return;
     }
+    if (action === "open-support") {
+      e.preventDefault();
+      e.stopPropagation();
+      window.open("https://termsdigest.com/support", "_blank", "noopener,noreferrer");
+      return;
+    }
     if (action === "open-link") {
       // Click the original link directly (most reliable)
       if (current.anchor) {
@@ -1125,7 +1402,204 @@ UI.popover.addEventListener("click", (e) => {
         // Fallback: click the anchor directly
         current.anchor.click();
       }
+    } else if (action === "open-options") {
+      e.preventDefault();
+      e.stopPropagation();
+      // Handle footer settings icon click
+      chrome.runtime.sendMessage({ type: "open_options" });
+      return;
     }
+  }
+  
+  // Also check if clicking directly on footer settings icon
+  const footerSettings = e.target && e.target.closest ? e.target.closest(".footer-settings") : null;
+  if (footerSettings) {
+    e.preventDefault();
+    e.stopPropagation();
+    chrome.runtime.sendMessage({ type: "open_options" });
+    return;
+  }
+});
+
+
+// ========================================
+// AUTO-HIGHLIGHT DETECTED LEGAL LINKS
+// ========================================
+
+// Track highlighted elements to avoid re-processing
+const highlightedElements = new WeakSet();
+
+// Inject highlight styles into the main document
+function injectHighlightStyles() {
+  if (document.getElementById("termsdigest-highlight-styles")) return;
+  
+  const style = document.createElement("style");
+  style.id = "termsdigest-highlight-styles";
+  style.textContent = `
+    /* TermsDigest link highlight - animated underline */
+    .td-highlighted {
+      position: relative;
+      display: inline;
+      text-decoration: none !important;
+    }
+    
+    /* Animated underline that draws from left to right */
+    .td-highlighted::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: 0.5px;
+      background: currentColor;
+      transform-origin: left center;
+      animation: td-underline-draw 3s linear infinite;
+    }
+    
+    @keyframes td-underline-draw {
+      0% {
+        transform: scaleX(0);
+        transform-origin: left center;
+      }
+      12% {
+        transform: scaleX(1);
+        transform-origin: left center;
+      }
+      12.1% {
+        transform-origin: right center;
+      }
+      24% {
+        transform: scaleX(0);
+        transform-origin: right center;
+      }
+      100% {
+        transform: scaleX(0);
+        transform-origin: right center;
+      }
+    }
+  `;
+  
+  document.head.appendChild(style);
+}
+
+// Highlight a legal link element
+function highlightLegalLink(element) {
+  if (highlightedElements.has(element)) return;
+  if (!element || !element.isConnected) return;
+  
+  highlightedElements.add(element);
+  
+  // Use requestAnimationFrame for smooth DOM updates
+  requestAnimationFrame(() => {
+    element.classList.add("td-highlighted");
+  });
+}
+
+// IntersectionObserver to trigger animations when links enter viewport
+let highlightObserver = null;
+
+function setupHighlightObserver() {
+  if (highlightObserver) return;
+  
+  highlightObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const element = entry.target;
+          highlightLegalLink(element);
+          // Stop observing once highlighted
+          highlightObserver.unobserve(element);
+        }
+      });
+    },
+    {
+      root: null,
+      rootMargin: "50px",
+      threshold: 0.1
+    }
+  );
+}
+
+// Scan the page for legal links and set up observation
+function scanAndObserveLegalLinks() {
+  // Find all potential link/button elements
+  const elements = document.querySelectorAll('a, button, [role="link"], [role="button"]');
+  
+  elements.forEach((el) => {
+    // Skip already processed elements
+    if (highlightedElements.has(el)) return;
+    if (el.classList.contains("td-highlighted")) return;
+    
+    // Check if it's a legal link
+    if (isLikelyLegalLink(el)) {
+      // Observe for viewport entry
+      highlightObserver.observe(el);
+    }
+  });
+}
+
+// Watch for dynamically added content
+let mutationObserverForHighlight = null;
+
+function setupMutationObserverForHighlight() {
+  if (mutationObserverForHighlight) return;
+  
+  mutationObserverForHighlight = new MutationObserver((mutations) => {
+    let shouldScan = false;
+    
+    for (const mutation of mutations) {
+      if (mutation.type === "childList" && mutation.addedNodes.length > 0) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            // Check if the added node or its children might contain legal links
+            if (node.matches && (node.matches('a, button, [role="link"], [role="button"]') || 
+                node.querySelector('a, button, [role="link"], [role="button"]'))) {
+              shouldScan = true;
+              break;
+            }
+          }
+        }
+      }
+      if (shouldScan) break;
+    }
+    
+    if (shouldScan) {
+      // Debounce scanning for performance
+      clearTimeout(mutationObserverForHighlight._scanTimeout);
+      mutationObserverForHighlight._scanTimeout = setTimeout(scanAndObserveLegalLinks, 100);
+    }
+  });
+  
+  mutationObserverForHighlight.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+}
+
+// Initialize highlighting when DOM is ready
+function initLinkHighlighting() {
+  // Don't highlight if auto-hover is disabled (user preference)
+  if (!preferences.autoHover) return;
+  
+  injectHighlightStyles();
+  setupHighlightObserver();
+  scanAndObserveLegalLinks();
+  setupMutationObserverForHighlight();
+}
+
+// Initialize after a short delay to let page settle
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(initLinkHighlighting, 500);
+  });
+} else {
+  setTimeout(initLinkHighlighting, 500);
+}
+
+// Re-initialize when preferences are loaded (in case autoHover was false initially)
+loadPreferences().then(() => {
+  if (preferences.autoHover) {
+    initLinkHighlighting();
   }
 });
 

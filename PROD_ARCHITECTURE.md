@@ -1,4 +1,4 @@
-# Production Architecture (T&C Hover Summarizer)
+# Production Architecture (TermsDigest)
 
 This document describes the **production** setup for the extension so users **do not paste API keys**.
 

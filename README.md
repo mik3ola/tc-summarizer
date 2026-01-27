@@ -1,4 +1,4 @@
-# T&C Hover Summarizer
+# TermsDigest
 
 📜 **Instantly understand Terms & Conditions before you agree.**
 
@@ -26,38 +26,36 @@ A Chrome extension that summarizes legal documents (Terms of Service, Privacy Po
 
 ## Installation
 
-### From Source (Development)
+### From Chrome Web Store
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/yourusername/tc-hover-summarizer.git
-   cd tc-hover-summarizer
-   ```
+1. Visit the [Chrome Web Store listing](https://chrome.google.com/webstore/detail/termsdigest/[extension-id])
+2. Click **Add to Chrome**
+3. Click **Add Extension** to confirm
+4. Click the extension icon → **Options** → Sign in or add your OpenAI API key
 
-2. Open Chrome and go to `chrome://extensions`
-
-3. Enable **Developer mode** (top right)
-
-4. Click **Load unpacked** and select the `ai-summary-extension` folder
-
-5. Click the extension icon → **Settings** → Add your OpenAI API key
-
-### From Chrome Web Store (Coming Soon)
-
-The extension will be available on the Chrome Web Store once it's ready for public release.
+**Note**: The extension is only available through the Chrome Web Store. Source code is not publicly available for security and licensing reasons.
 
 ## Configuration
 
-### Free Tier (Your Own API Key)
+### Free Tier (5 Summaries/Month)
 
+1. Click the extension icon → **Options**
+2. Click **Sign in** or **Create account**
+3. Get 5 free summaries per month (no API key needed!)
+
+### Pro Tier (£4.99/year - Limited Time)
+
+1. Click the extension icon → **Options**
+2. Click **Upgrade to Pro**
+3. Get 50 summaries per month + unlimited with your own API key
+
+### Bring Your Own API Key (Pro Only)
+
+Pro subscribers can use their own OpenAI API key for unlimited summaries:
 1. Get an API key from [OpenAI](https://platform.openai.com/api-keys)
-2. Open extension Settings (click the Extension Options under Details)
-3. Paste your API key
+2. Open extension **Options**
+3. Paste your API key in the **API Settings** section
 4. Choose your preferred model (GPT-4o Mini recommended for cost)
-
-### Subscriber (Coming Soon)
-
-Subscribers won't need their own API key — just login and start using!
 
 ## Settings
 
@@ -68,42 +66,15 @@ Subscribers won't need their own API key — just login and start using!
 | Show supporting quotes | Include relevant quotes | ✅ On |
 | Hover delay | Time before showing summary | 0.75s |
 
-## Project Structure
+## Privacy Policy
 
-```
-ai-summary-extension/
-├── manifest.json          # Extension manifest (MV3)
-├── src/
-│   ├── background.js      # Service worker (API calls, caching)
-│   ├── content.js         # Content script (UI, hover detection)
-│   ├── options.html       # Settings page
-│   └── options.js         # Settings logic
-├── icons/                 # Extension icons (TODO: add icons)
-└── README.md
-```
+For detailed information about how we collect, use, and protect your data, please see our [Privacy Policy](https://termsdigest.com/privacy).
 
-## Backend Integration (For Subscribers)
-
-To enable the subscription model, you'll need to deploy a backend that:
-
-1. **Authenticates users** (OAuth, email/password, etc.)
-2. **Proxies API calls** to OpenAI (so users don't need their own key)
-3. **Manages subscriptions** (Stripe, etc.)
-
-Update `BACKEND_URL` in `src/background.js` with your backend URL.
-
-### Backend API Endpoints
-
-```
-POST /api/summarize
-Authorization: Bearer <token>
-Body: { url: string, text: string }
-Response: { summary: SummaryObject }
-
-POST /api/auth/login
-POST /api/auth/logout
-GET /api/subscription/status
-```
+**Quick Summary:**
+- **Free tier**: Your data stays local. We only track usage count for quota enforcement.
+- **Pro tier**: Text content is sent to our backend for summarization but **never stored**. Only usage statistics are kept.
+- **No tracking**: We don't track which websites you visit or collect browsing history.
+- **Local cache**: Summaries are cached locally in your browser for 30 days.
 
 ## Privacy
 

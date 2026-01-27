@@ -1,4 +1,4 @@
--- Supabase schema for T&C Hover Summarizer
+-- Supabase schema for TermsDigest
 -- Apply in Supabase SQL editor.
 
 -- 1) Profiles (ties to auth.users)

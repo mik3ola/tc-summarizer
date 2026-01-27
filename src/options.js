@@ -20,10 +20,11 @@ const signUpBtn = document.getElementById("signUpBtn");
 const cancelAuthBtn = document.getElementById("cancelAuthBtn");
 const planHintEl = document.getElementById("planHint");
 
-// Backend config
-const supabaseUrlEl = document.getElementById("supabaseUrl");
-const supabaseAnonKeyEl = document.getElementById("supabaseAnonKey");
-const saveBackendBtn = document.getElementById("saveBackend");
+// Backend config - removed (always use defaults)
+
+// Default Supabase configuration (same as background.js)
+const DEFAULT_SUPABASE_URL = "https://rsxvxezucgczesplmjiw.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzeHZ4ZXp1Y2djemVzcGxtaml3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjcwNjYsImV4cCI6MjA4MzU0MzA2Nn0.1umoIH60gsytGtmfbgfxr1OZJs_L-62wT_BWVaMt5lw";
 
 // Toggles
 const autoHoverEl = document.getElementById("autoHover");
@@ -110,8 +111,6 @@ async function loadSettings() {
     "subscription",
     "subscriptionPlan",
     "userEmail",
-    "supabaseUrl",
-    "supabaseAnonKey",
     "supabaseSession",
     "preferences",
     "summariesCache",
@@ -133,15 +132,13 @@ async function loadSettings() {
 
   // Subscription status
   // Prefer real session if present
-  await refreshSupabaseStatusIfPossible(data);
+  await refreshSupabaseStatusIfPossible({ supabaseSession: data.supabaseSession });
   
   // Refresh data after status update
   const refreshedData = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
   updateSubscriptionUI(refreshedData.subscription, refreshedData.userEmail, refreshedData.subscriptionPlan);
 
-  // Backend config
-  supabaseUrlEl.value = data.supabaseUrl || "https://rsxvxezucgczesplmjiw.supabase.co";
-  supabaseAnonKeyEl.value = data.supabaseAnonKey || "";
+  // Backend config - always use defaults (not user-configurable)
 
   // Stats - pass monthly usage and plan
   updateStats(data.summariesCache, data.usageStats, refreshedData.monthlyUsage, refreshedData.subscriptionPlan);
@@ -149,7 +146,8 @@ async function loadSettings() {
 
 function updateSubscriptionUI(subscription, email, plan) {
   const isLoggedIn = !!email;
-  const isPro = subscription === "active" && plan === "pro";
+  // Pro if: (1) subscription is active AND plan is pro, OR (2) plan is pro (fallback for edge cases)
+  const isPro = (subscription === "active" && plan === "pro") || plan === "pro";
   
   // API key hint element
   const apiKeyHint = document.getElementById("apiKeyHint");
@@ -169,7 +167,6 @@ function updateSubscriptionUI(subscription, email, plan) {
     // Show stats and API card for Pro users
     statsCardEl?.classList.remove("hidden");
     apiCardEl?.classList.remove("hidden");
-    backendCardEl?.classList.add("hidden");
     
     // Update API hint for Pro users
     if (apiKeyHint) apiKeyHint.innerHTML = "Your Pro plan is active. Add your own key for <strong>unlimited</strong> usage.";
@@ -188,7 +185,6 @@ function updateSubscriptionUI(subscription, email, plan) {
     // Show stats, HIDE API card for free tier (Pro only feature)
     statsCardEl?.classList.remove("hidden");
     apiCardEl?.classList.add("hidden"); // API key is Pro-only
-    backendCardEl?.classList.add("hidden");
   } else {
     // Not logged in → prompt to sign in/up
     subBadgeEl.textContent = "Guest";
@@ -196,17 +192,28 @@ function updateSubscriptionUI(subscription, email, plan) {
     subStatusEl.classList.remove("hidden");
     subActiveEl.classList.add("hidden");
     
-    // Hide stats, API card, and backend config for guests - they need to sign in first
+    // Hide stats, API card for guests - they need to sign in first
     statsCardEl?.classList.add("hidden");
     apiCardEl?.classList.add("hidden"); // Must sign in to use API key
-    backendCardEl?.classList.add("hidden"); // Backend config is baked in
   }
 }
 
 function updateStats(cache, stats, monthlyUsage, plan) {
   const cacheCount = cache ? Object.keys(cache).length : 0;
   const totalSummaries = stats?.totalSummaries || 0;
-  const avgReadTime = 5; // Assume 5 min saved per summary
+  
+  // Calculate minutes saved based on actual word count from cached summaries
+  // Average reading speed: ~200 words per minute
+  let totalWords = 0;
+  if (cache) {
+    Object.values(cache).forEach(entry => {
+      if (entry?.originalTextLength) {
+        // Estimate words from character count (average 5 chars per word)
+        totalWords += Math.floor(entry.originalTextLength / 5);
+      }
+    });
+  }
+  const minutesSaved = Math.floor(totalWords / 200); // 200 words per minute reading speed
   
   // Determine quota based on plan
   let quota = 5; // Free tier default
@@ -219,7 +226,7 @@ function updateStats(cache, stats, monthlyUsage, plan) {
   
   statSummariesEl.textContent = `${used}/${quota}`;
   statCachedEl.textContent = cacheCount;
-  statSavedEl.textContent = `~${totalSummaries * avgReadTime}`;
+  statSavedEl.textContent = `~${minutesSaved}`;
   
   // Update hint
   if (usageHintEl) {
@@ -231,7 +238,7 @@ function updateStats(cache, stats, monthlyUsage, plan) {
       usageHintEl.style.color = "#f59e0b";
     } else {
       usageHintEl.textContent = `${remaining} ${remaining === 1 ? "summary" : "summaries"} remaining this month.`;
-      usageHintEl.style.color = "";
+      usageHintEl.style.color = "var(--text-muted)";
     }
   }
 }
@@ -256,6 +263,7 @@ clearApiBtn.addEventListener("click", async () => {
 clearCacheBtn.addEventListener("click", async () => {
   await chrome.storage.local.set({ summariesCache: {} });
   statCachedEl.textContent = "0";
+  statSavedEl.textContent = "~0"; // Also clear minutes saved
   showStatus("Summary cache cleared!");
 });
 
@@ -266,7 +274,7 @@ exportDataBtn.addEventListener("click", async () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `tc-summarizer-data-${Date.now()}.json`;
+  a.download = `termsdigest-data-${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(url);
   showStatus("Data exported!");
@@ -290,16 +298,16 @@ showQuotesEl.addEventListener("change", savePreferences);
 enableCachingEl.addEventListener("change", savePreferences);
 hoverDelayEl.addEventListener("change", savePreferences);
 
-function requireBackendConfigOrThrow() {
-  const url = (supabaseUrlEl.value || "").trim();
-  const anon = (supabaseAnonKeyEl.value || "").trim();
-  if (!url) throw new Error("Missing Supabase Project URL (Backend connection section).");
-  if (!anon) throw new Error("Missing Supabase anon key (Backend connection section).");
+async function requireBackendConfigOrThrow() {
+  // Always use hardcoded defaults (not user-configurable)
+  const url = DEFAULT_SUPABASE_URL.trim();
+  const anon = DEFAULT_SUPABASE_ANON_KEY.trim();
+  if (!url || !anon) throw new Error("Backend configuration error. Please contact support.");
   return { url, anon };
 }
 
 async function signInOrUp(mode) {
-  const { url, anon } = requireBackendConfigOrThrow();
+  const { url, anon } = await requireBackendConfigOrThrow();
   const email = (authEmailEl.value || "").trim();
   const password = (authPasswordEl.value || "").trim();
   if (!email || !password) throw new Error("Please enter both email and password.");
@@ -361,14 +369,12 @@ async function signInOrUp(mode) {
   };
 
   await chrome.storage.local.set({
-    supabaseUrl: url,
-    supabaseAnonKey: anon,
     supabaseSession: session
   });
 
   authFormEl.classList.add("hidden");
   showModal("success", "Signed in!", `Welcome back, ${email}!`);
-  await refreshSupabaseStatusIfPossible({ supabaseUrl: url, supabaseAnonKey: anon, supabaseSession: session });
+  await refreshSupabaseStatusIfPossible({ supabaseSession: session });
   await loadSettings();
 }
 
@@ -398,47 +404,154 @@ signUpBtn?.addEventListener("click", async () => {
   }
 });
 
-saveBackendBtn?.addEventListener("click", async () => {
+// Backend settings save removed - always use hardcoded defaults
+
+async function refreshSessionToken(supabaseUrl, anon, session) {
+  if (!session?.refresh_token) return null;
+  
   try {
-    const url = (supabaseUrlEl.value || "").trim();
-    const anon = (supabaseAnonKeyEl.value || "").trim();
-    await chrome.storage.local.set({ supabaseUrl: url, supabaseAnonKey: anon });
-    showStatus("Backend settings saved!");
+    const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { "content-type": "application/json", apikey: anon },
+      body: JSON.stringify({ refresh_token: session.refresh_token })
+    });
+    
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    if (!data?.access_token) return null;
+    
+    const expiresAt = Date.now() + (Number(data.expires_in || 0) * 1000);
+    const refreshed = {
+      ...session,
+      access_token: data.access_token,
+      refresh_token: data.refresh_token || session.refresh_token,
+      expires_at: expiresAt,
+      user: data.user ? { id: data.user.id, email: data.user.email } : session.user
+    };
+    
+    await chrome.storage.local.set({ supabaseSession: refreshed });
+    return refreshed;
   } catch (e) {
-    showStatus(e?.message || "Failed to save backend settings", "error");
+    console.error("[Options] Token refresh failed:", e);
+    return null;
   }
-});
+}
 
 async function refreshSupabaseStatusIfPossible(data) {
-  const supabaseUrl = (data.supabaseUrl || "").trim();
-  const anon = (data.supabaseAnonKey || "").trim();
-  const session = data.supabaseSession;
-  if (!supabaseUrl || !anon || !session?.access_token) return;
-
-  const userId = session.user?.id;
-  
-  // Fetch subscription status (RLS restricts to own row)
-  const subQs = userId
-    ? `?select=status,plan,current_period_end&user_id=eq.${encodeURIComponent(userId)}`
-    : `?select=status,plan,current_period_end`;
-
-  const subRes = await fetch(`${supabaseUrl}/rest/v1/subscriptions${subQs}`, {
-    method: "GET",
-    headers: { apikey: anon, Authorization: `Bearer ${session.access_token}` }
-  });
-
-  if (!subRes.ok) {
-    // If token is invalid/expired, leave as-is; background worker will refresh on next use
+  const supabaseUrl = DEFAULT_SUPABASE_URL.trim();
+  const anon = DEFAULT_SUPABASE_ANON_KEY.trim();
+  let session = data.supabaseSession;
+  if (!session?.access_token) {
     return;
   }
-  const subRows = await subRes.json().catch(() => []);
-  const sub = Array.isArray(subRows) ? subRows[0] : subRows;
-  const status = sub?.status || null;
-  const plan = sub?.plan || null;
 
-  // Fetch monthly usage (current month)
-  let monthlyUsage = 0;
-  if (userId) {
+  const userId = session.user?.id;
+  if (!userId) {
+    return;
+  }
+  
+  // Check if token is expired and refresh if needed
+  const isExpired = session.expires_at && (session.expires_at - 300000) < Date.now();
+  if (isExpired) {
+    const refreshed = await refreshSessionToken(supabaseUrl, anon, session);
+    if (refreshed?.access_token) {
+      session = refreshed;
+    } else {
+      return;
+    }
+  }
+  
+  // Fetch subscription status (RLS restricts to own row)
+  const subQs = `?select=status,plan,current_period_end&user_id=eq.${encodeURIComponent(userId)}`;
+
+  try {
+    const subRes = await fetch(`${supabaseUrl}/rest/v1/subscriptions${subQs}`, {
+      method: "GET",
+      headers: { apikey: anon, Authorization: `Bearer ${session.access_token}` }
+    });
+
+    if (!subRes.ok) {
+      const errorText = await subRes.text().catch(() => "");
+      console.error(`[Options] Failed to fetch subscription (${subRes.status}):`, errorText);
+      
+      // If 401, try refreshing token once more
+      if (subRes.status === 401) {
+        const refreshed = await refreshSessionToken(supabaseUrl, anon, session);
+        if (refreshed?.access_token) {
+          // Retry with new token
+          const retryRes = await fetch(`${supabaseUrl}/rest/v1/subscriptions${subQs}`, {
+            method: "GET",
+            headers: { apikey: anon, Authorization: `Bearer ${refreshed.access_token}` }
+          });
+          if (retryRes.ok) {
+            session = refreshed;
+            // Continue with processing below
+            const subRows = await retryRes.json().catch(() => []);
+            const sub = Array.isArray(subRows) ? subRows[0] : subRows;
+            
+            if (!sub) {
+              await chrome.storage.local.set({
+                subscription: null,
+                subscriptionPlan: null
+              });
+              return;
+            }
+            
+            const status = sub?.status || null;
+            const plan = sub?.plan || null;
+            
+            // Fetch monthly usage
+            let monthlyUsage = 0;
+            const now = new Date();
+            const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+            const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${monthStart}`;
+            
+            try {
+              const usageRes = await fetch(`${supabaseUrl}/rest/v1/usage_counters_monthly${usageQs}`, {
+                method: "GET",
+                headers: { apikey: anon, Authorization: `Bearer ${refreshed.access_token}` }
+              });
+              
+              if (usageRes.ok) {
+                const usageRows = await usageRes.json().catch(() => []);
+                const usage = Array.isArray(usageRows) ? usageRows[0] : usageRows;
+                monthlyUsage = usage?.summaries_count || 0;
+              }
+            } catch (e) {
+              // Silently fail - usage is optional
+            }
+
+            await chrome.storage.local.set({
+              subscription: status,
+              subscriptionPlan: plan,
+              userEmail: refreshed.user?.email || null,
+              monthlyUsage: monthlyUsage
+            });
+            return;
+          }
+        }
+      }
+      
+      return;
+    }
+    
+    const subRows = await subRes.json().catch(() => []);
+    const sub = Array.isArray(subRows) ? subRows[0] : subRows;
+    
+    if (!sub) {
+      // Clear subscription data if no row exists
+      await chrome.storage.local.set({
+        subscription: null,
+        subscriptionPlan: null
+      });
+      return;
+    }
+    
+    const status = sub?.status || null;
+    const plan = sub?.plan || null;
+
+    // Fetch monthly usage (current month)
+    let monthlyUsage = 0;
     const now = new Date();
     const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
     const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${monthStart}`;
@@ -455,28 +568,30 @@ async function refreshSupabaseStatusIfPossible(data) {
         monthlyUsage = usage?.summaries_count || 0;
       }
     } catch (e) {
-      console.warn("Failed to fetch monthly usage:", e);
+      // Silently fail - usage is optional
     }
-  }
 
-  await chrome.storage.local.set({
-    subscription: status,
-    subscriptionPlan: plan,
-    userEmail: session.user?.email || null,
-    monthlyUsage: monthlyUsage
-  });
+    // Store the updated subscription data
+    await chrome.storage.local.set({
+      subscription: status,
+      subscriptionPlan: plan,
+      userEmail: session.user?.email || null,
+      monthlyUsage: monthlyUsage
+    });
+  } catch (e) {
+    console.error("[Options] Error refreshing subscription status:", e);
+    throw e; // Re-throw so caller can handle it
+  }
 }
 
 upgradeBtn?.addEventListener("click", async () => {
   try {
-    const { supabaseUrl, supabaseAnonKey, supabaseSession } = await chrome.storage.local.get([
-      "supabaseUrl",
-      "supabaseAnonKey",
-      "supabaseSession"
-    ]);
-    if (!supabaseUrl || !supabaseAnonKey || !supabaseSession?.access_token) {
+    const { supabaseSession } = await chrome.storage.local.get(["supabaseSession"]);
+    if (!supabaseSession?.access_token) {
       throw new Error("Please sign in first.");
     }
+    const supabaseUrl = DEFAULT_SUPABASE_URL.trim();
+    const supabaseAnonKey = DEFAULT_SUPABASE_ANON_KEY.trim();
 
     showModal("loading", "Preparing checkout...", "Please wait while we create your payment link.");
 
@@ -496,10 +611,81 @@ upgradeBtn?.addEventListener("click", async () => {
     hideModal();
     window.open(data.url, "_blank", "noopener,noreferrer");
     
-    // Show info modal after a brief delay
-    setTimeout(() => {
-      showModal("info", "Checkout opened", "Complete your payment in the new tab. After payment, click 'Refresh status' to see your Pro subscription.");
-    }, 500);
+    // Show info modal
+    showModal("info", "Checkout opened", "Complete your payment in the new tab. We'll automatically detect when payment is complete.");
+    
+    // Poll for subscription status changes (payment webhook may take a few seconds)
+    // Stripe redirects to success page, doesn't close window, so we just poll periodically
+    let pollCount = 0;
+    const maxPolls = 20; // Poll for up to 20 checks (every 3 seconds = 60 seconds total)
+    const pollInterval = setInterval(async () => {
+      pollCount++;
+      
+      try {
+        // Refresh subscription status from backend
+        await refreshSupabaseStatusIfPossible({ supabaseSession });
+        
+        // Get updated data immediately after refresh
+        const updated = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
+        
+        // Check if subscription is now active (be flexible - plan="pro" is enough)
+        if ((updated.subscription === "active" && updated.subscriptionPlan === "pro") || updated.subscriptionPlan === "pro") {
+          clearInterval(pollInterval);
+          window.removeEventListener("focus", focusHandler);
+          
+          // Force UI update with latest data
+          updateSubscriptionUI(updated.subscription, updated.userEmail, updated.subscriptionPlan);
+          updateStats(
+            (await chrome.storage.local.get(["summariesCache"])).summariesCache,
+            (await chrome.storage.local.get(["usageStats"])).usageStats,
+            updated.monthlyUsage,
+            updated.subscriptionPlan
+          );
+          
+          // Show success
+          showModal("success", "Payment successful!", "Your Pro subscription is now active! You can start using all Pro features.");
+          return;
+        }
+        
+        // Stop polling after max attempts
+        if (pollCount >= maxPolls) {
+          clearInterval(pollInterval);
+          window.removeEventListener("focus", focusHandler);
+          // Don't show error - user might have completed payment, just remind them to refresh
+          showModal("info", "Payment check complete", "If you completed payment, click 'Refresh status' to see your Pro subscription.");
+        }
+      } catch (err) {
+        console.error("Error polling subscription status:", err);
+      }
+    }, 3000); // Poll every 3 seconds
+    
+    // Also listen for window focus (user might have switched back after payment)
+    const focusHandler = async () => {
+      try {
+        await refreshSupabaseStatusIfPossible({ supabaseSession });
+        const updated = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
+        
+        // Check if subscription is now active (be flexible - plan="pro" is enough)
+        if ((updated.subscription === "active" && updated.subscriptionPlan === "pro") || updated.subscriptionPlan === "pro") {
+          clearInterval(pollInterval);
+          window.removeEventListener("focus", focusHandler);
+          
+          // Force UI update
+          updateSubscriptionUI(updated.subscription, updated.userEmail, updated.subscriptionPlan);
+          updateStats(
+            (await chrome.storage.local.get(["summariesCache"])).summariesCache,
+            (await chrome.storage.local.get(["usageStats"])).usageStats,
+            updated.monthlyUsage,
+            updated.subscriptionPlan
+          );
+          
+          showModal("success", "Payment successful!", "Your Pro subscription is now active!");
+        }
+      } catch (err) {
+        console.error("[Options] Error checking subscription on focus:", err);
+      }
+    };
+    window.addEventListener("focus", focusHandler);
   } catch (e) {
     console.error(e);
     showModal("error", "Upgrade failed", e?.message || "Please try again later.");
@@ -509,12 +695,26 @@ upgradeBtn?.addEventListener("click", async () => {
 refreshStatusBtn?.addEventListener("click", async () => {
   try {
     showModal("loading", "Refreshing...", "Checking your subscription status.");
-    const data = await chrome.storage.local.get(["supabaseUrl", "supabaseAnonKey", "supabaseSession"]);
+    const data = await chrome.storage.local.get(["supabaseSession"]);
+    
+    // Force refresh from backend
     await refreshSupabaseStatusIfPossible(data);
+    
+    // Get the updated data
+    const updated = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
+    
+    // Reload all settings to update UI
     await loadSettings();
-    showModal("success", "Status refreshed", "Your subscription status has been updated.");
+    
+    // Show appropriate message based on subscription status
+    if (updated.subscription === "active" && updated.subscriptionPlan === "pro") {
+      showModal("success", "Status refreshed", "Your Pro subscription is active!");
+    } else {
+      showModal("success", "Status refreshed", "Your subscription status has been updated.");
+    }
   } catch (e) {
-    showModal("error", "Refresh failed", e?.message || "Failed to refresh status.");
+    console.error("[Options] Refresh error:", e);
+    showModal("error", "Refresh failed", e?.message || "Failed to refresh status. Please try again.");
   }
 });
 
@@ -553,6 +753,12 @@ function handleQueryParams() {
       window.history.replaceState({}, document.title, window.location.pathname);
     }, 500);
   }
+}
+
+// Initialize logo
+const logoImg = document.getElementById("logoImg");
+if (logoImg) {
+  logoImg.src = chrome.runtime.getURL("icons/icon48.png");
 }
 
 // Initialize

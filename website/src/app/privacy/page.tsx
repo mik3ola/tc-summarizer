@@ -1,8 +1,9 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export const metadata = {
-  title: "Privacy Policy - T&C Summarizer",
-  description: "How T&C Summarizer handles your data and protects your privacy.",
+  title: "Privacy Policy - TermsDigest",
+  description: "How TermsDigest handles your data and protects your privacy.",
 };
 
 export default function PrivacyPage() {
@@ -12,8 +13,8 @@ export default function PrivacyPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 glass-card">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">📋</span>
-            <span className="font-bold text-lg">T&C Summarizer</span>
+            <Image src="/logo.png" alt="TermsDigest" width={32} height={32} className="w-8 h-8" />
+            <span className="font-bold text-lg">TermsDigest</span>
           </Link>
           <div className="flex items-center gap-6">
             <Link href="/#features" className="text-gray-400 hover:text-white transition-colors text-sm">Features</Link>
@@ -32,7 +33,7 @@ export default function PrivacyPage() {
             <section>
               <h2 className="text-2xl font-semibold mb-4">Overview</h2>
               <p className="text-gray-300 leading-relaxed">
-                T&C Summarizer (&quot;we&quot;, &quot;our&quot;, &quot;us&quot;) is a Chrome extension that helps users understand 
+                TermsDigest (&quot;we&quot;, &quot;our&quot;, &quot;us&quot;) is a Chrome extension that helps users understand 
                 legal documents by providing AI-generated summaries. We are committed to protecting your 
                 privacy and being transparent about our data practices.
               </p>
@@ -73,7 +74,7 @@ export default function PrivacyPage() {
                 <li>Returns the summary to display in the popup</li>
               </ol>
               <p className="text-gray-300 leading-relaxed mt-4">
-                <strong>Important:</strong> The text is processed in real-time and is <strong>not stored</strong> 
+                <strong>Important:</strong> The text is processed in real-time and is <strong>not stored </strong> 
                 on our servers. We do not build profiles of your browsing activity.
               </p>
             </section>
@@ -115,8 +116,8 @@ export default function PrivacyPage() {
               </ul>
               <p className="text-gray-300 leading-relaxed mt-4">
                 To exercise these rights, contact us at{" "}
-                <a href="mailto:privacy@tc-summarizer.com" className="text-blue-400 hover:underline">
-                  privacy@tc-summarizer.com
+                <a href="mailto:privacy@termsdigest.com" className="text-blue-400 hover:underline">
+                  privacy@termsdigest.com
                 </a>
               </p>
             </section>
@@ -146,7 +147,7 @@ export default function PrivacyPage() {
             <section>
               <h2 className="text-2xl font-semibold mb-4">Children&apos;s Privacy</h2>
               <p className="text-gray-300 leading-relaxed">
-                T&C Summarizer is not intended for children under 13. We do not knowingly collect 
+                TermsDigest is not intended for children under 13. We do not knowingly collect 
                 personal information from children.
               </p>
             </section>
@@ -163,8 +164,8 @@ export default function PrivacyPage() {
               <h2 className="text-2xl font-semibold mb-4">Contact Us</h2>
               <p className="text-gray-300 leading-relaxed">
                 For privacy-related questions or concerns, contact us at:{" "}
-                <a href="mailto:privacy@tc-summarizer.com" className="text-blue-400 hover:underline">
-                  privacy@tc-summarizer.com
+                <a href="mailto:privacy@termsdigest.com" className="text-blue-400 hover:underline">
+                  privacy@termsdigest.com
                 </a>
               </p>
             </section>
@@ -177,8 +178,8 @@ export default function PrivacyPage() {
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
-              <span className="text-xl">📋</span>
-              <span className="font-semibold">T&C Summarizer</span>
+              <Image src="/logo.png" alt="TermsDigest" width={24} height={24} className="w-6 h-6" />
+              <span className="font-semibold">TermsDigest</span>
             </div>
             <div className="flex items-center gap-6 text-sm text-gray-400">
               <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
@@ -186,7 +187,7 @@ export default function PrivacyPage() {
               <Link href="/support" className="hover:text-white transition-colors">Support</Link>
             </div>
             <div className="text-sm text-gray-500">
-              © {new Date().getFullYear()} T&C Summarizer. All rights reserved.
+              © {new Date().getFullYear()} TermsDigest. All rights reserved.
             </div>
           </div>
         </div>

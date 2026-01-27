@@ -48,7 +48,7 @@ serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const priceId = Deno.env.get("STRIPE_PRICE_ID");
-    const siteUrl = Deno.env.get("SITE_URL") || "https://tc-summarizer.com";
+    const siteUrl = Deno.env.get("SITE_URL") || "https://termsdigest.com";
 
     if (!stripeSecretKey || !supabaseUrl || !serviceRoleKey || !priceId) {
       console.error("Missing config:", { stripeSecretKey: !!stripeSecretKey, supabaseUrl: !!supabaseUrl, serviceRoleKey: !!serviceRoleKey, priceId: !!priceId });
