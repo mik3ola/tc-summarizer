@@ -7,32 +7,30 @@ import { useTheme } from "@/components/ThemeProvider";
 
 export default function GlobeFeatureSection() {
   const { theme } = useTheme();
-  const isDark = theme === "dark";
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  // Only calculate isDark after mounting to avoid hydration mismatch
+  const isDark = mounted ? theme === "dark" : true;
 
   return (
-    <section className={cn(
-      "relative w-full overflow-hidden min-h-[600px] md:min-h-[700px]",
-      isDark ? "bg-slate-950" : "bg-gray-50"
-    )}>
-      {/* Globe - positioned on the right */}
+    <section className="relative w-full overflow-hidden min-h-[600px] md:min-h-[700px] bg-gray-50 dark:bg-slate-950">
+      {/* Globe - positioned on the right, only render after mounting to get correct theme */}
       <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[450px] h-[450px] md:w-[600px] md:h-[600px] lg:w-[750px] lg:h-[750px] -mr-24 md:-mr-16 lg:-mr-8">
-        <Globe isDark={isDark} className="w-full h-full" />
+        {mounted && <Globe isDark={isDark} className="w-full h-full" />}
       </div>
 
       {/* Content */}
       <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 h-full min-h-[600px] md:min-h-[700px] flex flex-col justify-between py-16 md:py-20">
         {/* Title - Upper Left */}
         <div className="max-w-xl">
-          <h2 className={cn(
-            "text-4xl md:text-5xl lg:text-6xl font-light tracking-tight leading-tight",
-            isDark ? "text-white" : "text-gray-900"
-          )}>
+          <h2 className="text-4xl md:text-5xl lg:text-6xl font-light tracking-tight leading-tight text-gray-900 dark:text-white">
             Ready to understand what you&apos;re signing?
           </h2>
-          <p className={cn(
-            "text-lg md:text-xl font-light mt-6 leading-relaxed max-w-lg",
-            isDark ? "text-gray-400" : "text-gray-600"
-          )}>
+          <p className="text-lg md:text-xl font-light mt-6 leading-relaxed max-w-lg text-gray-600 dark:text-gray-400">
             Join thousands of users who stopped blindly accepting legal terms. Get instant AI-powered summaries.
           </p>
         </div>

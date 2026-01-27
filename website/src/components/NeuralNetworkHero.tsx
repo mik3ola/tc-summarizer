@@ -334,28 +334,25 @@ export default function NeuralNetworkHero({
     { scope: sectionRef, dependencies: [mounted] },
   );
 
-  const isDark = theme === 'dark';
+  // Only use isDark for the background which is already guarded by mounted
+  const isDark = mounted ? theme === 'dark' : true;
 
   return (
     <section ref={sectionRef} className="relative min-h-screen w-full overflow-hidden">
       {/* Background - shader for dark mode, gradient for light mode */}
       {mounted && (isDark ? <ShaderBackground /> : <GradientBackground />)}
 
-      <div className={`relative mx-auto flex max-w-7xl flex-col items-center gap-6 px-6 pb-24 pt-36 sm:gap-8 sm:pt-44 md:px-10 lg:px-16 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+      <div className="relative mx-auto flex max-w-7xl flex-col items-center gap-6 px-6 pb-24 pt-36 sm:gap-8 sm:pt-44 md:px-10 lg:px-16 text-gray-900 dark:text-white">
         {/* Badge */}
         <div 
           ref={badgeRef} 
-          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 backdrop-blur-sm ${
-            isDark 
-              ? 'border-white/10 bg-white/5' 
-              : 'border-gray-200 bg-white/80 shadow-sm'
-          }`}
+          className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 backdrop-blur-sm border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 shadow-sm dark:shadow-none"
         >
-          <span className={`text-[10px] font-light uppercase tracking-[0.08em] ${isDark ? 'text-white/70' : 'text-gray-500'}`}>
+          <span className="text-[10px] font-light uppercase tracking-[0.08em] text-gray-500 dark:text-white/70">
             {badgeLabel}
           </span>
-          <span className={`h-1 w-1 rounded-full ${isDark ? 'bg-white/40' : 'bg-gray-400'}`} />
-          <span className={`text-xs font-light tracking-tight ${isDark ? 'text-white/80' : 'text-gray-700'}`}>
+          <span className="h-1 w-1 rounded-full bg-gray-400 dark:bg-white/40" />
+          <span className="text-xs font-light tracking-tight text-gray-700 dark:text-white/80">
             {badgeText}
           </span>
         </div>
@@ -363,7 +360,7 @@ export default function NeuralNetworkHero({
         {/* Title */}
         <h1 
           ref={headerRef} 
-          className={`max-w-4xl text-center text-5xl font-extralight leading-[1.05] tracking-tight sm:text-6xl md:text-7xl ${isDark ? 'text-white' : 'text-gray-900'}`}
+          className="max-w-4xl text-center text-5xl font-extralight leading-[1.05] tracking-tight sm:text-6xl md:text-7xl text-gray-900 dark:text-white"
         >
           {title}
         </h1>
@@ -371,7 +368,7 @@ export default function NeuralNetworkHero({
         {/* Description */}
         <p 
           ref={paraRef} 
-          className={`max-w-2xl text-center text-base font-light leading-relaxed tracking-tight sm:text-lg ${isDark ? 'text-white/75' : 'text-gray-600'}`}
+          className="max-w-2xl text-center text-base font-light leading-relaxed tracking-tight sm:text-lg text-gray-600 dark:text-white/75"
         >
           {description}
         </p>
@@ -386,12 +383,8 @@ export default function NeuralNetworkHero({
               rel={button.external ? "noopener noreferrer" : undefined}
               className={`rounded-2xl border px-6 py-3 text-sm font-light tracking-tight transition-all duration-300 focus:outline-none focus:ring-2 ${
                 button.primary
-                  ? isDark
-                    ? "border-white/10 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 focus:ring-white/30"
-                    : "border-blue-600 bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-300"
-                  : isDark
-                    ? "border-white/10 text-white/80 hover:bg-white/5"
-                    : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                  ? "border-blue-600 dark:border-white/10 bg-blue-600 dark:bg-white/10 text-white backdrop-blur-sm hover:bg-blue-700 dark:hover:bg-white/20 focus:ring-blue-300 dark:focus:ring-white/30"
+                  : "border-gray-200 dark:border-white/10 text-gray-700 dark:text-white/80 hover:bg-gray-50 dark:hover:bg-white/5"
               }`}
             >
               {button.text}
@@ -402,7 +395,7 @@ export default function NeuralNetworkHero({
         {/* Micro Details */}
         <ul 
           ref={microRef} 
-          className={`mt-8 flex flex-wrap justify-center gap-6 text-xs font-extralight tracking-tight ${isDark ? 'text-white/60' : 'text-gray-500'}`}
+          className="mt-8 flex flex-wrap justify-center gap-6 text-xs font-extralight tracking-tight text-gray-500 dark:text-white/60"
         >
           {microDetails.map((detail, index) => (
             <li 
@@ -410,14 +403,14 @@ export default function NeuralNetworkHero({
               ref={(el) => { microItemRefs.current[index] = el; }}
               className="flex items-center gap-2"
             >
-              <span className={`h-1 w-1 rounded-full ${isDark ? 'bg-white/40' : 'bg-gray-400'}`} /> {detail}
+              <span className="h-1 w-1 rounded-full bg-gray-400 dark:bg-white/40" /> {detail}
             </li>
           ))}
         </ul>
       </div>
 
       {/* Bottom gradient fade */}
-      <div className={`pointer-events-none absolute inset-x-0 bottom-0 h-32 ${isDark ? 'bg-gradient-to-t from-black/60 to-transparent' : 'bg-gradient-to-t from-white/80 to-transparent'}`} />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-white/80 dark:from-black/60 to-transparent" />
     </section>
   );
 }

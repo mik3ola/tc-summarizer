@@ -306,26 +306,33 @@ const footerLinks = [
 export const FlickeringFooter = () => {
   const tablet = useMediaQuery("(max-width: 1024px)");
   const { theme } = useTheme();
-  const isDark = theme === "dark";
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  // Only use isDark for components that need it as a prop (like FlickeringGrid color)
+  const isDark = mounted ? theme === "dark" : true;
 
   return (
-    <footer id="footer" className={cn("w-full pb-0", isDark ? "bg-black" : "bg-white")}>
+    <footer id="footer" className="w-full pb-0 bg-white dark:bg-black">
       <div className="max-w-7xl mx-auto px-6 py-12">
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
           {/* Logo, Description and Badge */}
           <div className="flex flex-col items-start max-w-sm">
             <Link href="/" className="flex items-center gap-2" style={{ display: 'flex', whiteSpace: 'nowrap' }}>
               <Image src="/logo.png" alt="TermsDigest" width={32} height={32} className="w-8 h-8" style={{ flexShrink: 0 }} />
-              <span className={cn("text-lg font-semibold tracking-tight", isDark ? "text-white" : "text-gray-900")} style={{ whiteSpace: 'nowrap' }}>
+              <span className="text-lg font-semibold tracking-tight text-gray-900 dark:text-white" style={{ whiteSpace: 'nowrap' }}>
                 TermsDigest
               </span>
             </Link>
-            <p className={cn("mt-3 text-sm font-light leading-relaxed", isDark ? "text-gray-400" : "text-gray-600")}>
+            <p className="mt-3 text-sm font-light leading-relaxed text-gray-600 dark:text-gray-400">
               AI-powered summaries of Terms & Conditions, Privacy Policies, and legal documents.
             </p>
-            {/* GDPR Badge */}
+            {/* GDPR Badge - render after mounting to avoid hydration mismatch */}
             <div className="mt-4">
-              {!isDark ? (
+              {mounted && !isDark ? (
                 <svg width="46" height="45" viewBox="0 0 46 45" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-10 h-10">
                   <rect x="3" y="0.863281" width="40" height="40" rx="20" fill="url(#paint0_gdpr_light)" />
                   <path d="M30.6146 31.3062L31.2991 33.4127L33.5139 33.4127L31.7221 34.7145L32.4065 36.821L30.6146 35.5191L28.8228 36.821L29.5072 34.7145L27.7153 33.4127L29.9302 33.4127L30.6146 31.3062Z" fill="url(#paint1_gdpr_light)" />
@@ -383,16 +390,13 @@ export const FlickeringFooter = () => {
           <div className="flex flex-wrap gap-x-12 gap-y-6 md:gap-x-16">
             {footerLinks.map((column, columnIndex) => (
               <ul key={columnIndex} className="flex flex-col gap-y-2">
-                <li className={cn("mb-1 text-sm font-semibold", isDark ? "text-white" : "text-gray-900")}>
+                <li className="mb-1 text-sm font-semibold text-gray-900 dark:text-white">
                   {column.title}
                 </li>
                 {column.links.map((link) => (
                   <li
                     key={link.id}
-                    className={cn(
-                      "text-sm font-light transition-colors",
-                      isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
-                    )}
+                    className="text-sm font-light transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                   >
                     <Link href={link.url}>{link.title}</Link>
                   </li>
@@ -403,28 +407,27 @@ export const FlickeringFooter = () => {
         </div>
 
         {/* Copyright */}
-        <div className={cn("mt-8 pt-6 border-t text-xs font-light", isDark ? "border-gray-800 text-gray-500" : "border-gray-200 text-gray-400")}>
+        <div className="mt-8 pt-6 border-t text-xs font-light border-gray-200 dark:border-gray-800 text-gray-400 dark:text-gray-500">
           © {new Date().getFullYear()} TermsDigest. All rights reserved.
         </div>
       </div>
 
-      {/* Flickering Grid */}
+      {/* Flickering Grid - only render after mounting for correct theme colors */}
       <div className="w-full h-32 md:h-40 relative z-0">
-        <div className={cn(
-          "absolute inset-0 z-10 from-40%",
-          isDark ? "bg-gradient-to-t from-transparent to-black" : "bg-gradient-to-t from-transparent to-white"
-        )} />
+        <div className="absolute inset-0 z-10 from-40% bg-gradient-to-t from-transparent to-white dark:to-black" />
         <div className="absolute inset-0 mx-6">
-          <FlickeringGrid
-            text={tablet ? "TermsDigest" : "Terms Made Simple"}
-            fontSize={tablet ? 50 : 70}
-            className="h-full w-full"
-            squareSize={2}
-            gridGap={tablet ? 2 : 3}
-            color={isDark ? "#6B7280" : "#9CA3AF"}
-            maxOpacity={isDark ? 0.3 : 0.4}
-            flickerChance={0.1}
-          />
+          {mounted && (
+            <FlickeringGrid
+              text={tablet ? "TermsDigest" : "Terms Made Simple"}
+              fontSize={tablet ? 50 : 70}
+              className="h-full w-full"
+              squareSize={2}
+              gridGap={tablet ? 2 : 3}
+              color={isDark ? "#6B7280" : "#9CA3AF"}
+              maxOpacity={isDark ? 0.3 : 0.4}
+              flickerChance={0.1}
+            />
+          )}
         </div>
       </div>
     </footer>
