@@ -384,14 +384,14 @@ export default function NeuralNetworkHero({
               href={button.href}
               target={button.external ? "_blank" : undefined}
               rel={button.external ? "noopener noreferrer" : undefined}
-              className={`rounded-2xl border px-6 py-3 text-sm font-light tracking-tight transition-all duration-300 focus:outline-none focus:ring-2 ${
-                button.primary
-                  ? isDark
+              className={`rounded-2xl border px-6 py-3 text-sm font-light tracking-tight transition-all duration-300 focus:outline-none focus:ring-2 hover:-translate-y-0.5 ${
+                isDark
+                  ? button.primary
                     ? "border-white/10 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 focus:ring-white/30"
-                    : "border-blue-600 bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-300"
-                  : isDark
-                    ? "border-white/10 text-white/80 hover:bg-white/5"
-                    : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                    : "border-white/10 text-white/80 hover:bg-white/5"
+                  : "shadow hover:shadow-lg " + (button.primary
+                    ? "border-gray-900 bg-gray-900 text-white hover:bg-gray-800 focus:ring-gray-300"
+                    : "border-gray-200 text-gray-700 hover:bg-gray-50")
               }`}
             >
               {button.text}

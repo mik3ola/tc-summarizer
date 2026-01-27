@@ -108,11 +108,14 @@ function isLikelyLegalLink(el) {
   const hrefLower = normalizeText(href);
   const id = normalizeText(el.getAttribute("id") || "");
   
-  const combined = `${txt} ${aria} ${title} ${hrefLower} ${id}`;
+  let combined = `${txt} ${aria} ${title} ${hrefLower} ${id}`;
   if (!combined.trim()) return false;
   
   // Skip if the text is too long (likely a code block or paragraph, not a link label)
   if (txt.length > 100) return false;
+  
+  // Filter out "termsdigest" to avoid false positives on our own branding
+  combined = combined.replace(/termsdigest/gi, "");
   
   return KEYWORDS.some((k) => combined.includes(k));
 }

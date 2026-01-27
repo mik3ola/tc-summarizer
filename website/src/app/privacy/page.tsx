@@ -74,7 +74,7 @@ export default function PrivacyPage() {
                 <li>Returns the summary to display in the popup</li>
               </ol>
               <p className="text-gray-300 leading-relaxed mt-4">
-                <strong>Important:</strong> The text is processed in real-time and is <strong>not stored</strong> 
+                <strong>Important:</strong> The text is processed in real-time and is <strong>not stored </strong> 
                 on our servers. We do not build profiles of your browsing activity.
               </p>
             </section>
