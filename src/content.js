@@ -1447,10 +1447,10 @@ function injectHighlightStyles() {
       left: 0;
       bottom: 0;
       width: 100%;
-      height: 1.5px;
+      height: 0.5px;
       background: currentColor;
       transform-origin: left center;
-      animation: td-underline-draw 5.6s linear infinite;
+      animation: td-underline-draw 3s linear infinite;
     }
     
     @keyframes td-underline-draw {
@@ -1458,14 +1458,14 @@ function injectHighlightStyles() {
         transform: scaleX(0);
         transform-origin: left center;
       }
-      8% {
+      12% {
         transform: scaleX(1);
         transform-origin: left center;
       }
-      8.1% {
+      12.1% {
         transform-origin: right center;
       }
-      16% {
+      24% {
         transform: scaleX(0);
         transform-origin: right center;
       }

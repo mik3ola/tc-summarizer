@@ -1,16 +1,25 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import ScrollAnimations from "@/components/ScrollAnimations";
 import ThemeToggle from "@/components/ThemeToggle";
 import NeuralNetworkHero from "@/components/NeuralNetworkHero";
 import GlobeFeatureSection from "@/components/ui/globe-feature-section";
+import FlickeringFooter from "@/components/ui/flickering-footer";
 import { useTheme } from "@/components/ThemeProvider";
 
 export default function Home() {
   const { theme } = useTheme();
-  const isDark = theme === "dark";
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  // Use dark as default for SSR, then switch to actual theme after mount
+  const isDark = mounted ? theme === "dark" : true;
 
   return (
     <main className="min-h-screen">
@@ -18,15 +27,18 @@ export default function Home() {
       
       {/* Navigation */}
       <nav className={`fixed top-0 left-0 right-0 z-50 backdrop-blur-md border-b ${isDark ? 'bg-black/50 border-white/10' : 'bg-white/70 border-gray-200'}`}>
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Image src="/logo.png" alt="TermsDigest" width={32} height={32} className="w-8 h-8" />
             <span className={`font-semibold text-lg tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>TermsDigest</span>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4">
             <Link href="#features" className={`text-sm font-light tracking-tight transition-colors ${isDark ? 'text-white/70 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}>Features</Link>
+            <span className={`text-sm ${isDark ? 'text-white/30' : 'text-gray-300'}`}>|</span>
             <Link href="#pricing" className={`text-sm font-light tracking-tight transition-colors ${isDark ? 'text-white/70 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}>Pricing</Link>
+            <span className={`text-sm ${isDark ? 'text-white/30' : 'text-gray-300'}`}>|</span>
             <Link href="/support" className={`text-sm font-light tracking-tight transition-colors ${isDark ? 'text-white/70 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}>Support</Link>
+            <span className={`text-sm ${isDark ? 'text-white/30' : 'text-gray-300'}`}>|</span>
             <ThemeToggle />
             <a 
               href="https://chrome.google.com/webstore/detail/termsdigest" 
@@ -68,7 +80,7 @@ export default function Home() {
                   <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>example.com/checkout</span>
                 </div>
               </div>
-              <div className="p-8 relative min-h-[300px]">
+              <div className="p-8 relative min-h-[420px]">
                 <div className={`mb-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                   <p className="mb-2">Complete your purchase</p>
                   <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>By continuing, you agree to our{" "}
@@ -79,31 +91,60 @@ export default function Home() {
                   </p>
                 </div>
                 
-                {/* Simulated popover */}
-                <div className={`absolute right-4 top-20 w-96 rounded-xl p-5 float ${isDark ? 'glass-card' : 'bg-white shadow-xl border border-gray-200'}`}>
-                  <div className="flex items-center justify-between mb-3 gap-3">
-                    <span className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>Example Terms Summary</span>
+                {/* Simulated popover - always dark like the actual extension */}
+                <div className="absolute right-4 top-20 w-96 rounded-xl overflow-hidden float bg-slate-800/95 backdrop-blur-md border border-slate-700/50 shadow-2xl" style={{ colorScheme: 'dark' }}>
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-5 pt-5 pb-3 gap-3">
+                    <span className="font-semibold text-sm !text-white">Example Terms Summary</span>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Confidence:</span>
-                      <span className="text-xs bg-green-500/20 text-green-500 px-2.5 py-1 rounded-full border border-green-500/30 whitespace-nowrap">high</span>
+                      <span className="text-xs !text-gray-400">Confidence:</span>
+                      <span className="text-xs bg-green-500/20 !text-green-500 px-2.5 py-1 rounded-full border border-green-500/30 whitespace-nowrap">high</span>
                     </div>
                   </div>
-                  <div className={`text-sm mb-3 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Standard e-commerce terms with auto-renewal subscription.
+                  
+                  {/* Content */}
+                  <div className="px-5 pb-3">
+                    <div className="text-sm mb-3 !text-gray-400">
+                      Standard e-commerce terms with auto-renewal subscription.
+                    </div>
+                    <div className="space-y-2 text-xs">
+                      <div className="flex items-start gap-2">
+                        <span>💰</span>
+                        <span className="!text-gray-300">Monthly billing, auto-renews at £9.99/month</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span>↩️</span>
+                        <span className="!text-gray-300">Cancel anytime, no refunds for partial months</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span>🚩</span>
+                        <span className="!text-red-500">Arbitration clause - cannot sue in court</span>
+                      </div>
+                    </div>
+                    
+                    {/* Note */}
+                    <p className="text-xs !text-gray-500 mt-4">
+                      Note: This is an automated summary.{" "}
+                      <span className="!text-blue-400 cursor-pointer hover:underline">View full content</span>.
+                    </p>
                   </div>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex items-start gap-2">
-                      <span>💰</span>
-                      <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>Monthly billing, auto-renews at £9.99/month</span>
+                  
+                  {/* Footer stats */}
+                  <div className="flex items-center justify-between px-5 py-3 border-t border-slate-700/50">
+                    <div className="flex items-center gap-4 text-xs">
+                      <div className="!text-green-500">
+                        <span className="font-medium">5/50</span>
+                        <span className="!text-gray-500 ml-1">Used</span>
+                      </div>
+                      <div className="!text-green-500">
+                        <span className="font-medium">~8</span>
+                        <span className="!text-gray-500 ml-1">Mins saved</span>
+                      </div>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <span>↩️</span>
-                      <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>Cancel anytime, no refunds for partial months</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span>🚩</span>
-                      <span className="text-red-500">Arbitration clause - cannot sue in court</span>
-                    </div>
+                    {/* Settings gear icon */}
+                    <svg className="w-4 h-4 !text-gray-500 hover:!text-gray-300 cursor-pointer transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                    </svg>
                   </div>
                 </div>
               </div>
@@ -308,27 +349,8 @@ export default function Home() {
       {/* CTA Section with Globe */}
       <GlobeFeatureSection />
 
-      {/* Footer */}
-      <footer className={`py-12 px-6 border-t ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
-        <div className="max-w-6xl mx-auto">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-2">
-              <Image src="/logo.png" alt="TermsDigest" width={24} height={24} className="w-6 h-6" />
-              <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>TermsDigest</span>
-            </div>
-            
-            <div className={`flex items-center gap-6 text-sm font-light ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              <Link href="/privacy" className={`transition-colors ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}>Privacy Policy</Link>
-              <Link href="/terms" className={`transition-colors ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}>Terms of Service</Link>
-              <Link href="/support" className={`transition-colors ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}>Support</Link>
-            </div>
-            
-            <div className={`text-sm font-light ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-              © {new Date().getFullYear()} TermsDigest. All rights reserved.
-            </div>
-          </div>
-        </div>
-      </footer>
+      {/* Footer with Flickering Grid */}
+      <FlickeringFooter />
     </main>
   );
 }
