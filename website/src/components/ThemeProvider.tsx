@@ -12,6 +12,17 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+// Helper to apply theme to document
+function applyThemeToDocument(theme: Theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  // Also toggle .dark class for Tailwind's dark: variant
+  if (theme === "dark") {
+    document.documentElement.classList.add("dark");
+  } else {
+    document.documentElement.classList.remove("dark");
+  }
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("dark");
   const [mounted, setMounted] = useState(false);
@@ -22,20 +33,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const stored = localStorage.getItem("theme") as Theme | null;
     if (stored) {
       setThemeState(stored);
-      document.documentElement.setAttribute("data-theme", stored);
+      applyThemeToDocument(stored);
     } else {
       // Check system preference
       const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       const defaultTheme = prefersDark ? "dark" : "dark"; // Default to dark for now
       setThemeState(defaultTheme);
-      document.documentElement.setAttribute("data-theme", defaultTheme);
+      applyThemeToDocument(defaultTheme);
     }
   }, []);
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
     localStorage.setItem("theme", newTheme);
-    document.documentElement.setAttribute("data-theme", newTheme);
+    applyThemeToDocument(newTheme);
   };
 
   const toggleTheme = () => {

@@ -92,6 +92,27 @@ body {
 [data-theme="light"] .glass-card {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Text color overrides for light mode */
+[data-theme="light"] .text-white {
+  color: #111827;
+}
+
+[data-theme="light"] .text-white\/70,
+[data-theme="light"] .text-white\/75,
+[data-theme="light"] .text-white\/80 {
+  color: #4b5563;
+}
+
+[data-theme="light"] .text-white\/60 {
+  color: #6b7280;
+}
+
+[data-theme="light"] .text-white\/40,
+[data-theme="light"] .text-white\/30 {
+  color: #9ca3af;
 }
 
 [data-theme="light"] .text-gray-300 {
@@ -104,6 +125,22 @@ body {
 
 [data-theme="light"] .text-gray-500 {
   color: #6b7280;
+}
+
+/* Background overrides for light mode */
+[data-theme="light"] .bg-black\/50 {
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="light"] .bg-white\/5,
+[data-theme="light"] .bg-white\/10,
+[data-theme="light"] .bg-white\/20 {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Border overrides for light mode */
+[data-theme="light"] .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.1);
 }
 
 [data-theme="light"] .border-gray-700 {
@@ -121,6 +158,21 @@ body {
 [data-theme="light"] .bg-gray-900 {
   background-color: #ffffff;
   border: 1px solid #e5e7eb;
+}
+
+/* Hover state overrides for light mode */
+[data-theme="light"] .hover\:bg-white\/5:hover,
+[data-theme="light"] .hover\:bg-white\/20:hover {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .hover\:border-gray-500:hover {
+  border-color: #9ca3af;
+}
+
+/* Ring/focus overrides for light mode */
+[data-theme="light"] .focus\:ring-white\/30:focus {
+  --tw-ring-color: rgba(59, 130, 246, 0.3);
 }
 
 /* Keep gradient button text white in light mode */
