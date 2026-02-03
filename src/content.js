@@ -604,7 +604,7 @@ function createUi() {
       all: unset;
       cursor: pointer;
       border: 1px solid rgba(148,163,184,0.25);
-      border-radius: 8px;
+      border-radius: 4px;
       padding: 10px 16px;
       font-size: 13px;
       font-weight: 500;
@@ -1597,6 +1597,51 @@ if (document.readyState === "loading") {
 }
 
 // Re-initialize when preferences are loaded (in case autoHover was false initially)
+// Listen for storage changes to refresh footer when usage updates
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local" && changes.monthlyUsage) {
+    // Usage count was updated - refresh footer if popover is visible
+    refreshFooterIfVisible();
+  }
+});
+
+// Function to refresh footer if popover is currently visible
+async function refreshFooterIfVisible() {
+  try {
+    if (!UI.popover || !UI.popover.shadowRoot) {
+      return; // Popover not visible
+    }
+    
+    const footerElement = UI.popover.shadowRoot.querySelector(".footer-stats");
+    if (!footerElement) {
+      return; // Footer not present
+    }
+    
+    // Get current URL from the popover's "View source" link or current state
+    const viewSourceLink = UI.popover.shadowRoot.querySelector('a[data-action="view-source"]');
+    const currentUrl = viewSourceLink?.getAttribute("href") || current.url || null;
+    
+    // Get fresh footer HTML with updated usage count
+    const newFooter = await getStatsFooter(currentUrl);
+    
+    // Replace the footer element
+    if (footerElement && footerElement.parentNode) {
+      footerElement.outerHTML = newFooter;
+      
+      // Re-attach event listeners for the settings button
+      const settingsBtn = UI.popover.shadowRoot.querySelector('.footer-settings[data-action="open-options"]');
+      if (settingsBtn) {
+        settingsBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          chrome.runtime.sendMessage({ type: "open_options" });
+        });
+      }
+    }
+  } catch (e) {
+    // Silently fail - footer refresh is optional
+  }
+}
+
 loadPreferences().then(() => {
   if (preferences.autoHover) {
     initLinkHighlighting();

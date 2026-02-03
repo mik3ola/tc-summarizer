@@ -231,7 +231,7 @@ function updateStats(cache, stats, monthlyUsage, plan) {
   // Update hint
   if (usageHintEl) {
     if (remaining === 0) {
-      usageHintEl.textContent = "You've used all your summaries this month. Upgrade for more!";
+      usageHintEl.textContent = "You've used all your inclusive summaries this month. Upgrade for more!";
       usageHintEl.style.color = "#f87171";
     } else if (remaining <= 2) {
       usageHintEl.textContent = `Only ${remaining} ${remaining === 1 ? "summary" : "summaries"} left this month.`;
@@ -768,4 +768,29 @@ loadSettings().then(() => {
 }).catch((e) => {
   console.error("Failed to load settings:", e);
   showStatus(e?.message || "Failed to load settings", "error");
+});
+
+// Listen for storage changes to auto-refresh stats when monthlyUsage updates
+chrome.storage.onChanged.addListener(async (changes, areaName) => {
+  if (areaName === "local" && changes.monthlyUsage) {
+    const oldValue = changes.monthlyUsage.oldValue;
+    const newValue = changes.monthlyUsage.newValue;
+    
+    // Only refresh if the value actually changed (not just initialized)
+    if (oldValue !== newValue) {
+      // Reload stats with updated usage count
+      const data = await chrome.storage.local.get([
+        "summariesCache",
+        "usageStats", 
+        "monthlyUsage",
+        "subscriptionPlan"
+      ]);
+      updateStats(
+        data.summariesCache, 
+        data.usageStats, 
+        data.monthlyUsage, 
+        data.subscriptionPlan
+      );
+    }
+  }
 });

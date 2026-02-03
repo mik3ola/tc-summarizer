@@ -44,7 +44,7 @@ export default function Home() {
               href="https://chrome.google.com/webstore/detail/termsdigest" 
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-4 py-2 rounded-xl text-sm font-medium transition-colors text-white"
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-4 py-2 rounded text-sm font-medium transition-colors text-white"
             >
               Install Free
             </a>
@@ -251,7 +251,7 @@ export default function Home() {
                 href="https://chrome.google.com/webstore/detail/termsdigest" 
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`block w-full text-center py-3 rounded-xl border transition-colors font-medium mt-auto ${isDark ? 'border-gray-700 hover:border-gray-500 text-white' : 'border-gray-200 hover:border-gray-300 text-gray-900'}`}
+                className={`block w-full text-center py-3 rounded border transition-colors font-medium mt-auto ${isDark ? 'border-gray-700 hover:border-gray-500 text-white' : 'border-gray-200 hover:border-gray-300 text-gray-900'}`}
               >
                 Get Started Free
               </a>
@@ -300,7 +300,7 @@ export default function Home() {
                 href="https://chrome.google.com/webstore/detail/termsdigest" 
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block w-full text-center py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all font-medium mt-auto text-white"
+                className="block w-full text-center py-3 rounded bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all font-medium mt-auto text-white"
               >
                 Upgrade to Pro
               </a>
@@ -337,7 +337,7 @@ export default function Home() {
 
               <Link 
                 href="/support"
-                className={`block w-full text-center py-3 rounded-xl border transition-colors font-medium mt-auto ${isDark ? 'border-gray-700 hover:border-gray-500 text-white' : 'border-gray-200 hover:border-gray-300 text-gray-900'}`}
+                className={`block w-full text-center py-3 rounded border transition-colors font-medium mt-auto ${isDark ? 'border-gray-700 hover:border-gray-500 text-white' : 'border-gray-200 hover:border-gray-300 text-gray-900'}`}
               >
                 Contact Sales
               </Link>

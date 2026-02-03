@@ -102,6 +102,7 @@ async function callOpenAI(url: string, text: string): Promise<Summary> {
     body: JSON.stringify({
       model,
       temperature: 0.2,
+      service_tier: "priority", // Enable Priority Processing for faster, lower-latency responses
       messages: [
         { role: "system", content: prompt.system },
         { role: "user", content: prompt.user }
@@ -116,6 +117,9 @@ async function callOpenAI(url: string, text: string): Promise<Summary> {
 
   const data = await res.json();
   const content = data?.choices?.[0]?.message?.content;
+  const serviceTierUsed = data?.service_tier || "unknown";
+  console.log(`OpenAI service_tier used: ${serviceTierUsed}`);
+  
   if (!content) throw new Error("Empty OpenAI response");
   
   return JSON.parse(content) as Summary;
@@ -208,10 +212,12 @@ serve(async (req: Request) => {
       }
     }
 
-    // Call OpenAI
-    console.log("Calling OpenAI for URL:", url.slice(0, 100));
+    // Call OpenAI with Priority Processing
+    console.log("Calling OpenAI (priority tier) for URL:", url.slice(0, 100));
+    const startTime = Date.now();
     const summary = await callOpenAI(url, text);
-    console.log("OpenAI response received, confidence:", summary.confidence);
+    const latencyMs = Date.now() - startTime;
+    console.log(`OpenAI response received in ${latencyMs}ms, confidence: ${summary.confidence}`);
 
     // Return the summary first, then try to log usage
     const response = json({ summary });

@@ -100,7 +100,7 @@
       button {
         cursor: pointer;
         padding: 10px 16px;
-        border-radius: 10px;
+        border-radius: 4px;
         border: 1px solid var(--border);
         background: var(--card-bg);
         color: var(--text);
@@ -245,7 +245,7 @@
         border: none;
         color: #fff;
         padding: 10px 24px;
-        border-radius: 10px;
+        border-radius: 4px;
         font-weight: 600;
         cursor: pointer;
         transition: background 0.15s;
@@ -284,7 +284,7 @@
         </div>
         <div id="subStatus">
           <p style="margin: 0 0 12px; color: var(--text-muted); font-size: 0.875rem;">
-            <strong>Use your own API key below</strong> for unlimited summaries, or sign in for our managed service.
+            Sign in to access your free summaries, or upgrade to Pro for unlimited usage with your own API key.
           </p>
           <div class="btn-row">
             <button id="loginBtn">🔐 Login / Create account</button>
@@ -339,18 +339,18 @@
         <p id="usageHint" style="margin: 12px 0 0; color: var(--text-muted); font-size: 0.75rem; text-align: center;"></p>
       </div>
       
-      <!-- API Settings (for BYO key - unlimited usage) -->
-      <div class="card" id="apiCard">
+      <!-- API Settings (for BYO key - Pro users only) -->
+      <div class="card hidden" id="apiCard">
         <div class="card-header">
           <div class="card-title">🔑 Your OpenAI API Key</div>
           <span class="badge badge-success" id="apiKeyBadge">Unlimited</span>
         </div>
         <p style="margin: 0 0 12px; color: var(--text-muted); font-size: 0.8rem;" id="apiKeyHint">
-          Add your own OpenAI API key for <strong>unlimited</strong> summaries when not logged in.
+          As a Pro user, add your own OpenAI API key for <strong>unlimited</strong> summaries.
         </p>
         <div class="input-group">
           <label for="apiKey">OpenAI API Key</label>
-          <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+          <input id="apiKey" type="password" placeholder="sk-..." autocomplete="new-password" data-form-type="other" />
           <div class="input-hint">Stored locally, never sent to our servers.</div>
         </div>
         <div class="input-group">
