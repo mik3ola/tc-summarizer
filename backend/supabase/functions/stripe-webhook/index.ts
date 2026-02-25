@@ -11,6 +11,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@13.10.0?target=deno";
+import { mapStripeStatus, buildSubscriptionUpdateData, shouldSkipCreatedEvent } from "./lib.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
   apiVersion: "2023-10-16",
@@ -52,21 +53,17 @@ serve(async (req: Request) => {
         }
 
         case "customer.subscription.created": {
-          // For created events, check if subscription already exists with Pro plan
-          // (checkout.session.completed might have already set it)
           const subscription = event.data.object as Stripe.Subscription;
           const { data: existing } = await supabase
             .from("subscriptions")
             .select("plan, status")
             .eq("stripe_subscription_id", subscription.id)
             .maybeSingle();
-          
-          // Only update if subscription doesn't exist yet, or if it's not already Pro
-          // This prevents overwriting Pro status set by checkout.session.completed
-          if (!existing || (existing.plan !== "pro" && existing.status !== "active")) {
-            await handleSubscriptionUpdate(subscription);
+
+          if (shouldSkipCreatedEvent(existing)) {
+            console.log(`Subscription ${subscription.id} already exists with plan=${existing!.plan}, skipping created event`);
           } else {
-            console.log(`Subscription ${subscription.id} already exists with plan=${existing.plan}, skipping created event`);
+            await handleSubscriptionUpdate(subscription);
           }
           break;
         }
@@ -159,6 +156,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       plan: "pro",
       stripe_customer_id: customerId,
       stripe_subscription_id: subscriptionId,
+      auto_renew: true,
+      downgrade_scheduled_for: null,
+      downgrade_reason: null,
       updated_at: new Date().toISOString(),
     })
     .eq("user_id", userId);
@@ -173,11 +173,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
 async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   const subscriptionId = subscription.id;
-  const status = mapStripeStatus(subscription.status);
-  
-  // Safely handle current_period_end (may be null for some subscription states)
+
   let currentPeriodEnd: string | null = null;
-  if (subscription.current_period_end && typeof subscription.current_period_end === 'number') {
+  if (subscription.current_period_end && typeof subscription.current_period_end === "number") {
     try {
       currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
     } catch (err) {
@@ -185,46 +183,21 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
     }
   }
 
-  console.log(
-    `Subscription ${subscriptionId} updated: status=${status}, ends=${currentPeriodEnd || 'N/A'}`
-  );
-
-  // Get existing subscription to preserve plan (don't overwrite plan unless canceling)
   const { data: existing } = await supabase
     .from("subscriptions")
     .select("plan")
     .eq("stripe_subscription_id", subscriptionId)
     .maybeSingle();
 
-  const updateData: {
-    status: string;
-    plan?: string;
-    current_period_end?: string | null;
-    updated_at: string;
-  } = {
-    status,
-    updated_at: new Date().toISOString(),
-  };
+  const updateData = buildSubscriptionUpdateData(
+    subscription.status,
+    subscription.cancel_at_period_end,
+    currentPeriodEnd,
+    existing,
+    new Date().toISOString(),
+  );
 
-  // CRITICAL: Never downgrade from Pro to free unless explicitly canceled
-  // Preserve existing Pro/Enterprise plan unless status is explicitly canceled
-  if (status === "canceled") {
-    updateData.plan = "free";
-  } else if (existing?.plan && (existing.plan === "pro" || existing.plan === "enterprise")) {
-    // Always preserve Pro/Enterprise plan - never downgrade
-    updateData.plan = existing.plan;
-    // Also ensure status is active if plan is Pro and Stripe status is active/trialing
-    if (subscription.status === "active" || subscription.status === "trialing") {
-      updateData.status = "active";
-    }
-  } else if (status === "active" && !existing?.plan) {
-    // New subscription with active status but no plan yet - checkout.session.completed will set it
-    // Don't set plan here to avoid race conditions
-  }
-
-  if (currentPeriodEnd) {
-    updateData.current_period_end = currentPeriodEnd;
-  }
+  console.log(`Subscription ${subscriptionId} updated: status=${updateData.status}, ends=${currentPeriodEnd || "N/A"}`);
 
   const { error } = await supabase
     .from("subscriptions")
@@ -247,6 +220,11 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     .update({
       status: "canceled",
       plan: "free",
+      auto_renew: false,
+      downgrade_scheduled_for: null,
+      downgrade_reason: null,
+      stripe_subscription_id: null,
+      current_period_end: null,
       updated_at: new Date().toISOString(),
     })
     .eq("stripe_subscription_id", subscriptionId);
@@ -275,21 +253,4 @@ async function updateSubscriptionStatus(
   }
 }
 
-function mapStripeStatus(
-  stripeStatus: string
-): "free" | "active" | "past_due" | "canceled" {
-  switch (stripeStatus) {
-    case "active":
-    case "trialing":
-      return "active";
-    case "past_due":
-    case "unpaid":
-      return "past_due";
-    case "canceled":
-    case "incomplete_expired":
-      return "canceled";
-    default:
-      return "free";
-  }
-}
 

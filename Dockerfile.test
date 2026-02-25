@@ -1,0 +1,19 @@
+# Test environment: Node (Vitest) + Deno (edge function tests)
+# Use Debian-based images (glibc) - Deno binary is glibc-compiled, won't run on Alpine (musl)
+FROM denoland/deno:latest AS deno
+FROM node:20-slim
+
+# Copy Deno from official image (both glibc-based)
+COPY --from=deno /usr/bin/deno /usr/local/bin/deno
+
+WORKDIR /app
+
+# Install Node dependencies
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy source and tests
+COPY . .
+
+# Run all tests: Vitest (extension) + Deno (edge functions)
+CMD ["sh", "-c", "npm run test:inner && cd backend/supabase/functions && deno test downgrade-subscription/lib.test.ts delete-user-account/lib.test.ts summarize/lib.test.ts stripe-webhook/lib.test.ts --allow-read"]

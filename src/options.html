@@ -240,6 +240,13 @@
         margin-bottom: 16px;
         line-height: 1.5;
       }
+      .modal-message a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .modal-message a:hover {
+        text-decoration: underline;
+      }
       .modal-btn {
         background: var(--accent);
         border: none;
@@ -270,6 +277,39 @@
         <div id="modalTitle" class="modal-title">Success</div>
         <div id="modalMessage" class="modal-message">Operation completed successfully.</div>
         <button id="modalBtn" class="modal-btn">OK</button>
+      </div>
+    </div>
+    <!-- Confirmation modal (Cancel Auto-Renewal / Downgrade Now) -->
+    <div id="confirmModalOverlay" class="modal-overlay">
+      <div class="modal-box">
+        <div id="confirmModalIcon" class="modal-icon">⚠️</div>
+        <div id="confirmModalTitle" class="modal-title">Confirm</div>
+        <div id="confirmModalMessage" class="modal-message"></div>
+        <div class="btn-row" style="justify-content: center; gap: 12px; margin-top: 16px;">
+          <button id="confirmModalCancel" class="modal-btn" style="background: var(--card-bg); border: 1px solid var(--border);">Cancel</button>
+          <button id="confirmModalConfirm" class="modal-btn danger" style="background: rgba(248, 113, 113, 0.2); border-color: #f87171;">Confirm</button>
+        </div>
+      </div>
+    </div>
+    <!-- Delete Account modal (type DELETE to confirm) -->
+    <div id="deleteAccountModalOverlay" class="modal-overlay">
+      <div class="modal-box">
+        <div class="modal-icon" style="color: #f87171;">⚠️</div>
+        <div class="modal-title">Delete Account</div>
+        <div class="modal-message" style="text-align: left;">
+          <p style="margin: 0 0 12px;">This action cannot be undone.</p>
+          <ul style="margin: 0 0 12px; padding-left: 20px;">
+            <li>All your summaries will be deleted</li>
+            <li>Your subscription will be canceled</li>
+            <li>Account will be deleted in 30 days</li>
+          </ul>
+          <label for="deleteConfirmInput" style="display: block; margin-bottom: 6px; font-size: 0.875rem;">Type DELETE to confirm:</label>
+          <input id="deleteConfirmInput" type="text" placeholder="DELETE" style="width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.875rem;" />
+        </div>
+        <div class="btn-row" style="justify-content: center; gap: 12px; margin-top: 16px;">
+          <button id="deleteAccountModalCancel" class="modal-btn" style="background: var(--card-bg); border: 1px solid var(--border);">Cancel</button>
+          <button id="deleteAccountModalConfirm" class="modal-btn danger" style="background: rgba(248, 113, 113, 0.2); border-color: #f87171;" disabled>Delete Account</button>
+        </div>
       </div>
     </div>
     <div class="container">
@@ -316,6 +356,16 @@
             <button id="logoutBtn">Logout</button>
           </div>
           <p id="planHint" style="margin: 10px 0 0; color: var(--text-muted); font-size: 0.8rem;"></p>
+          <!-- Subscription management (Pro users only) -->
+          <div id="subManagement" class="hidden" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+            <p id="subStatusLine" style="margin: 0 0 8px; font-size: 0.875rem; color: var(--text-muted);"></p>
+            <p id="autoRenewLine" style="margin: 0 0 12px; font-size: 0.8rem; color: var(--text-muted);"></p>
+            <div class="btn-row">
+              <button id="cancelAutoRenewBtn" class="danger">Cancel Auto-Renewal</button>
+              <button id="reEnableAutoRenewBtn">Re-enable Auto-Renewal</button>
+              <button id="downgradeNowBtn" class="danger">Downgrade Now</button>
+            </div>
+          </div>
         </div>
       </div>
       
@@ -441,6 +491,15 @@
           <button id="clearCache">Clear Summary Cache</button>
           <button id="exportData">Export Data</button>
         </div>
+      </div>
+      
+      <!-- Danger Zone (logged-in users only) -->
+      <div id="dangerZone" class="card hidden">
+        <div class="card-title" style="margin-bottom: 12px; color: #f87171;">⚠️ Danger Zone</div>
+        <p style="margin: 0 0 12px; font-size: 0.875rem; color: var(--text-muted);">
+          Permanently delete your account and all data. This cannot be undone.
+        </p>
+        <button id="deleteAccountBtn" class="danger">Delete My Account</button>
       </div>
       
       <!-- Status Message -->

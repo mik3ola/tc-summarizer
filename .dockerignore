@@ -1,0 +1,24 @@
+# Dependencies (reinstalled in container)
+node_modules
+**/node_modules
+
+# Build outputs
+website/.next
+build
+.next
+
+# Git and IDE
+.git
+.gitignore
+.cursor
+.vscode
+*.log
+
+# Env files (secrets)
+.env
+.env.*
+!.env.example
+
+# Misc
+*.md
+!README.md

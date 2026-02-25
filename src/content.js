@@ -1,6 +1,22 @@
 let HOVER_DELAY_MS = 750;
 const POPOVER_MAX_WIDTH_PX = 420;
 
+// Check if extension context is still valid (false after extension reload)
+function isExtensionContextValid() {
+  try {
+    return typeof chrome !== "undefined" && !!chrome?.runtime?.id;
+  } catch {
+    return false;
+  }
+}
+
+// True if error is due to extension reload (context invalidated)
+function isContextInvalidatedError(e) {
+  const msg = (e?.message || String(e)).toLowerCase();
+  return msg.includes("context invalidated") || msg.includes("message port closed") ||
+    msg.includes("reading 'get'") || msg.includes("reading 'sendmessage'") || msg.includes("reading 'runtime'");
+}
+
 // Preferences (loaded from storage)
 let preferences = {
   autoHover: true,
@@ -11,6 +27,7 @@ let preferences = {
 
 // Load preferences from storage
 async function loadPreferences() {
+  if (!isExtensionContextValid()) return;
   try {
     const response = await chrome.runtime.sendMessage({ type: "get_preferences" });
     if (response?.ok && response.preferences) {
@@ -18,7 +35,9 @@ async function loadPreferences() {
       HOVER_DELAY_MS = parseInt(preferences.hoverDelay) || 750;
     }
   } catch (e) {
-    console.warn("[TermsDigest] Could not load preferences:", e);
+    if (!isContextInvalidatedError(e)) {
+      console.warn("[TermsDigest] Could not load preferences:", e);
+    }
   }
 }
 
@@ -468,10 +487,6 @@ function extractTextFromHtml(html, baseUrl) {
   }
 }
 
-function clamp(n, min, max) {
-  return Math.min(max, Math.max(min, n));
-}
-
 function createUi() {
   const host = document.createElement("div");
   host.id = "termsdigest-root";
@@ -492,8 +507,8 @@ function createUi() {
       min-width: 300px;
       max-height: 70vh;
       overflow-y: auto;
-      background: rgba(11, 18, 32, 0.75);
-      backdrop-filter: blur(10px);
+      background: rgba(7, 11, 22, 0.88);
+      backdrop-filter: blur(12px);
       color: #e5e7eb;
       border: 1px solid rgba(148,163,184,0.25);
       border-radius: 12px;
@@ -507,7 +522,7 @@ function createUi() {
     .popover::-webkit-scrollbar-track { background: transparent; }
     .popover::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.35); border-radius: 3px; }
     .popover::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.5); }
-    .header { display: flex; align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: 0; background: rgba(11, 18, 32, 0.75); backdrop-filter: blur(10px); padding: 12px 12px 8px; margin: 0; z-index: 1; border-radius: 12px 12px 0 0; }
+    .header { display: flex; align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: 0; background: rgba(7, 11, 22, 0.9); backdrop-filter: blur(12px); padding: 12px 12px 8px; margin: 0; z-index: 1; border-radius: 12px 12px 0 0; }
     .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .title {
       font-size: 12px;
@@ -649,14 +664,62 @@ function createUi() {
       justify-content: center;
       font-size: 16px;
     }
-    .spinner-icon {
-      width: 16px;
-      height: 16px;
-      border-radius: 6px;
-      animation: spin 0.8s linear infinite;
-      opacity: 0.95;
+    .loading-dots span {
+      display: inline-block;
+      animation: dot-bounce 1.4s ease-in-out infinite both;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-dots span:nth-child(1) { animation-delay: 0s; }
+    .loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+    .loading-dots span:nth-child(4) { animation-delay: 0.45s; }
+    @keyframes dot-bounce {
+      0%, 80%, 100% { opacity: 0.35; transform: scale(0.85); }
+      40% { opacity: 1; transform: scale(1); }
+    }
+    .ring-loader {
+      width: 20px;
+      height: 20px;
+      color: rgba(255,255,255,0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ring-loader svg {
+      width: 100%;
+      height: 100%;
+    }
+    .reveal-line {
+      opacity: 0;
+      animation: slide-up-fade 0.4s ease-out forwards;
+    }
+    .reveal-line:nth-child(1) { animation-delay: 0s; }
+    .reveal-line:nth-child(2) { animation-delay: 0.05s; }
+    .reveal-line:nth-child(3) { animation-delay: 0.1s; }
+    .reveal-line:nth-child(4) { animation-delay: 0.15s; }
+    .reveal-line:nth-child(5) { animation-delay: 0.2s; }
+    .reveal-line:nth-child(6) { animation-delay: 0.25s; }
+    .reveal-line:nth-child(7) { animation-delay: 0.3s; }
+    .reveal-line:nth-child(8) { animation-delay: 0.35s; }
+    .reveal-line:nth-child(9) { animation-delay: 0.4s; }
+    .reveal-line:nth-child(10) { animation-delay: 0.45s; }
+    .reveal-line:nth-child(11) { animation-delay: 0.5s; }
+    .reveal-line:nth-child(12) { animation-delay: 0.55s; }
+    .reveal-line:nth-child(13) { animation-delay: 0.6s; }
+    .reveal-line:nth-child(14) { animation-delay: 0.65s; }
+    .reveal-line:nth-child(15) { animation-delay: 0.7s; }
+    .reveal-line:nth-child(16) { animation-delay: 0.75s; }
+    .reveal-line:nth-child(17) { animation-delay: 0.8s; }
+    .reveal-line:nth-child(18) { animation-delay: 0.85s; }
+    .reveal-line:nth-child(19) { animation-delay: 0.9s; }
+    .reveal-line:nth-child(20) { animation-delay: 0.95s; }
+    .reveal-line:nth-child(n+21) { animation-delay: 1s; }
+    .reveal-line { margin-top: 6px; }
+    .reveal-line:first-child { margin-top: 0; }
+    .reveal-line .section { margin-top: 0; }
+    @keyframes slide-up-fade {
+      0% { transform: translateY(8px); opacity: 0; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
   `;
 
   const popover = document.createElement("div");
@@ -684,8 +747,6 @@ function setPopoverPositionNearAnchor(anchor) {
   const padding = 10;
   const vpW = window.innerWidth;
   const vpH = window.innerHeight;
-  const scrollX = window.scrollX || window.pageXOffset;
-  const scrollY = window.scrollY || window.pageYOffset;
 
   // default right/below the link
   const desiredLeft = rect.left + Math.min(rect.width, 40) + 12;
@@ -749,14 +810,25 @@ function setPopoverPositionNearAnchor(anchor) {
 }
 
 async function renderLoading(url) {
-  // Get icon URL fresh each time to ensure it's available
-  const iconUrl = chrome.runtime.getURL("icons/icon16.png");
   const footer = await getStatsFooter();
   UI.popover.innerHTML = `
     <div class="header">
-      <div class="title">Summarizing…</div>
+      <div class="title">Summarizing<span class="loading-dots"><span>.</span><span>.</span><span>.</span><span>.</span></span></div>
       <div class="header-right">
-        <img class="spinner-icon" src="${iconUrl}" alt="" aria-label="Loading" />
+        <div class="ring-loader" aria-label="Loading">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" stroke="currentColor" fill="none">
+            <g fill="none" fill-rule="evenodd" stroke-width="2">
+              <circle cx="22" cy="22" r="1">
+                <animate attributeName="r" begin="0s" dur="1.8s" values="1; 20" calcMode="spline" keyTimes="0; 1" keySplines="0.165, 0.84, 0.44, 1" repeatCount="indefinite"/>
+                <animate attributeName="stroke-opacity" begin="0s" dur="1.8s" values="1; 0" calcMode="spline" keyTimes="0; 1" keySplines="0.3, 0.61, 0.355, 1" repeatCount="indefinite"/>
+              </circle>
+              <circle cx="22" cy="22" r="1">
+                <animate attributeName="r" begin="-0.9s" dur="1.8s" values="1; 20" calcMode="spline" keyTimes="0; 1" keySplines="0.165, 0.84, 0.44, 1" repeatCount="indefinite"/>
+                <animate attributeName="stroke-opacity" begin="-0.9s" dur="1.8s" values="1; 0" calcMode="spline" keyTimes="0; 1" keySplines="0.3, 0.61, 0.355, 1" repeatCount="indefinite"/>
+              </circle>
+            </g>
+          </svg>
+        </div>
       </div>
     </div>
     <div class="section muted" style="margin-top:8px;">
@@ -775,6 +847,19 @@ function truncateUrl(url, maxLen = 50) {
 
 // Get usage stats and render footer
 async function getStatsFooter(currentSummaryUrl = null) {
+  if (!isExtensionContextValid()) {
+    return `
+      <div class="footer-stats">
+        <a class="footer-settings" data-action="open-options" title="Open extension options">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M13.6569 8.65685C13.6569 8.65685 12.2426 10.0711 10.8284 11.4853C10.4142 11.8995 10.4142 12.5355 10.8284 12.9497C11.2426 13.364 11.8787 13.364 12.2929 12.9497C13.7071 11.5355 15.1213 10.1213 15.1213 10.1213C15.5355 9.70711 15.5355 9.07107 15.1213 8.65685C15.1213 8.65685 13.7071 7.24264 12.2929 5.82843C11.8787 5.41421 11.2426 5.41421 10.8284 5.82843C10.4142 6.24264 10.4142 6.87868 10.8284 7.29289C12.2426 8.70711 13.6569 10.1213 13.6569 10.1213L13.6569 8.65685Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2.34315 7.34315C2.34315 7.34315 3.75736 5.92893 5.17157 4.51472C5.58579 4.1005 5.58579 3.46447 5.17157 3.05025C4.75736 2.63604 4.12132 2.63604 3.70711 3.05025C2.29289 4.46447 0.87868 5.87868 0.87868 5.87868C0.464466 6.29289 0.464466 6.92893 0.87868 7.34315C0.87868 7.34315 2.29289 8.75736 3.70711 10.1716C4.12132 10.5858 4.75736 10.5858 5.17157 10.1716C5.58579 9.75736 5.58579 9.12132 5.17157 8.70711C3.75736 7.29289 2.34315 5.87868 2.34315 5.87868L2.34315 7.34315Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+      </div>
+    `;
+  }
   try {
     const data = await chrome.storage.local.get([
       "usageStats", 
@@ -844,7 +929,9 @@ async function getStatsFooter(currentSummaryUrl = null) {
       </div>
     `;
   } catch (e) {
-    console.warn("[TermsDigest] Could not load stats:", e);
+    if (!isContextInvalidatedError(e)) {
+      console.warn("[TermsDigest] Could not load stats:", e);
+    }
     return `
       <div class="footer-stats">
         <a class="footer-settings" data-action="open-options" title="Open extension options">
@@ -865,12 +952,16 @@ async function renderError(errMsg, url) {
   // Check subscription status for Pro users
   let isProUser = false;
   let hasOpenAIKey = false;
-  try {
-    const data = await chrome.storage.local.get(["subscription", "subscriptionPlan", "openaiApiKey"]);
-    isProUser = (data.subscription === "active" && data.subscriptionPlan === "pro") || data.subscriptionPlan === "pro";
-    hasOpenAIKey = !!data.openaiApiKey && data.openaiApiKey.trim().length > 0;
-  } catch (e) {
-    console.warn("[TermsDigest] Could not check subscription status:", e);
+  if (isExtensionContextValid()) {
+    try {
+      const data = await chrome.storage.local.get(["subscription", "subscriptionPlan", "openaiApiKey"]);
+      isProUser = (data.subscription === "active" && data.subscriptionPlan === "pro") || data.subscriptionPlan === "pro";
+      hasOpenAIKey = !!data.openaiApiKey && data.openaiApiKey.trim().length > 0;
+    } catch (e) {
+      if (!isContextInvalidatedError(e)) {
+        console.warn("[TermsDigest] Could not check subscription status:", e);
+      }
+    }
   }
   
   // Determine error type and icon
@@ -882,8 +973,8 @@ async function renderError(errMsg, url) {
   let isSignInIssue = false;
   let isProQuotaExceeded = false;
   
-  if (msg.includes("Extension context invalidated") || msg.includes("message port closed")) {
-    displayMsg = "Extension needs page refresh";
+  if (isContextInvalidatedError({ message: msg })) {
+    displayMsg = "Extension needs a page refresh to continue";
     errorIcon = "⚠️";
     headerTitle = "Summary unavailable";
     showRefreshButton = true;
@@ -921,7 +1012,7 @@ async function renderError(errMsg, url) {
   let buttonsHtml;
   if (showRefreshButton) {
     buttonsHtml = `
-      <button onclick="location.reload()">Refresh page</button>
+      <button data-action="refresh-page">Refresh page</button>
       <button data-action="open-link">View page</button>
     `;
   } else if (isProQuotaExceeded) {
@@ -1004,28 +1095,28 @@ async function renderSummary(summary, url, fromCache) {
   const footer = await getStatsFooter(url);
 
   UI.popover.innerHTML = `
-    <div class="header">
-      <div class="title" title="${escapeAttr(title)}">${escapeHtml(title)}</div>
-      <div class="header-right">
-        <span class="confidence-label">Confidence:</span>
-        <div class="badge ${badgeColorClass}" title="${escapeAttr(badgeTooltip)}">${escapeHtml(badgeText)}</div>
-      </div>
+    <div class="summary-content-reveal">
+      <div class="reveal-line"><div class="header">
+        <div class="title" title="${escapeAttr(title)}">${escapeHtml(title)}</div>
+        <div class="header-right">
+          <span class="confidence-label">Confidence:</span>
+          <div class="badge ${badgeColorClass}" title="${escapeAttr(badgeTooltip)}">${escapeHtml(badgeText)}</div>
+        </div>
+      </div></div>
+      <div class="reveal-line"><div class="section"><div class="h">Quick Summary</div></div></div>
+      <div class="reveal-line"><div class="section"><div class="muted">${escapeHtml(summary?.tldr || "")}</div></div></div>
+      ${renderListSection("💰 Costs & renewal", summary?.costs_and_renewal)}
+      ${renderListSection("↩️ Cancellation & refunds", summary?.cancellation_and_refunds)}
+      ${renderListSection("⚖️ Liability & disputes", summary?.liability_and_disputes)}
+      ${renderListSection("🔒 Privacy & data", summary?.privacy_and_data)}
+      ${preferences.showRedFlags ? renderListSection("🚩 Red flags", summary?.red_flags) : ""}
+      ${preferences.showQuotes ? renderQuotes(summary?.quotes) : ""}
+      <div class="reveal-line"><div class="divider"></div></div>
+      <div class="reveal-line"><div class="section muted" style="padding-bottom: 4px; margin-top: 0;">
+        Note: This is an automated summary. <a class="link" data-action="view-source" href="${escapeAttr(url)}" target="_blank" rel="noreferrer">View full content</a>.
+      </div></div>
+      <div class="reveal-line">${footer}</div>
     </div>
-    <div class="section">
-      <div class="h">Quick Summary</div>
-      <div class="muted">${escapeHtml(summary?.tldr || "")}</div>
-    </div>
-    ${renderListSection("💰 Costs & renewal", summary?.costs_and_renewal)}
-    ${renderListSection("↩️ Cancellation & refunds", summary?.cancellation_and_refunds)}
-    ${renderListSection("⚖️ Liability & disputes", summary?.liability_and_disputes)}
-    ${renderListSection("🔒 Privacy & data", summary?.privacy_and_data)}
-    ${preferences.showRedFlags ? renderListSection("🚩 Red flags", summary?.red_flags) : ""}
-    ${preferences.showQuotes ? renderQuotes(summary?.quotes) : ""}
-    <div class="divider"></div>
-    <div class="section muted" style="padding-bottom: 4px; margin-top: 0;">
-      Note: This is an automated summary. <a class="link" data-action="view-source" href="${escapeAttr(url)}" target="_blank" rel="noreferrer">View full content</a>.
-    </div>
-    ${footer}
   `;
 }
 
@@ -1033,10 +1124,8 @@ function renderListSection(title, items) {
   const arr = Array.isArray(items) ? items.filter((x) => typeof x === "string" && x.trim()) : [];
   if (!arr.length) return "";
   return `
-    <div class="section">
-      <div class="h">${escapeHtml(title)}</div>
-      <ul>${arr.slice(0, 6).map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
-    </div>
+    <div class="reveal-line"><div class="section"><div class="h">${escapeHtml(title)}</div></div></div>
+    ${arr.slice(0, 6).map((x) => `<div class="reveal-line"><div class="section"><ul><li>${escapeHtml(x)}</li></ul></div></div>`).join("")}
   `;
 }
 
@@ -1049,13 +1138,12 @@ function renderQuotes(quotes) {
     }))
     .filter((q) => q.quote);
   if (!cleaned.length) return "";
+  const items = cleaned.slice(0, 3).map((q) =>
+    `<li><span class="muted">"${escapeHtml(q.quote)}"</span>${q.why ? ` — ${escapeHtml(q.why)}` : ""}</li>`
+  );
   return `
-    <div class="section">
-      <div class="h">Supporting quotes</div>
-      <ul>
-        ${cleaned.slice(0, 3).map((q) => `<li><span class="muted">“${escapeHtml(q.quote)}”</span>${q.why ? ` — ${escapeHtml(q.why)}` : ""}</li>`).join("")}
-      </ul>
-    </div>
+    <div class="reveal-line"><div class="section"><div class="h">Supporting quotes</div></div></div>
+    ${items.map((li) => `<div class="reveal-line"><div class="section"><ul>${li}</ul></div></div>`).join("")}
   `;
 }
 
@@ -1338,18 +1426,30 @@ UI.popover.addEventListener("click", (e) => {
   const btn = e.target && e.target.closest ? e.target.closest("button") : null;
   if (btn) {
     const action = btn.getAttribute("data-action");
+    if (action === "refresh-page") {
+      e.preventDefault();
+      e.stopPropagation();
+      window.location.reload();
+      return;
+    }
     if (action === "open-options") {
       e.preventDefault();
       e.stopPropagation();
-      // Ask background script to open options page (window.open doesn't work for chrome-extension:// URLs)
-      chrome.runtime.sendMessage({ type: "open_options" });
+      try {
+        chrome.runtime.sendMessage({ type: "open_options" }).catch(() => {});
+      } catch (err) {
+        if (!isContextInvalidatedError(err)) throw err;
+      }
       return;
     }
     if (action === "upgrade-to-pro") {
       e.preventDefault();
       e.stopPropagation();
-      // Ask background script to open options page (window.open doesn't work for chrome-extension:// URLs)
-      chrome.runtime.sendMessage({ type: "open_options_upgrade" });
+      try {
+        chrome.runtime.sendMessage({ type: "open_options_upgrade" }).catch(() => {});
+      } catch (err) {
+        if (!isContextInvalidatedError(err)) throw err;
+      }
       return;
     }
     if (action === "open-support") {
@@ -1405,8 +1505,11 @@ UI.popover.addEventListener("click", (e) => {
     } else if (action === "open-options") {
       e.preventDefault();
       e.stopPropagation();
-      // Handle footer settings icon click
-      chrome.runtime.sendMessage({ type: "open_options" });
+      try {
+        chrome.runtime.sendMessage({ type: "open_options" }).catch(() => {});
+      } catch (err) {
+        if (!isContextInvalidatedError(err)) throw err;
+      }
       return;
     }
   }
@@ -1416,7 +1519,11 @@ UI.popover.addEventListener("click", (e) => {
   if (footerSettings) {
     e.preventDefault();
     e.stopPropagation();
-    chrome.runtime.sendMessage({ type: "open_options" });
+    try {
+      chrome.runtime.sendMessage({ type: "open_options" }).catch(() => {});
+    } catch (err) {
+      if (!isContextInvalidatedError(err)) throw err;
+    }
     return;
   }
 });
@@ -1596,14 +1703,20 @@ if (document.readyState === "loading") {
   setTimeout(initLinkHighlighting, 500);
 }
 
-// Re-initialize when preferences are loaded (in case autoHover was false initially)
 // Listen for storage changes to refresh footer when usage updates
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === "local" && changes.monthlyUsage) {
-    // Usage count was updated - refresh footer if popover is visible
-    refreshFooterIfVisible();
-  }
-});
+try {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    try {
+      if (areaName === "local" && changes.monthlyUsage && isExtensionContextValid()) {
+        refreshFooterIfVisible();
+      }
+    } catch {
+      // Context invalidated - listener will stop working; no need to log
+    }
+  });
+} catch {
+  // Extension context invalid at registration time
+}
 
 // Function to refresh footer if popover is currently visible
 async function refreshFooterIfVisible() {
@@ -1633,7 +1746,11 @@ async function refreshFooterIfVisible() {
       if (settingsBtn) {
         settingsBtn.addEventListener("click", (e) => {
           e.preventDefault();
-          chrome.runtime.sendMessage({ type: "open_options" });
+          try {
+            chrome.runtime.sendMessage({ type: "open_options" }).catch(() => {});
+          } catch (err) {
+            if (!isContextInvalidatedError(err)) throw err;
+          }
         });
       }
     }

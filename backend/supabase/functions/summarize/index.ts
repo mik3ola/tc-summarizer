@@ -4,6 +4,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getMonthlyQuota, monthStart, decodeJwtPayload, buildPrompt, type Summary } from "./lib.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,79 +12,11 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS"
 };
 
-type Summary = {
-  title: string;
-  tldr: string;
-  costs_and_renewal: string[];
-  cancellation_and_refunds: string[];
-  liability_and_disputes: string[];
-  privacy_and_data: string[];
-  red_flags: string[];
-  quotes: { quote: string; why_it_matters: string }[];
-  confidence: "low" | "medium" | "high";
-};
-
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { "content-type": "application/json", ...corsHeaders }
   });
-}
-
-function monthStart(d = new Date()) {
-  const dt = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
-  return dt.toISOString().slice(0, 10);
-}
-
-function getMonthlyQuota(plan: string) {
-  if (plan === "pro") return 50;
-  if (plan === "enterprise") return 5000;
-  return 5; // free tier
-}
-
-function decodeJwtPayload(token: string): { sub: string; role: string } | null {
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    
-    let payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    while (payload.length % 4 !== 0) payload += "=";
-    
-    return JSON.parse(atob(payload));
-  } catch {
-    return null;
-  }
-}
-
-function buildPrompt(url: string, text: string) {
-  return {
-    system: "You summarize website legal pages (terms, privacy, refund, billing). Be concise, cautious, and highlight potentially costly clauses. If unsure, say so.",
-    user: `Summarize this page for a normal user.
-
-Requirements:
-- Output STRICT JSON only (no markdown, no extra text).
-- Be factual; do not invent clauses.
-- Focus on costs/renewals, cancellation/refunds/returns/exchanges, liability, arbitration/jurisdiction, data sharing/ads, auto-renew, trials, termination, and unusual restrictions.
-- Include a short list of quotes to support the biggest risks.
-
-Return JSON with this schema:
-{
-  "title": string,
-  "tldr": string,
-  "costs_and_renewal": string[],
-  "cancellation_and_refunds": string[],
-  "liability_and_disputes": string[],
-  "privacy_and_data": string[],
-  "red_flags": string[],
-  "quotes": { "quote": string, "why_it_matters": string }[],
-  "confidence": "low"|"medium"|"high"
-}
-
-Page URL: ${url}
-Page text:
-${text}
-`
-  };
 }
 
 async function callOpenAI(url: string, text: string): Promise<Summary> {
