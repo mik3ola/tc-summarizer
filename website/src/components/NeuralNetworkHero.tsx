@@ -384,7 +384,7 @@ export default function NeuralNetworkHero({
               href={button.href}
               target={button.external ? "_blank" : undefined}
               rel={button.external ? "noopener noreferrer" : undefined}
-              className={`rounded-2xl border px-6 py-3 text-sm font-light tracking-tight transition-all duration-300 focus:outline-none focus:ring-2 hover:-translate-y-0.5 ${
+              className={`rounded border px-6 py-3 text-sm font-light tracking-tight transition-all duration-300 focus:outline-none focus:ring-2 hover:-translate-y-0.5 ${
                 isDark
                   ? button.primary
                     ? "border-white/10 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 focus:ring-white/30"

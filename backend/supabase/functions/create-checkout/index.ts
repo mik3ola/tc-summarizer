@@ -48,7 +48,12 @@ serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const priceId = Deno.env.get("STRIPE_PRICE_ID");
-    const siteUrl = Deno.env.get("SITE_URL") || "https://termsdigest.com";
+    // Use production URL by default - only use SITE_URL if explicitly set to a production domain
+    // This prevents localhost from being used in production
+    const envSiteUrl = Deno.env.get("SITE_URL");
+    const siteUrl = (envSiteUrl && !envSiteUrl.includes("localhost")) 
+      ? envSiteUrl 
+      : "https://termsdigest.com";
 
     if (!stripeSecretKey || !supabaseUrl || !serviceRoleKey || !priceId) {
       console.error("Missing config:", { stripeSecretKey: !!stripeSecretKey, supabaseUrl: !!supabaseUrl, serviceRoleKey: !!serviceRoleKey, priceId: !!priceId });

@@ -172,7 +172,7 @@ export default function SupportPage() {
             <p className="text-gray-400 mb-4">Still need help?</p>
             <a 
               href="mailto:support@termsdigest.com"
-              className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-8 py-3 rounded-xl font-semibold transition-all"
+              className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-8 py-3 rounded font-semibold transition-all"
             >
               Contact Support
             </a>

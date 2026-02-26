@@ -4,7 +4,8 @@ const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const MAX_TEXT_CHARS = 45_000; // keep request size reasonable
 const DEFAULT_SUPABASE_URL = "https://rsxvxezucgczesplmjiw.supabase.co";
 // Anon key is safe to expose - it's a public key meant for client-side use
-const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzeHZ4ZXp1Y2djemVzcGxtaml3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyNjMwNjYsImV4cCI6MjA1MTgzOTA2Nn0.1umoIHDTHX8NXU_5JlVJMx14LvxOIGXiZOg2wFHqfBE";
+// Must match the key in options.js for refresh to work
+const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzeHZ4ZXp1Y2djemVzcGxtaml3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjcwNjYsImV4cCI6MjA4MzU0MzA2Nn0.1umoIH60gsytGtmfbgfxr1OZJs_L-62wT_BWVaMt5lw";
 
 function nowMs() {
   return Date.now();
@@ -514,6 +515,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         // Increment usage stats
         await incrementStats();
 
+        // If backend was used (new summary, not cached), automatically refresh status
+        // This simulates clicking the "Refresh status" button to update usage count
+        if (usedBackend) {
+          // Use the same session that was just used successfully for the summary
+          const sessionToUse = settings.session || (await chrome.storage.local.get(["supabaseSession"])).supabaseSession;
+          if (sessionToUse) {
+            // Wait a moment for backend to update usage counter, then refresh
+            setTimeout(() => {
+              refreshSupabaseStatusIfPossible({ supabaseSession: sessionToUse }).catch(() => {
+                // Silently fail - refresh is optional
+              });
+            }, 1000);
+          }
+        }
+
         sendResponse({ ok: true, fromCache: false, summary });
         return;
       }
@@ -525,6 +541,152 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   return true; // keep the message channel open for async sendResponse
 });
+
+// Refresh Supabase status (same logic as options.js refresh button)
+// This function updates monthlyUsage in storage by fetching from backend
+async function refreshSupabaseStatusIfPossible(data) {
+  const supabaseUrl = DEFAULT_SUPABASE_URL.trim();
+  const anon = DEFAULT_SUPABASE_ANON_KEY.trim();
+  let session = data.supabaseSession;
+  if (!session?.access_token) {
+    return;
+  }
+
+  const userId = session.user?.id;
+  if (!userId) {
+    return;
+  }
+  
+  // Check if token is expired and refresh if needed
+  const isExpired = session.expires_at && (session.expires_at - 300000) < Date.now();
+  if (isExpired) {
+    const refreshed = await refreshSessionIfPossible({ 
+      supabaseUrl, 
+      anonKey: anon, 
+      session 
+    });
+    if (refreshed?.access_token) {
+      session = refreshed;
+    } else {
+      return;
+    }
+  }
+  
+  // Fetch subscription status (RLS restricts to own row)
+  const subQs = `?select=status,plan,current_period_end&user_id=eq.${encodeURIComponent(userId)}`;
+
+  try {
+    const subRes = await fetch(`${supabaseUrl}/rest/v1/subscriptions${subQs}`, {
+      method: "GET",
+      headers: { apikey: anon, Authorization: `Bearer ${session.access_token}` }
+    });
+
+    let status = null;
+    let plan = null;
+    
+    if (!subRes.ok) {
+      const errorText = await subRes.text().catch(() => "");
+      console.error(`[Background] Failed to fetch subscription (${subRes.status}):`, errorText);
+      
+      // If 401, try refreshing token once more
+      if (subRes.status === 401) {
+        const refreshed = await refreshSessionIfPossible({ 
+          supabaseUrl, 
+          anonKey: anon, 
+          session 
+        });
+        if (refreshed?.access_token) {
+          session = refreshed;
+          // Retry with new token
+          const retryRes = await fetch(`${supabaseUrl}/rest/v1/subscriptions${subQs}`, {
+            method: "GET",
+            headers: { apikey: anon, Authorization: `Bearer ${refreshed.access_token}` }
+          });
+          if (retryRes.ok) {
+            const subRows = await retryRes.json().catch(() => []);
+            const sub = Array.isArray(subRows) ? subRows[0] : subRows;
+            if (sub) {
+              status = sub?.status || null;
+              plan = sub?.plan || null;
+            }
+          }
+        }
+      }
+      // Even if subscription fetch failed, continue to fetch usage (that's what we really need)
+    } else {
+      const subRows = await subRes.json().catch(() => []);
+      const sub = Array.isArray(subRows) ? subRows[0] : subRows;
+      if (sub) {
+        status = sub?.status || null;
+        plan = sub?.plan || null;
+      }
+    }
+
+    // Always try to fetch monthly usage (this is what we really need for the count)
+    // Even if subscription fetch failed, we can still get usage count
+    let monthlyUsage = 0;
+    const now = new Date();
+    const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+    const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${monthStart}`;
+    
+    // Use the current session (might have been refreshed above)
+    const currentAccessToken = session?.access_token;
+    if (currentAccessToken) {
+      try {
+        const usageRes = await fetch(`${supabaseUrl}/rest/v1/usage_counters_monthly${usageQs}`, {
+          method: "GET",
+          headers: { apikey: anon, Authorization: `Bearer ${currentAccessToken}` }
+        });
+        
+        if (usageRes.ok) {
+          const usageRows = await usageRes.json().catch(() => []);
+          const usage = Array.isArray(usageRows) ? usageRows[0] : usageRows;
+          monthlyUsage = usage?.summaries_count || 0;
+        } else if (usageRes.status === 401) {
+          // If usage fetch also fails with 401, try refreshing token one more time
+          const refreshed = await refreshSessionIfPossible({ 
+            supabaseUrl, 
+            anonKey: anon, 
+            session 
+          });
+          if (refreshed?.access_token) {
+            const retryUsageRes = await fetch(`${supabaseUrl}/rest/v1/usage_counters_monthly${usageQs}`, {
+              method: "GET",
+              headers: { apikey: anon, Authorization: `Bearer ${refreshed.access_token}` }
+            });
+            if (retryUsageRes.ok) {
+              const usageRows = await retryUsageRes.json().catch(() => []);
+              const usage = Array.isArray(usageRows) ? usageRows[0] : usageRows;
+              monthlyUsage = usage?.summaries_count || 0;
+              session = refreshed; // Update session for storage
+            }
+          }
+        }
+      } catch (e) {
+        // Silently fail - usage fetch is optional
+      }
+    }
+
+    // Store the updated data (always update monthlyUsage even if subscription fetch failed)
+    // Get current values first to preserve what we have
+    const currentStorage = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
+    
+    // Only update monthlyUsage if we successfully fetched a new value (> 0 or explicitly 0 from backend)
+    // If fetch failed, preserve existing value to avoid overwriting with 0
+    const finalMonthlyUsage = monthlyUsage > 0 || (monthlyUsage === 0 && currentStorage.monthlyUsage === undefined) 
+      ? monthlyUsage 
+      : (currentStorage.monthlyUsage ?? monthlyUsage);
+    
+    await chrome.storage.local.set({
+      subscription: status !== null ? status : currentStorage.subscription,
+      subscriptionPlan: plan !== null ? plan : currentStorage.subscriptionPlan,
+      userEmail: session?.user?.email || currentStorage.userEmail || null,
+      monthlyUsage: finalMonthlyUsage
+    });
+  } catch (e) {
+    console.error("[Background] Error refreshing subscription status:", e);
+  }
+}
 
 // Listen for auth callback from your backend (when implementing OAuth)
 chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {

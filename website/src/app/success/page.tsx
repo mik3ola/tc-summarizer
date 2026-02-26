@@ -75,7 +75,7 @@ function SuccessContent() {
           <p className="text-gray-400 mb-8">{message}</p>
           <Link 
             href="/pricing"
-            className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all font-semibold inline-block"
+            className="px-6 py-3 rounded bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all font-semibold inline-block"
           >
             Try Again
           </Link>
@@ -140,13 +140,13 @@ function SuccessContent() {
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link 
             href="/"
-            className="px-6 py-3 rounded-xl border border-gray-700 hover:border-gray-500 transition-colors font-medium"
+            className="px-6 py-3 rounded border border-gray-700 hover:border-gray-500 transition-colors font-medium"
           >
             Back to Home
           </Link>
           <Link 
             href="/support"
-            className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all font-semibold"
+            className="px-6 py-3 rounded bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all font-semibold"
           >
             Get Help
           </Link>

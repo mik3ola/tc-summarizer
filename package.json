@@ -1,0 +1,12 @@
+{
+  "name": "tc-summarizer",
+  "private": true,
+  "scripts": {
+    "test": "docker build -f Dockerfile.test -t termsdigest-test . && docker run --rm termsdigest-test",
+    "test:inner": "vitest run",
+    "dev": "cd website && npm run dev"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.0"
+  }
+}

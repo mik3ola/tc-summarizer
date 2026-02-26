@@ -66,7 +66,7 @@ function showModal(type, title, message) {
   
   modalIcon.textContent = icons[type] || "ℹ️";
   modalTitle.textContent = title;
-  modalMessage.textContent = message;
+  modalMessage.innerHTML = message;
   
   // Add type class for styling
   modalOverlay.querySelector(".modal-box").className = `modal-box modal-${type}`;
@@ -135,8 +135,11 @@ async function loadSettings() {
   await refreshSupabaseStatusIfPossible({ supabaseSession: data.supabaseSession });
   
   // Refresh data after status update
-  const refreshedData = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
-  updateSubscriptionUI(refreshedData.subscription, refreshedData.userEmail, refreshedData.subscriptionPlan);
+  const refreshedData = await chrome.storage.local.get([
+    "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
+    "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
+  ]);
+  updateSubscriptionUI(refreshedData.subscription, refreshedData.userEmail, refreshedData.subscriptionPlan, refreshedData);
 
   // Backend config - always use defaults (not user-configurable)
 
@@ -144,15 +147,42 @@ async function loadSettings() {
   updateStats(data.summariesCache, data.usageStats, refreshedData.monthlyUsage, refreshedData.subscriptionPlan);
 }
 
-function updateSubscriptionUI(subscription, email, plan) {
+function formatSubStatusLine(currentPeriodEnd) {
+  if (!currentPeriodEnd) return "Subscription: Pro";
+  const d = new Date(currentPeriodEnd);
+  const fmt = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return `Subscription: Pro (expires ${fmt})`;
+}
+function formatSubAutoRenewLine(autoRenew, downgradeScheduledFor) {
+  if (!autoRenew) {
+    if (downgradeScheduledFor) {
+      const d = new Date(downgradeScheduledFor);
+      const fmt = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+      return `Auto-renewal: Disabled. Access until ${fmt}.`;
+    }
+    return "Auto-renewal: Disabled";
+  }
+  return "Auto-renewal: Enabled";
+}
+
+function updateSubscriptionUI(subscription, email, plan, extra = {}) {
   const isLoggedIn = !!email;
   // Pro if: (1) subscription is active AND plan is pro, OR (2) plan is pro (fallback for edge cases)
   const isPro = (subscription === "active" && plan === "pro") || plan === "pro";
-  
+  const autoRenew = extra.subscriptionAutoRenew !== false;
+  const downgradeScheduledFor = extra.subscriptionDowngradeScheduledFor || null;
+  const currentPeriodEnd = extra.currentPeriodEnd || null;
+
   // API key hint element
   const apiKeyHint = document.getElementById("apiKeyHint");
   const apiKeyBadge = document.getElementById("apiKeyBadge");
-  
+  const subManagementEl = document.getElementById("subManagement");
+  const subStatusLineEl = document.getElementById("subStatusLine");
+  const autoRenewLineEl = document.getElementById("autoRenewLine");
+  const cancelAutoRenewBtn = document.getElementById("cancelAutoRenewBtn");
+  const reEnableAutoRenewBtn = document.getElementById("reEnableAutoRenewBtn");
+  const downgradeNowBtn = document.getElementById("downgradeNowBtn");
+
   if (isPro) {
     // Pro user - logged in with active subscription
     subBadgeEl.textContent = "Pro";
@@ -171,6 +201,17 @@ function updateSubscriptionUI(subscription, email, plan) {
     // Update API hint for Pro users
     if (apiKeyHint) apiKeyHint.innerHTML = "Your Pro plan is active. Add your own key for <strong>unlimited</strong> usage.";
     if (apiKeyBadge) { apiKeyBadge.textContent = "Optional"; apiKeyBadge.className = "badge badge-info"; }
+
+    document.getElementById("dangerZone")?.classList.remove("hidden");
+    // Subscription management section (Pro only)
+    if (subManagementEl) {
+      subManagementEl.classList.remove("hidden");
+      if (subStatusLineEl) subStatusLineEl.textContent = formatSubStatusLine(currentPeriodEnd);
+      if (autoRenewLineEl) autoRenewLineEl.textContent = formatSubAutoRenewLine(autoRenew, downgradeScheduledFor);
+      if (cancelAutoRenewBtn) cancelAutoRenewBtn.style.display = autoRenew ? "inline-block" : "none";
+      if (reEnableAutoRenewBtn) reEnableAutoRenewBtn.style.display = autoRenew ? "none" : "inline-block";
+      if (downgradeNowBtn) downgradeNowBtn.style.display = "inline-block";
+    }
   } else if (isLoggedIn) {
     // Logged in but not pro → backend free tier available
     subBadgeEl.textContent = "Free";
@@ -182,9 +223,11 @@ function updateSubscriptionUI(subscription, email, plan) {
     upgradeBtn.classList.remove("hidden");
     refreshStatusBtn.classList.remove("hidden");
     
-    // Show stats, HIDE API card for free tier (Pro only feature)
+    // Show stats, HIDE API card and subscription management for free tier
     statsCardEl?.classList.remove("hidden");
     apiCardEl?.classList.add("hidden"); // API key is Pro-only
+    subManagementEl?.classList.add("hidden");
+    document.getElementById("dangerZone")?.classList.remove("hidden");
   } else {
     // Not logged in → prompt to sign in/up
     subBadgeEl.textContent = "Guest";
@@ -195,6 +238,8 @@ function updateSubscriptionUI(subscription, email, plan) {
     // Hide stats, API card for guests - they need to sign in first
     statsCardEl?.classList.add("hidden");
     apiCardEl?.classList.add("hidden"); // Must sign in to use API key
+    subManagementEl?.classList.add("hidden");
+    document.getElementById("dangerZone")?.classList.add("hidden");
   }
 }
 
@@ -231,7 +276,7 @@ function updateStats(cache, stats, monthlyUsage, plan) {
   // Update hint
   if (usageHintEl) {
     if (remaining === 0) {
-      usageHintEl.textContent = "You've used all your summaries this month. Upgrade for more!";
+      usageHintEl.textContent = "You've used all your inclusive summaries this month. Upgrade for more!";
       usageHintEl.style.color = "#f87171";
     } else if (remaining <= 2) {
       usageHintEl.textContent = `Only ${remaining} ${remaining === 1 ? "summary" : "summaries"} left this month.`;
@@ -391,7 +436,7 @@ signInBtn?.addEventListener("click", async () => {
     await signInOrUp("signin");
   } catch (e) {
     console.error(e);
-    showModal("error", "Sign-in failed", e?.message || "Please check your credentials and try again.");
+    showModal("error", "Sign-in failed", "Please check your email and password. If the problem persists, contact our <a href=\"https://termsdigest.com/support\" target=\"_blank\">support team</a> for help.");
   }
 });
 
@@ -400,7 +445,7 @@ signUpBtn?.addEventListener("click", async () => {
     await signInOrUp("signup");
   } catch (e) {
     console.error(e);
-    showModal("error", "Signup failed", e?.message || "Please try again with a different email.");
+    showModal("error", "Signup failed", "Please try again with a different email. If the problem persists, contact our <a href=\"https://termsdigest.com/support\" target=\"_blank\">support team</a> for help.");
   }
 });
 
@@ -462,7 +507,7 @@ async function refreshSupabaseStatusIfPossible(data) {
   }
   
   // Fetch subscription status (RLS restricts to own row)
-  const subQs = `?select=status,plan,current_period_end&user_id=eq.${encodeURIComponent(userId)}`;
+  const subQs = `?select=status,plan,current_period_end,auto_renew,downgrade_scheduled_for&user_id=eq.${encodeURIComponent(userId)}`;
 
   try {
     const subRes = await fetch(`${supabaseUrl}/rest/v1/subscriptions${subQs}`, {
@@ -521,11 +566,17 @@ async function refreshSupabaseStatusIfPossible(data) {
               // Silently fail - usage is optional
             }
 
+            const autoRenew = sub?.auto_renew !== false;
+            const downgradeScheduledFor = sub?.downgrade_scheduled_for || null;
+            const currentPeriodEnd = sub?.current_period_end || null;
             await chrome.storage.local.set({
               subscription: status,
               subscriptionPlan: plan,
               userEmail: refreshed.user?.email || null,
-              monthlyUsage: monthlyUsage
+              monthlyUsage: monthlyUsage,
+              subscriptionAutoRenew: autoRenew,
+              subscriptionDowngradeScheduledFor: downgradeScheduledFor,
+              currentPeriodEnd: currentPeriodEnd
             });
             return;
           }
@@ -549,6 +600,9 @@ async function refreshSupabaseStatusIfPossible(data) {
     
     const status = sub?.status || null;
     const plan = sub?.plan || null;
+    const autoRenew = sub?.auto_renew !== false;
+    const downgradeScheduledFor = sub?.downgrade_scheduled_for || null;
+    const currentPeriodEnd = sub?.current_period_end || null;
 
     // Fetch monthly usage (current month)
     let monthlyUsage = 0;
@@ -576,7 +630,10 @@ async function refreshSupabaseStatusIfPossible(data) {
       subscription: status,
       subscriptionPlan: plan,
       userEmail: session.user?.email || null,
-      monthlyUsage: monthlyUsage
+      monthlyUsage: monthlyUsage,
+      subscriptionAutoRenew: autoRenew,
+      subscriptionDowngradeScheduledFor: downgradeScheduledFor,
+      currentPeriodEnd: currentPeriodEnd
     });
   } catch (e) {
     console.error("[Options] Error refreshing subscription status:", e);
@@ -626,7 +683,10 @@ upgradeBtn?.addEventListener("click", async () => {
         await refreshSupabaseStatusIfPossible({ supabaseSession });
         
         // Get updated data immediately after refresh
-        const updated = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
+        const updated = await chrome.storage.local.get([
+          "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
+          "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
+        ]);
         
         // Check if subscription is now active (be flexible - plan="pro" is enough)
         if ((updated.subscription === "active" && updated.subscriptionPlan === "pro") || updated.subscriptionPlan === "pro") {
@@ -634,7 +694,7 @@ upgradeBtn?.addEventListener("click", async () => {
           window.removeEventListener("focus", focusHandler);
           
           // Force UI update with latest data
-          updateSubscriptionUI(updated.subscription, updated.userEmail, updated.subscriptionPlan);
+          updateSubscriptionUI(updated.subscription, updated.userEmail, updated.subscriptionPlan, updated);
           updateStats(
             (await chrome.storage.local.get(["summariesCache"])).summariesCache,
             (await chrome.storage.local.get(["usageStats"])).usageStats,
@@ -663,7 +723,10 @@ upgradeBtn?.addEventListener("click", async () => {
     const focusHandler = async () => {
       try {
         await refreshSupabaseStatusIfPossible({ supabaseSession });
-        const updated = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
+        const updated = await chrome.storage.local.get([
+          "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
+          "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
+        ]);
         
         // Check if subscription is now active (be flexible - plan="pro" is enough)
         if ((updated.subscription === "active" && updated.subscriptionPlan === "pro") || updated.subscriptionPlan === "pro") {
@@ -671,7 +734,7 @@ upgradeBtn?.addEventListener("click", async () => {
           window.removeEventListener("focus", focusHandler);
           
           // Force UI update
-          updateSubscriptionUI(updated.subscription, updated.userEmail, updated.subscriptionPlan);
+          updateSubscriptionUI(updated.subscription, updated.userEmail, updated.subscriptionPlan, updated);
           updateStats(
             (await chrome.storage.local.get(["summariesCache"])).summariesCache,
             (await chrome.storage.local.get(["usageStats"])).usageStats,
@@ -688,7 +751,7 @@ upgradeBtn?.addEventListener("click", async () => {
     window.addEventListener("focus", focusHandler);
   } catch (e) {
     console.error(e);
-    showModal("error", "Upgrade failed", e?.message || "Please try again later.");
+    showModal("error", "Something went wrong", "We couldn't open the checkout. Please try again or contact our support team at termsdigest.com/support.");
   }
 });
 
@@ -696,25 +759,23 @@ refreshStatusBtn?.addEventListener("click", async () => {
   try {
     showModal("loading", "Refreshing...", "Checking your subscription status.");
     const data = await chrome.storage.local.get(["supabaseSession"]);
-    
-    // Force refresh from backend
     await refreshSupabaseStatusIfPossible(data);
-    
-    // Get the updated data
-    const updated = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
-    
-    // Reload all settings to update UI
-    await loadSettings();
-    
-    // Show appropriate message based on subscription status
-    if (updated.subscription === "active" && updated.subscriptionPlan === "pro") {
-      showModal("success", "Status refreshed", "Your Pro subscription is active!");
-    } else {
-      showModal("success", "Status refreshed", "Your subscription status has been updated.");
-    }
+    const updated = await chrome.storage.local.get([
+      "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
+      "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
+    ]);
+    updateSubscriptionUI(updated.subscription, updated.userEmail, updated.subscriptionPlan, updated);
+    updateStats(
+      (await chrome.storage.local.get(["summariesCache"])).summariesCache,
+      (await chrome.storage.local.get(["usageStats"])).usageStats,
+      updated.monthlyUsage,
+      updated.subscriptionPlan
+    );
+    const isPro = updated.subscription === "active" && updated.subscriptionPlan === "pro";
+    showModal("success", "Status refreshed", isPro ? "Your Pro subscription is active!" : "Your subscription status has been updated.");
   } catch (e) {
     console.error("[Options] Refresh error:", e);
-    showModal("error", "Refresh failed", e?.message || "Failed to refresh status. Please try again.");
+    showModal("error", "Something went wrong", "We couldn't refresh your status. Please try again or contact our <a href=\"https://termsdigest.com/support\" target=\"_blank\">support team</a> for help.");
   }
 });
 
@@ -724,11 +785,221 @@ logoutBtn.addEventListener("click", async () => {
     subscription: null, 
     subscriptionPlan: null,
     userEmail: null,
-    supabaseSession: null
+    supabaseSession: null,
+    subscriptionAutoRenew: null,
+    subscriptionDowngradeScheduledFor: null,
+    currentPeriodEnd: null
   });
   updateSubscriptionUI(null, null, null);
   showModal("success", "Logged out", "You have been logged out successfully.");
 });
+
+// Confirmation modal helpers
+let confirmResolve = null;
+function showConfirmModal(title, message) {
+  return new Promise((resolve) => {
+    confirmResolve = resolve;
+    document.getElementById("confirmModalTitle").textContent = title;
+    document.getElementById("confirmModalMessage").textContent = message;
+    document.getElementById("confirmModalOverlay").classList.add("show");
+  });
+}
+function hideConfirmModal() {
+  document.getElementById("confirmModalOverlay").classList.remove("show");
+  confirmResolve = null;
+}
+document.getElementById("confirmModalCancel")?.addEventListener("click", () => {
+  if (confirmResolve) confirmResolve(false);
+  hideConfirmModal();
+});
+document.getElementById("confirmModalConfirm")?.addEventListener("click", () => {
+  if (confirmResolve) confirmResolve(true);
+  hideConfirmModal();
+});
+document.getElementById("confirmModalOverlay")?.addEventListener("click", (e) => {
+  if (e.target.id === "confirmModalOverlay") {
+    if (confirmResolve) confirmResolve(false);
+    hideConfirmModal();
+  }
+});
+
+// Downgrade API call
+async function callDowngradeSubscription(action) {
+  const { supabaseSession } = await chrome.storage.local.get(["supabaseSession"]);
+  if (!supabaseSession?.access_token) throw new Error("Please sign in first.");
+  const supabaseUrl = DEFAULT_SUPABASE_URL.trim();
+  const anon = DEFAULT_SUPABASE_ANON_KEY.trim();
+  const res = await fetch(`${supabaseUrl}/functions/v1/downgrade-subscription`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      apikey: anon,
+      Authorization: `Bearer ${supabaseSession.access_token}`
+    },
+    body: JSON.stringify({ action, reason: "user_requested" })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error("[downgrade-subscription] error:", res.status, data);
+    throw new Error("SUBSCRIPTION_REQUEST_FAILED");
+  }
+  return data;
+}
+
+// Cancel Auto-Renewal button
+document.getElementById("cancelAutoRenewBtn")?.addEventListener("click", async () => {
+  const confirmed = await showConfirmModal(
+    "Cancel Auto-Renewal",
+    "Your subscription will end at the end of the current billing period. You will keep Pro access until then. You can resubscribe anytime."
+  );
+  if (!confirmed) return;
+  try {
+    showModal("loading", "Updating...", "Canceling auto-renewal.");
+    const result = await callDowngradeSubscription("cancel_auto_renew");
+    await chrome.storage.local.set({
+      subscriptionAutoRenew: false,
+      subscriptionDowngradeScheduledFor: result.subscription.downgrade_scheduled_for || null,
+      currentPeriodEnd: result.subscription.current_period_end || null
+    });
+    const updated = await chrome.storage.local.get([
+      "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
+      "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
+    ]);
+    hideModal();
+    updateSubscriptionUI(updated.subscription, updated.userEmail, updated.subscriptionPlan, updated);
+    showModal("success", "Auto-renewal canceled", "Your subscription will not renew. You will keep Pro access until the end of the current period.");
+  } catch (e) {
+    console.error(e);
+    hideModal();
+    showModal("error", "Something went wrong", "We couldn't update your subscription. Please try again or contact our <a href=\"https://termsdigest.com/support\" target=\"_blank\">support team</a> for help.");
+  }
+});
+
+// Re-enable Auto-Renewal button
+document.getElementById("reEnableAutoRenewBtn")?.addEventListener("click", async () => {
+  const confirmed = await showConfirmModal(
+    "Re-enable Auto-Renewal",
+    "Your subscription will automatically renew at the end of the current billing period."
+  );
+  if (!confirmed) return;
+  try {
+    showModal("loading", "Updating...", "Re-enabling auto-renewal.");
+    await callDowngradeSubscription("re_enable_auto_renew");
+    await chrome.storage.local.set({
+      subscriptionAutoRenew: true,
+      subscriptionDowngradeScheduledFor: null
+    });
+    const updated = await chrome.storage.local.get([
+      "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
+      "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
+    ]);
+    hideModal();
+    updateSubscriptionUI(updated.subscription, updated.userEmail, updated.subscriptionPlan, updated);
+    showModal("success", "Auto-renewal re-enabled", "Your subscription will automatically renew at the end of the current period.");
+  } catch (e) {
+    console.error(e);
+    hideModal();
+    showModal("error", "Something went wrong", "We couldn't update your subscription. Please try again or contact our <a href=\"https://termsdigest.com/support\" target=\"_blank\">support team</a> for help.");
+  }
+});
+
+// Downgrade Now button
+document.getElementById("downgradeNowBtn")?.addEventListener("click", async () => {
+  const confirmed = await showConfirmModal(
+    "Downgrade Now",
+    "You will lose Pro access immediately. Your subscription will be canceled and you will be moved to the free plan. This cannot be undone for the current billing period."
+  );
+  if (!confirmed) return;
+  try {
+    showModal("loading", "Downgrading...", "Please wait.");
+    const result = await callDowngradeSubscription("downgrade_now");
+    // Apply the API response to storage so the UI reflects the confirmed state
+    await chrome.storage.local.set({
+      subscription: result.subscription.status,
+      subscriptionPlan: result.subscription.plan,
+      subscriptionAutoRenew: false,
+      subscriptionDowngradeScheduledFor: null,
+      currentPeriodEnd: null
+    });
+    const updated = await chrome.storage.local.get([
+      "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
+      "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
+    ]);
+    hideModal();
+    updateSubscriptionUI(updated.subscription, updated.userEmail, updated.subscriptionPlan, updated);
+    showModal("success", "Downgraded", "You have been moved to the free plan. You can upgrade again anytime.");
+  } catch (e) {
+    console.error(e);
+    hideModal();
+    showModal("error", "Something went wrong", "We couldn't complete your request. Please try again or contact our <a href=\"https://termsdigest.com/support\" target=\"_blank\">support team</a> for help.");
+  }
+});
+
+// Delete Account modal and handler
+const deleteAccountModalOverlay = document.getElementById("deleteAccountModalOverlay");
+const deleteConfirmInput = document.getElementById("deleteConfirmInput");
+const deleteAccountModalConfirm = document.getElementById("deleteAccountModalConfirm");
+const deleteAccountModalCancel = document.getElementById("deleteAccountModalCancel");
+
+function showDeleteAccountModal() {
+  deleteConfirmInput.value = "";
+  deleteAccountModalConfirm.disabled = true;
+  deleteAccountModalOverlay?.classList.add("show");
+}
+
+function hideDeleteAccountModal() {
+  deleteAccountModalOverlay?.classList.remove("show");
+}
+
+deleteConfirmInput?.addEventListener("input", () => {
+  deleteAccountModalConfirm.disabled = deleteConfirmInput.value.trim() !== "DELETE";
+});
+
+deleteAccountModalCancel?.addEventListener("click", hideDeleteAccountModal);
+deleteAccountModalOverlay?.addEventListener("click", (e) => {
+  if (e.target === deleteAccountModalOverlay) hideDeleteAccountModal();
+});
+
+async function callDeleteUserAccount() {
+  const { supabaseSession } = await chrome.storage.local.get(["supabaseSession"]);
+  if (!supabaseSession?.access_token) throw new Error("Please sign in first.");
+  const supabaseUrl = DEFAULT_SUPABASE_URL.trim();
+  const anon = DEFAULT_SUPABASE_ANON_KEY.trim();
+  const res = await fetch(`${supabaseUrl}/functions/v1/delete-user-account`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      apikey: anon,
+      Authorization: `Bearer ${supabaseSession.access_token}`
+    },
+    body: JSON.stringify({ confirmation: "DELETE" })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error("[delete-user-account] error:", res.status, data);
+    throw new Error(data?.error || "Request failed");
+  }
+  return data;
+}
+
+deleteAccountModalConfirm?.addEventListener("click", async () => {
+  if (deleteAccountModalConfirm.disabled) return;
+  try {
+    showModal("loading", "Processing...", "Scheduling account deletion.");
+    await callDeleteUserAccount();
+    hideDeleteAccountModal();
+    await chrome.storage.local.clear();
+    hideModal();
+    updateSubscriptionUI(null, null, null);
+    showModal("success", "Deletion scheduled", "Your account will be permanently deleted in 30 days. You can contact our support team before then if you change your mind.");
+  } catch (e) {
+    console.error(e);
+    hideModal();
+    showModal("error", "Something went wrong", "We couldn't process your request. Please try again or contact our <a href=\"https://termsdigest.com/support\" target=\"_blank\">support team</a> for help.");
+  }
+});
+
+document.getElementById("deleteAccountBtn")?.addEventListener("click", showDeleteAccountModal);
 
 // Check for query parameters (e.g., ?upgrade=true)
 function handleQueryParams() {
@@ -768,4 +1039,29 @@ loadSettings().then(() => {
 }).catch((e) => {
   console.error("Failed to load settings:", e);
   showStatus(e?.message || "Failed to load settings", "error");
+});
+
+// Listen for storage changes to auto-refresh stats when monthlyUsage updates
+chrome.storage.onChanged.addListener(async (changes, areaName) => {
+  if (areaName === "local" && changes.monthlyUsage) {
+    const oldValue = changes.monthlyUsage.oldValue;
+    const newValue = changes.monthlyUsage.newValue;
+    
+    // Only refresh if the value actually changed (not just initialized)
+    if (oldValue !== newValue) {
+      // Reload stats with updated usage count
+      const data = await chrome.storage.local.get([
+        "summariesCache",
+        "usageStats", 
+        "monthlyUsage",
+        "subscriptionPlan"
+      ]);
+      updateStats(
+        data.summariesCache, 
+        data.usageStats, 
+        data.monthlyUsage, 
+        data.subscriptionPlan
+      );
+    }
+  }
 });

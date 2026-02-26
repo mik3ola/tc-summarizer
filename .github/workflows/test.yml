@@ -1,0 +1,16 @@
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run all tests in Docker
+        run: |
+          docker build -f Dockerfile.test -t termsdigest-test .
+          docker run --rm termsdigest-test

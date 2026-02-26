@@ -8,21 +8,55 @@ import { useTheme } from "@/components/ThemeProvider";
 export default function GlobeFeatureSection() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+  const sectionRef = useRef<HTMLElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.2 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <section className={cn(
-      "relative w-full overflow-hidden min-h-[600px] md:min-h-[700px]",
-      isDark ? "bg-slate-950" : "bg-gray-50"
-    )}>
-      {/* Globe - positioned on the right */}
-      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[450px] h-[450px] md:w-[600px] md:h-[600px] lg:w-[750px] lg:h-[750px] -mr-24 md:-mr-16 lg:-mr-8">
-        <Globe isDark={isDark} className="w-full h-full" />
+    <section 
+      ref={sectionRef}
+      className={cn(
+        "relative w-full overflow-hidden min-h-[600px] md:min-h-[700px]",
+        isDark ? "bg-slate-950" : "bg-gray-50"
+      )}
+    >
+      {/* Globe - positioned on the right, slides in from right */}
+      <div 
+        className={cn(
+          "absolute right-0 top-1/2 -translate-y-1/2 w-[450px] h-[450px] md:w-[600px] md:h-[600px] lg:w-[750px] lg:h-[750px] -mr-24 md:-mr-16 lg:-mr-8",
+          "transition-all duration-1000 ease-out",
+          isVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-[150px]"
+        )}
+      >
+        {isVisible && <Globe isDark={isDark} className="w-full h-full" />}
       </div>
 
       {/* Content */}
       <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 h-full min-h-[600px] md:min-h-[700px] flex flex-col justify-between py-16 md:py-20">
-        {/* Title - Upper Left */}
-        <div className="max-w-xl">
+        {/* Title - Upper Left, slides in from left */}
+        <div 
+          className={cn(
+            "max-w-xl transition-all duration-700 ease-out",
+            isVisible ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-20"
+          )}
+        >
           <h2 className={cn(
             "text-4xl md:text-5xl lg:text-6xl font-light tracking-tight leading-tight",
             isDark ? "text-white" : "text-gray-900"
@@ -30,20 +64,25 @@ export default function GlobeFeatureSection() {
             Ready to understand what you&apos;re signing?
           </h2>
           <p className={cn(
-            "text-lg md:text-xl font-light mt-6 leading-relaxed max-w-lg",
+            "mt-8 max-w-lg text-sm md:text-base font-light tracking-tight leading-relaxed",
             isDark ? "text-gray-400" : "text-gray-600"
           )}>
             Join thousands of users who stopped blindly accepting legal terms. Get instant AI-powered summaries.
           </p>
         </div>
 
-        {/* Button - Bottom Left */}
-        <div className="mt-auto pt-12">
+        {/* Button - Bottom Left, slides in from left with delay */}
+        <div 
+          className={cn(
+            "mt-auto pt-12 transition-all duration-700 ease-out delay-200",
+            isVisible ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-16"
+          )}
+        >
           <a
             href="https://chrome.google.com/webstore/detail/termsdigest"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-8 py-4 rounded-xl text-lg font-medium transition-all hover:scale-105 text-white shadow-lg shadow-purple-500/25"
+            className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-8 py-4 rounded text-lg font-medium transition-all hover:scale-105 text-white shadow-lg shadow-purple-500/25"
           >
             Install TermsDigest - Free
           </a>
