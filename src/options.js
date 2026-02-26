@@ -137,14 +137,15 @@ async function loadSettings() {
   // Refresh data after status update
   const refreshedData = await chrome.storage.local.get([
     "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
-    "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
+    "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd",
+    "cycleAnchorDate"
   ]);
   updateSubscriptionUI(refreshedData.subscription, refreshedData.userEmail, refreshedData.subscriptionPlan, refreshedData);
 
   // Backend config - always use defaults (not user-configurable)
 
-  // Stats - pass monthly usage and plan
-  updateStats(data.summariesCache, data.usageStats, refreshedData.monthlyUsage, refreshedData.subscriptionPlan);
+  // Stats - pass monthly usage, plan, and cycle anchor for correct reset date
+  updateStats(data.summariesCache, data.usageStats, refreshedData.monthlyUsage, refreshedData.subscriptionPlan, refreshedData.cycleAnchorDate);
 }
 
 function formatSubStatusLine(currentPeriodEnd) {
@@ -203,6 +204,7 @@ function updateSubscriptionUI(subscription, email, plan, extra = {}) {
     if (apiKeyBadge) { apiKeyBadge.textContent = "Optional"; apiKeyBadge.className = "badge badge-info"; }
 
     document.getElementById("dangerZone")?.classList.remove("hidden");
+    document.getElementById("dataCacheCard")?.classList.remove("hidden");
     // Subscription management section (Pro only)
     if (subManagementEl) {
       subManagementEl.classList.remove("hidden");
@@ -228,6 +230,7 @@ function updateSubscriptionUI(subscription, email, plan, extra = {}) {
     apiCardEl?.classList.add("hidden"); // API key is Pro-only
     subManagementEl?.classList.add("hidden");
     document.getElementById("dangerZone")?.classList.remove("hidden");
+    document.getElementById("dataCacheCard")?.classList.remove("hidden");
   } else {
     // Not logged in → prompt to sign in/up
     subBadgeEl.textContent = "Guest";
@@ -240,10 +243,29 @@ function updateSubscriptionUI(subscription, email, plan, extra = {}) {
     apiCardEl?.classList.add("hidden"); // Must sign in to use API key
     subManagementEl?.classList.add("hidden");
     document.getElementById("dangerZone")?.classList.add("hidden");
+    document.getElementById("dataCacheCard")?.classList.add("hidden");
   }
 }
 
-function updateStats(cache, stats, monthlyUsage, plan) {
+/**
+ * Returns a Date representing the start of the user's current 30-day quota period.
+ * Falls back to the 1st of the current calendar month if anchorDate is unavailable.
+ */
+function computePeriodStart(anchorDate) {
+  if (!anchorDate) {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  }
+  const anchorMs = new Date(anchorDate + "T00:00:00Z").getTime();
+  const now = new Date();
+  const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const msPerPeriod = 30 * 24 * 60 * 60 * 1000;
+  const elapsed = Math.max(0, todayMs - anchorMs);
+  const periodsElapsed = Math.floor(elapsed / msPerPeriod);
+  return new Date(anchorMs + periodsElapsed * msPerPeriod);
+}
+
+function updateStats(cache, stats, monthlyUsage, plan, cycleAnchorDate) {
   const cacheCount = cache ? Object.keys(cache).length : 0;
   const totalSummaries = stats?.totalSummaries || 0;
   
@@ -273,16 +295,23 @@ function updateStats(cache, stats, monthlyUsage, plan) {
   statCachedEl.textContent = cacheCount;
   statSavedEl.textContent = `~${minutesSaved}`;
   
-  // Update hint
+  // Update hint (include reset date based on user's rolling 30-day cycle)
   if (usageHintEl) {
+    const now = new Date();
+    const periodStartMs = computePeriodStart(cycleAnchorDate).getTime();
+    const nextReset = new Date(periodStartMs + 30 * 24 * 60 * 60 * 1000);
+    const resetFmt = nextReset.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    const daysUntilReset = Math.ceil((nextReset - now) / (24 * 60 * 60 * 1000));
+    const resetText = daysUntilReset <= 1 ? `Resets ${daysUntilReset === 1 ? "tomorrow" : "today"} (${resetFmt})` : `Resets ${resetFmt} (in ${daysUntilReset} days)`;
+
     if (remaining === 0) {
-      usageHintEl.textContent = "You've used all your inclusive summaries this month. Upgrade for more!";
+      usageHintEl.textContent = `You've used all your inclusive summaries this month. ${resetText}. Upgrade for more!`;
       usageHintEl.style.color = "#f87171";
     } else if (remaining <= 2) {
-      usageHintEl.textContent = `Only ${remaining} ${remaining === 1 ? "summary" : "summaries"} left this month.`;
+      usageHintEl.textContent = `Only ${remaining} ${remaining === 1 ? "summary" : "summaries"} left this month. ${resetText}`;
       usageHintEl.style.color = "#f59e0b";
     } else {
-      usageHintEl.textContent = `${remaining} ${remaining === 1 ? "summary" : "summaries"} remaining this month.`;
+      usageHintEl.textContent = `${remaining} ${remaining === 1 ? "summary" : "summaries"} remaining this month. ${resetText}`;
       usageHintEl.style.color = "var(--text-muted)";
     }
   }
@@ -544,12 +573,30 @@ async function refreshSupabaseStatusIfPossible(data) {
             
             const status = sub?.status || null;
             const plan = sub?.plan || null;
-            
-            // Fetch monthly usage
+            const autoRenew = sub?.auto_renew !== false;
+            const downgradeScheduledFor = sub?.downgrade_scheduled_for || null;
+            const currentPeriodEnd = sub?.current_period_end || null;
+
+            // Fetch the user's quota cycle anchor date from their profile
+            let cycleAnchorDate = null;
+            try {
+              const profileRes = await fetch(
+                `${supabaseUrl}/rest/v1/profiles?select=cycle_anchor_date&user_id=eq.${encodeURIComponent(userId)}`,
+                { method: "GET", headers: { apikey: anon, Authorization: `Bearer ${refreshed.access_token}` } }
+              );
+              if (profileRes.ok) {
+                const profileRows = await profileRes.json().catch(() => []);
+                const profile = Array.isArray(profileRows) ? profileRows[0] : profileRows;
+                cycleAnchorDate = profile?.cycle_anchor_date || null;
+              }
+            } catch (e) {
+              // Silently fail
+            }
+
+            // Fetch usage for the current 30-day period
             let monthlyUsage = 0;
-            const now = new Date();
-            const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
-            const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${monthStart}`;
+            const retryPeriodStart = computePeriodStart(cycleAnchorDate).toISOString().slice(0, 10);
+            const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${retryPeriodStart}`;
             
             try {
               const usageRes = await fetch(`${supabaseUrl}/rest/v1/usage_counters_monthly${usageQs}`, {
@@ -566,14 +613,12 @@ async function refreshSupabaseStatusIfPossible(data) {
               // Silently fail - usage is optional
             }
 
-            const autoRenew = sub?.auto_renew !== false;
-            const downgradeScheduledFor = sub?.downgrade_scheduled_for || null;
-            const currentPeriodEnd = sub?.current_period_end || null;
             await chrome.storage.local.set({
               subscription: status,
               subscriptionPlan: plan,
               userEmail: refreshed.user?.email || null,
               monthlyUsage: monthlyUsage,
+              cycleAnchorDate: cycleAnchorDate,
               subscriptionAutoRenew: autoRenew,
               subscriptionDowngradeScheduledFor: downgradeScheduledFor,
               currentPeriodEnd: currentPeriodEnd
@@ -604,11 +649,26 @@ async function refreshSupabaseStatusIfPossible(data) {
     const downgradeScheduledFor = sub?.downgrade_scheduled_for || null;
     const currentPeriodEnd = sub?.current_period_end || null;
 
-    // Fetch monthly usage (current month)
+    // Fetch the user's quota cycle anchor date from their profile
+    let cycleAnchorDate = null;
+    try {
+      const profileRes = await fetch(
+        `${supabaseUrl}/rest/v1/profiles?select=cycle_anchor_date&user_id=eq.${encodeURIComponent(userId)}`,
+        { method: "GET", headers: { apikey: anon, Authorization: `Bearer ${session.access_token}` } }
+      );
+      if (profileRes.ok) {
+        const profileRows = await profileRes.json().catch(() => []);
+        const profile = Array.isArray(profileRows) ? profileRows[0] : profileRows;
+        cycleAnchorDate = profile?.cycle_anchor_date || null;
+      }
+    } catch (e) {
+      // Silently fail - will fall back to calendar-month logic in updateStats
+    }
+
+    // Fetch usage for the current 30-day period
     let monthlyUsage = 0;
-    const now = new Date();
-    const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
-    const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${monthStart}`;
+    const periodStart = computePeriodStart(cycleAnchorDate).toISOString().slice(0, 10);
+    const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${periodStart}`;
     
     try {
       const usageRes = await fetch(`${supabaseUrl}/rest/v1/usage_counters_monthly${usageQs}`, {
@@ -631,6 +691,7 @@ async function refreshSupabaseStatusIfPossible(data) {
       subscriptionPlan: plan,
       userEmail: session.user?.email || null,
       monthlyUsage: monthlyUsage,
+      cycleAnchorDate: cycleAnchorDate,
       subscriptionAutoRenew: autoRenew,
       subscriptionDowngradeScheduledFor: downgradeScheduledFor,
       currentPeriodEnd: currentPeriodEnd
@@ -685,7 +746,8 @@ upgradeBtn?.addEventListener("click", async () => {
         // Get updated data immediately after refresh
         const updated = await chrome.storage.local.get([
           "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
-          "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
+          "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd",
+          "cycleAnchorDate"
         ]);
         
         // Check if subscription is now active (be flexible - plan="pro" is enough)
@@ -699,7 +761,8 @@ upgradeBtn?.addEventListener("click", async () => {
             (await chrome.storage.local.get(["summariesCache"])).summariesCache,
             (await chrome.storage.local.get(["usageStats"])).usageStats,
             updated.monthlyUsage,
-            updated.subscriptionPlan
+            updated.subscriptionPlan,
+            updated.cycleAnchorDate
           );
           
           // Show success
@@ -725,7 +788,8 @@ upgradeBtn?.addEventListener("click", async () => {
         await refreshSupabaseStatusIfPossible({ supabaseSession });
         const updated = await chrome.storage.local.get([
           "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
-          "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
+          "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd",
+          "cycleAnchorDate"
         ]);
         
         // Check if subscription is now active (be flexible - plan="pro" is enough)
@@ -739,7 +803,8 @@ upgradeBtn?.addEventListener("click", async () => {
             (await chrome.storage.local.get(["summariesCache"])).summariesCache,
             (await chrome.storage.local.get(["usageStats"])).usageStats,
             updated.monthlyUsage,
-            updated.subscriptionPlan
+            updated.subscriptionPlan,
+            updated.cycleAnchorDate
           );
           
           showModal("success", "Payment successful!", "Your Pro subscription is now active!");
@@ -762,14 +827,16 @@ refreshStatusBtn?.addEventListener("click", async () => {
     await refreshSupabaseStatusIfPossible(data);
     const updated = await chrome.storage.local.get([
       "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
-      "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
+      "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd",
+      "cycleAnchorDate"
     ]);
     updateSubscriptionUI(updated.subscription, updated.userEmail, updated.subscriptionPlan, updated);
     updateStats(
       (await chrome.storage.local.get(["summariesCache"])).summariesCache,
       (await chrome.storage.local.get(["usageStats"])).usageStats,
       updated.monthlyUsage,
-      updated.subscriptionPlan
+      updated.subscriptionPlan,
+      updated.cycleAnchorDate
     );
     const isPro = updated.subscription === "active" && updated.subscriptionPlan === "pro";
     showModal("success", "Status refreshed", isPro ? "Your Pro subscription is active!" : "Your subscription status has been updated.");
@@ -1054,13 +1121,15 @@ chrome.storage.onChanged.addListener(async (changes, areaName) => {
         "summariesCache",
         "usageStats", 
         "monthlyUsage",
-        "subscriptionPlan"
+        "subscriptionPlan",
+        "cycleAnchorDate"
       ]);
       updateStats(
         data.summariesCache, 
         data.usageStats, 
         data.monthlyUsage, 
-        data.subscriptionPlan
+        data.subscriptionPlan,
+        data.cycleAnchorDate
       );
     }
   }

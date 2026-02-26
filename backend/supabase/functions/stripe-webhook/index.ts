@@ -148,6 +148,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     `Checkout completed for user ${userId}, customer ${customerId}, subscription ${subscriptionId}`
   );
 
+  const upgradeDate = new Date().toISOString().slice(0, 10);
+
   // Update the user's subscription in Supabase
   const { error } = await supabase
     .from("subscriptions")
@@ -168,7 +170,19 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     throw error;
   }
 
-  console.log(`User ${userId} upgraded to Pro`);
+  // Reset the quota cycle anchor to the upgrade date so the user's 30-day
+  // billing period starts fresh from the moment they paid.
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .update({ cycle_anchor_date: upgradeDate })
+    .eq("user_id", userId);
+
+  if (profileError) {
+    console.error("Error updating cycle_anchor_date:", profileError);
+    // Non-fatal — log and continue
+  }
+
+  console.log(`User ${userId} upgraded to Pro, cycle anchor set to ${upgradeDate}`);
 }
 
 async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {

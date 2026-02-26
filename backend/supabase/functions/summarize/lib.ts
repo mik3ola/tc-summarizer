@@ -18,9 +18,23 @@ export function getMonthlyQuota(plan: string): number {
   return 5;
 }
 
-export function monthStart(d = new Date()): string {
-  const dt = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
-  return dt.toISOString().slice(0, 10);
+/**
+ * Returns the start date of the current 30-day billing period for a user.
+ *
+ * anchorDate: the user's cycle anchor (signup date for free, upgrade date for Pro)
+ * today:      injectable for testing; defaults to now()
+ *
+ * Example: anchor = "2026-01-20", today = "2026-02-25"
+ *   → daysSinceAnchor = 36, periodsElapsed = 1
+ *   → currentPeriodStart = "2026-02-19"  (next reset: "2026-03-21")
+ */
+export function periodStart(anchorDate: string, today = new Date()): string {
+  const anchorMs = new Date(anchorDate + "T00:00:00Z").getTime();
+  const todayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const msPerPeriod = 30 * 24 * 60 * 60 * 1000;
+  const elapsed = Math.max(0, todayMs - anchorMs);
+  const periodsElapsed = Math.floor(elapsed / msPerPeriod);
+  return new Date(anchorMs + periodsElapsed * msPerPeriod).toISOString().slice(0, 10);
 }
 
 export function decodeJwtPayload(token: string): { sub: string; role: string } | null {

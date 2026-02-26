@@ -5,7 +5,10 @@
 create table if not exists public.profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   email text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- Anchor date for rolling 30-day quota periods.
+  -- Set to signup date for free users; updated to upgrade date when user goes Pro.
+  cycle_anchor_date date not null default current_date
 );
 
 -- 2) Subscription status
