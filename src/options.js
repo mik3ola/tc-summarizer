@@ -97,6 +97,7 @@ modalOverlay?.addEventListener("click", (e) => {
 
 // Legacy status function (still used for minor feedback)
 function showStatus(msg, type = "success") {
+  if (!statusEl) return;
   statusEl.textContent = msg;
   statusEl.className = `status show ${type}`;
   setTimeout(() => {
@@ -118,17 +119,17 @@ async function loadSettings() {
     "monthlyUsage"
   ]);
 
-  // API settings
-  apiKeyEl.value = data.openaiApiKey || "";
-  modelEl.value = data.openaiModel || "gpt-4o-mini";
+  // API settings (options page only; popup has no API card)
+  if (apiKeyEl) apiKeyEl.value = data.openaiApiKey || "";
+  if (modelEl) modelEl.value = data.openaiModel || "gpt-4o-mini";
 
   // Preferences
   const prefs = data.preferences || {};
-  autoHoverEl.checked = prefs.autoHover !== false;
-  showRedFlagsEl.checked = prefs.showRedFlags !== false;
-  showQuotesEl.checked = prefs.showQuotes !== false;
-  enableCachingEl.checked = prefs.enableCaching !== false; // Default to true
-  hoverDelayEl.value = prefs.hoverDelay || "750";
+  if (autoHoverEl) autoHoverEl.checked = prefs.autoHover !== false;
+  if (showRedFlagsEl) showRedFlagsEl.checked = prefs.showRedFlags !== false;
+  if (showQuotesEl) showQuotesEl.checked = prefs.showQuotes !== false;
+  if (enableCachingEl) enableCachingEl.checked = prefs.enableCaching !== false; // Default to true
+  if (hoverDelayEl) hoverDelayEl.value = prefs.hoverDelay || "750";
 
   // Subscription status
   // Prefer real session if present
@@ -317,8 +318,8 @@ function updateStats(cache, stats, monthlyUsage, plan, cycleAnchorDate) {
   }
 }
 
-// Save API settings
-saveApiBtn.addEventListener("click", async () => {
+// Save API settings (options page only)
+saveApiBtn?.addEventListener("click", async () => {
   const openaiApiKey = apiKeyEl.value.trim();
   const openaiModel = modelEl.value;
   
@@ -326,23 +327,23 @@ saveApiBtn.addEventListener("click", async () => {
   showStatus("API settings saved!");
 });
 
-// Clear API key
-clearApiBtn.addEventListener("click", async () => {
+// Clear API key (options page only)
+clearApiBtn?.addEventListener("click", async () => {
   await chrome.storage.local.set({ openaiApiKey: "" });
   apiKeyEl.value = "";
   showStatus("API key cleared.", "success");
 });
 
-// Clear cache
-clearCacheBtn.addEventListener("click", async () => {
+// Clear cache (options page only)
+clearCacheBtn?.addEventListener("click", async () => {
   await chrome.storage.local.set({ summariesCache: {} });
   statCachedEl.textContent = "0";
   statSavedEl.textContent = "~0"; // Also clear minutes saved
   showStatus("Summary cache cleared!");
 });
 
-// Export data
-exportDataBtn.addEventListener("click", async () => {
+// Export data (options page only)
+exportDataBtn?.addEventListener("click", async () => {
   const data = await chrome.storage.local.get(["summariesCache", "preferences"]);
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -366,11 +367,11 @@ async function savePreferences() {
   await chrome.storage.local.set({ preferences });
 }
 
-autoHoverEl.addEventListener("change", savePreferences);
-showRedFlagsEl.addEventListener("change", savePreferences);
-showQuotesEl.addEventListener("change", savePreferences);
-enableCachingEl.addEventListener("change", savePreferences);
-hoverDelayEl.addEventListener("change", savePreferences);
+autoHoverEl?.addEventListener("change", savePreferences);
+showRedFlagsEl?.addEventListener("change", savePreferences);
+showQuotesEl?.addEventListener("change", savePreferences);
+enableCachingEl?.addEventListener("change", savePreferences);
+hoverDelayEl?.addEventListener("change", savePreferences);
 
 async function requireBackendConfigOrThrow() {
   // Always use hardcoded defaults (not user-configurable)

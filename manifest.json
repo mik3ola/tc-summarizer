@@ -12,7 +12,7 @@
   "options_page": "src/options.html",
   "action": {
     "default_title": "TermsDigest",
-    "default_popup": "src/options.html"
+    "default_popup": "src/popup.html"
   },
   "content_scripts": [
     {

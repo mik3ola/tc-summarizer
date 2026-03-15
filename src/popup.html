@@ -1,0 +1,459 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>TermsDigest</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --card-bg: #1e293b;
+        --border: rgba(148, 163, 184, 0.25);
+        --text: #e2e8f0;
+        --text-muted: rgba(226, 232, 240, 0.7);
+        --accent: #3b82f6;
+        --accent-hover: #2563eb;
+        --success: #22c55e;
+        --warning: #f59e0b;
+        color-scheme: dark;
+      }
+      * { box-sizing: border-box; }
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        margin: 0;
+        padding: 16px;
+        background: var(--bg);
+        color: var(--text);
+        width: 380px;
+        min-width: 380px;
+      }
+
+      /* ── Header ─────────────────────────────────────── */
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+      .logo { width: 26px; height: 26px; }
+      .header-title {
+        font-size: 1rem;
+        font-weight: 700;
+        flex: 1;
+      }
+      .open-options-btn {
+        all: unset;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        color: var(--text-muted);
+        transition: color 0.15s, background 0.15s;
+      }
+      .open-options-btn:hover {
+        color: var(--text);
+        background: rgba(148,163,184,0.12);
+      }
+      .open-options-btn svg { width: 16px; height: 16px; }
+
+      /* ── Cards ──────────────────────────────────────── */
+      .card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin-bottom: 10px;
+      }
+      .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .card-title {
+        font-weight: 600;
+        font-size: 0.875rem;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .badge {
+        font-size: 0.65rem;
+        padding: 2px 7px;
+        border-radius: 999px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      .badge-success { background: var(--success); color: #000; }
+      .badge-warning { background: var(--warning); color: #000; }
+      .badge-info    { background: var(--accent);  color: #fff; }
+
+      /* ── Text / inputs ──────────────────────────────── */
+      p { margin: 0; }
+      label {
+        display: block;
+        font-weight: 500;
+        margin-bottom: 5px;
+        font-size: 0.8rem;
+      }
+      input, select {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--text);
+        font-size: 0.8rem;
+      }
+      input:focus, select:focus { outline: none; border-color: var(--accent); }
+      .input-group { margin-bottom: 10px; }
+      .input-hint { font-size: 0.7rem; color: var(--text-muted); margin-top: 3px; }
+
+      /* ── Buttons ─────────────────────────────────────── */
+      button:not(.open-options-btn):not(.modal-btn) {
+        cursor: pointer;
+        padding: 8px 14px;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        background: var(--card-bg);
+        color: var(--text);
+        font-weight: 600;
+        font-size: 0.8rem;
+        transition: all 0.15s;
+      }
+      button:not(.open-options-btn):not(.modal-btn):hover {
+        background: var(--bg);
+        border-color: var(--accent);
+      }
+      button.primary {
+        background: var(--accent) !important;
+        border-color: var(--accent) !important;
+        color: #fff !important;
+      }
+      button.primary:hover {
+        background: var(--accent-hover) !important;
+      }
+      button.danger { color: #f87171; }
+      button.danger:hover { background: rgba(248,113,113,0.1); border-color: #f87171; }
+      .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+      /* ── Stats ───────────────────────────────────────── */
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        text-align: center;
+      }
+      .stat-value { font-size: 1.25rem; font-weight: 700; color: var(--accent); }
+      .stat-label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; }
+
+      /* ── Toggles ─────────────────────────────────────── */
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .toggle-row:last-of-type { border-bottom: none; }
+      .toggle-label { font-size: 0.8rem; font-weight: 500; }
+      .toggle-hint  { font-size: 0.7rem; color: var(--text-muted); }
+      .toggle {
+        position: relative;
+        width: 40px;
+        height: 22px;
+        flex-shrink: 0;
+      }
+      .toggle input {
+        -webkit-appearance: none;
+        appearance: none;
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+        pointer-events: none;
+      }
+      .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        inset: 0;
+        background: rgba(148,163,184,0.15);
+        border: 1px solid var(--border);
+        border-radius: 22px;
+        transition: 0.2s;
+      }
+      .toggle-slider::before {
+        content: "";
+        position: absolute;
+        height: 16px;
+        width: 16px;
+        left: 2px;
+        bottom: 2px;
+        background: var(--text-muted);
+        border-radius: 50%;
+        transition: 0.2s;
+      }
+      .toggle input:checked + .toggle-slider {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .toggle input:checked + .toggle-slider::before {
+        transform: translateX(18px);
+        background: #fff;
+      }
+      .divider { height: 1px; background: var(--border); margin: 10px 0; }
+
+      /* ── Status ──────────────────────────────────────── */
+      .status {
+        margin-top: 10px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        display: none;
+      }
+      .status.show { display: block; }
+      .status.success { background: rgba(34,197,94,0.15); color: var(--success); }
+      .status.error   { background: rgba(248,113,113,0.15); color: #f87171; }
+
+      /* ── Footer ──────────────────────────────────────── */
+      .footer {
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 0.7rem;
+        margin-top: 12px;
+      }
+      .footer a { color: var(--accent); text-decoration: none; }
+      .footer a:hover { text-decoration: underline; }
+
+      /* ── Modal ───────────────────────────────────────── */
+      .hidden { display: none !important; }
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.7);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.2s, visibility 0.2s;
+      }
+      .modal-overlay.show { opacity: 1; visibility: visible; }
+      .modal-box {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 20px;
+        max-width: 320px;
+        width: 90%;
+        text-align: center;
+        transform: scale(0.95);
+        transition: transform 0.2s;
+      }
+      .modal-overlay.show .modal-box { transform: scale(1); }
+      .modal-icon  { font-size: 2.5rem; margin-bottom: 10px; }
+      .modal-title { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+      .modal-message {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-bottom: 14px;
+        line-height: 1.5;
+      }
+      .modal-message a { color: var(--accent); text-decoration: none; }
+      .modal-message a:hover { text-decoration: underline; }
+      .modal-btn {
+        background: var(--accent);
+        border: none;
+        color: #fff;
+        padding: 8px 20px;
+        border-radius: 4px;
+        font-weight: 600;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .modal-btn:hover { background: var(--accent-hover); }
+      .modal-success .modal-icon { color: var(--success); }
+      .modal-error   .modal-icon { color: #f87171; }
+      .modal-loading .modal-icon { animation: spin 1s linear infinite; }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+
+    <!-- Standard modal -->
+    <div id="modalOverlay" class="modal-overlay">
+      <div class="modal-box">
+        <div id="modalIcon"   class="modal-icon">✅</div>
+        <div id="modalTitle"  class="modal-title">Success</div>
+        <div id="modalMessage" class="modal-message">Operation completed.</div>
+        <button id="modalBtn" class="modal-btn">OK</button>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <div class="header">
+      <img id="logoImg" src="" alt="" class="logo" />
+      <span class="header-title">TermsDigest</span>
+      <a href="options.html" target="_blank" class="open-options-btn" id="openOptionsBtn" title="Open full settings" role="button">
+        <!-- External link / expand icon -->
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9"/>
+          <path d="M10 2h4v4"/>
+          <path d="M14 2L8 8"/>
+        </svg>
+      </a>
+    </div>
+
+    <!-- Account card -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">⚡ Account</div>
+        <span id="subBadge" class="badge badge-info">Guest</span>
+      </div>
+
+      <!-- Logged-out state -->
+      <div id="subStatus">
+        <p style="margin-bottom:10px; color:var(--text-muted); font-size:0.8rem;">
+          Sign in to access your free summaries, or upgrade to Pro for unlimited usage with your own API key.
+        </p>
+        <div class="btn-row">
+          <button id="loginBtn">🔐 Login / Create account</button>
+        </div>
+        <div id="authForm" class="hidden" style="margin-top:12px;">
+          <div class="input-group">
+            <label for="authEmail">Email</label>
+            <input id="authEmail" type="email" placeholder="you@example.com" autocomplete="email" />
+          </div>
+          <div class="input-group">
+            <label for="authPassword">Password</label>
+            <input id="authPassword" type="password" placeholder="••••••••" autocomplete="current-password" />
+            <div class="input-hint">New user? Enter email + password then click "Create account".</div>
+          </div>
+          <div class="btn-row">
+            <button id="signInBtn" class="primary">Sign in</button>
+            <button id="signUpBtn">Create account</button>
+            <button id="cancelAuthBtn">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Logged-in state -->
+      <div id="subActive" class="hidden">
+        <p style="margin-bottom:10px; color:var(--text-muted); font-size:0.8rem;">
+          Logged in as <strong id="userEmail"></strong>
+        </p>
+        <div class="btn-row">
+          <button id="upgradeBtn" class="primary">⭐ Upgrade to Pro</button>
+          <button id="refreshStatusBtn">Refresh</button>
+          <button id="logoutBtn">Logout</button>
+        </div>
+        <p id="planHint" style="margin-top:8px; color:var(--text-muted); font-size:0.75rem;"></p>
+      </div>
+    </div>
+
+    <!-- Usage stats (logged-in only) -->
+    <div class="card hidden" id="statsCard">
+      <div class="card-title" style="margin-bottom:12px;">📊 Usage</div>
+      <div class="stats">
+        <div>
+          <div class="stat-value" id="statSummaries">0/5</div>
+          <div class="stat-label">Used / Limit</div>
+        </div>
+        <div>
+          <div class="stat-value" id="statCached">0</div>
+          <div class="stat-label">Cached</div>
+        </div>
+        <div>
+          <div class="stat-value" id="statSaved">~0</div>
+          <div class="stat-label">Min Saved</div>
+        </div>
+      </div>
+      <p id="usageHint" style="margin-top:10px; color:var(--text-muted); font-size:0.7rem; text-align:center;"></p>
+    </div>
+
+    <!-- Preferences -->
+    <div class="card">
+      <div class="card-title" style="margin-bottom:4px;">⚙️ Preferences</div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Auto-summarize on hover</div>
+          <div class="toggle-hint">Show summary when hovering legal links</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="autoHover" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Show red flags</div>
+          <div class="toggle-hint">Highlight concerning clauses</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="showRedFlags" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Show supporting quotes</div>
+          <div class="toggle-hint">Include relevant quotes</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="showQuotes" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Enable caching</div>
+          <div class="toggle-hint">Cache summaries for 30 days</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="enableCaching" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="input-group" style="margin-bottom:0;">
+        <label for="hoverDelay">Hover delay</label>
+        <select id="hoverDelay">
+          <option value="500">Fast (0.5s)</option>
+          <option value="750" selected>Normal (0.75s)</option>
+          <option value="1000">Slow (1s)</option>
+          <option value="1500">Very slow (1.5s)</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div class="footer">
+      <a href="options.html" target="_blank" id="openOptionsLink">Full settings &amp; account management →</a>
+    </div>
+
+    <script src="./options.js"></script>
+    <script>
+      // Logo: use extension-relative URL (popup runs in extension context)
+      const logo = document.getElementById("logoImg");
+      if (logo && typeof chrome?.runtime?.getURL === "function") {
+        logo.src = chrome.runtime.getURL("icons/icon48.png");
+      }
+      // Links use href="options.html" target="_blank" to open full settings in a new tab
+    </script>
+  </body>
+</html>
