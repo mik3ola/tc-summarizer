@@ -4,6 +4,7 @@
   "scripts": {
     "test": "docker build -f Dockerfile.test -t termsdigest-test . && docker run --rm termsdigest-test",
     "test:inner": "vitest run",
+    "test:run": "vitest run && cd backend/supabase/functions && deno test downgrade-subscription/lib.test.ts delete-user-account/lib.test.ts summarize/lib.test.ts stripe-webhook/lib.test.ts --allow-read",
     "dev": "cd website && npm run dev"
   },
   "devDependencies": {

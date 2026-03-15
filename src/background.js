@@ -625,9 +625,40 @@ async function refreshSupabaseStatusIfPossible(data) {
     // Always try to fetch monthly usage (this is what we really need for the count)
     // Even if subscription fetch failed, we can still get usage count
     let monthlyUsage = 0;
-    const now = new Date();
-    const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
-    const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${monthStart}`;
+
+    // Fetch the user's cycle anchor date so we query the right period row
+    let cycleAnchorDate = null;
+    try {
+      const profileRes = await fetch(
+        `${supabaseUrl}/rest/v1/profiles?select=cycle_anchor_date&user_id=eq.${encodeURIComponent(userId)}`,
+        { method: "GET", headers: { apikey: anon, Authorization: `Bearer ${session.access_token}` } }
+      );
+      if (profileRes.ok) {
+        const profileRows = await profileRes.json().catch(() => []);
+        const profile = Array.isArray(profileRows) ? profileRows[0] : profileRows;
+        cycleAnchorDate = profile?.cycle_anchor_date || null;
+      }
+    } catch (e) {
+      // Silently fail - will fall back to calendar month
+    }
+
+    // Compute period start from anchor (mirrors periodStart() in the edge function)
+    function computePeriodStart(anchorDate) {
+      if (!anchorDate) {
+        const now = new Date();
+        return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+      }
+      const anchorMs = new Date(anchorDate + "T00:00:00Z").getTime();
+      const now = new Date();
+      const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      const msPerPeriod = 30 * 24 * 60 * 60 * 1000;
+      const elapsed = Math.max(0, todayMs - anchorMs);
+      const periodsElapsed = Math.floor(elapsed / msPerPeriod);
+      return new Date(anchorMs + periodsElapsed * msPerPeriod).toISOString().slice(0, 10);
+    }
+
+    const periodStart = computePeriodStart(cycleAnchorDate);
+    const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${periodStart}`;
     
     // Use the current session (might have been refreshed above)
     const currentAccessToken = session?.access_token;
@@ -669,7 +700,7 @@ async function refreshSupabaseStatusIfPossible(data) {
 
     // Store the updated data (always update monthlyUsage even if subscription fetch failed)
     // Get current values first to preserve what we have
-    const currentStorage = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage"]);
+    const currentStorage = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage", "cycleAnchorDate"]);
     
     // Only update monthlyUsage if we successfully fetched a new value (> 0 or explicitly 0 from backend)
     // If fetch failed, preserve existing value to avoid overwriting with 0
@@ -681,7 +712,8 @@ async function refreshSupabaseStatusIfPossible(data) {
       subscription: status !== null ? status : currentStorage.subscription,
       subscriptionPlan: plan !== null ? plan : currentStorage.subscriptionPlan,
       userEmail: session?.user?.email || currentStorage.userEmail || null,
-      monthlyUsage: finalMonthlyUsage
+      monthlyUsage: finalMonthlyUsage,
+      cycleAnchorDate: cycleAnchorDate !== null ? cycleAnchorDate : (currentStorage.cycleAnchorDate ?? null)
     });
   } catch (e) {
     console.error("[Background] Error refreshing subscription status:", e);

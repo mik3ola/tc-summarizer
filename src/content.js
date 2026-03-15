@@ -720,6 +720,41 @@ function createUi() {
       0% { transform: translateY(8px); opacity: 0; }
       100% { transform: translateY(0); opacity: 1; }
     }
+    .loading-title-viewport {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      height: 20px;
+      position: relative;
+    }
+    .loading-title-strip {
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .loading-title-strip.loading-to-summarizing {
+      transform: translateY(-50%);
+    }
+    .loading-title-item {
+      height: 20px;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      font-size: 12px;
+      color: rgba(226,232,240,0.9);
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 280px;
+    }
+    .loading-title-item:first-child {
+      animation: loading-title-slide-up 0.6s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+    }
+    @keyframes loading-title-slide-up {
+      0% { transform: translateY(100%); opacity: 0; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
   `;
 
   const popover = document.createElement("div");
@@ -809,11 +844,18 @@ function setPopoverPositionNearAnchor(anchor) {
   UI.popover.style.top = `${top}px`;
 }
 
+const LOADING_DOTS = '<span class="loading-dots"><span>.</span><span>.</span><span>.</span><span>.</span></span>';
+
 async function renderLoading(url) {
   const footer = await getStatsFooter();
   UI.popover.innerHTML = `
     <div class="header">
-      <div class="title">Summarizing<span class="loading-dots"><span>.</span><span>.</span><span>.</span><span>.</span></span></div>
+      <div class="loading-title-viewport">
+        <div class="loading-title-strip" data-loading-phase="thinking">
+          <div class="loading-title-item">Thinking${LOADING_DOTS}</div>
+          <div class="loading-title-item">Summarizing${LOADING_DOTS}</div>
+        </div>
+      </div>
       <div class="header-right">
         <div class="ring-loader" aria-label="Loading">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" stroke="currentColor" fill="none">
@@ -838,6 +880,15 @@ async function renderLoading(url) {
     <div class="section muted" style="padding-bottom: 12px; margin-top: 0;">Keep your mouse over the popover to view the summary.</div>
     ${footer}
   `;
+
+  // After 1.7 seconds, animate "Summarizing" up from bottom, pushing "Thinking" out (if still loading)
+  setTimeout(() => {
+    const stripEl = UI.popover?.querySelector(".loading-title-strip[data-loading-phase='thinking']");
+    if (stripEl) {
+      stripEl.classList.add("loading-to-summarizing");
+      stripEl.setAttribute("data-loading-phase", "summarizing");
+    }
+  }, 1700);
 }
 
 function truncateUrl(url, maxLen = 50) {

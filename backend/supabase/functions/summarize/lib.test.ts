@@ -1,6 +1,6 @@
 // Unit tests for summarize lib
 import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.168.0/testing/asserts.ts";
-import { getMonthlyQuota, monthStart, decodeJwtPayload, buildPrompt, resolvedSiteUrl } from "./lib.ts";
+import { getMonthlyQuota, periodStart, decodeJwtPayload, buildPrompt, resolvedSiteUrl } from "./lib.ts";
 
 // ─── getMonthlyQuota ────────────────────────────────────────────────────────
 
@@ -21,28 +21,46 @@ Deno.test("getMonthlyQuota - enterprise plan returns 5000", () => {
   assertEquals(getMonthlyQuota("enterprise"), 5000);
 });
 
-// ─── monthStart ─────────────────────────────────────────────────────────────
+// ─── periodStart ────────────────────────────────────────────────────────────
 
-Deno.test("monthStart - returns YYYY-MM-01 format", () => {
-  const result = monthStart(new Date("2026-02-15T12:00:00Z"));
-  assertEquals(result, "2026-02-01");
+Deno.test("periodStart - anchor day returns anchor on same day", () => {
+  const result = periodStart("2026-01-20", new Date("2026-01-20T00:00:00Z"));
+  assertEquals(result, "2026-01-20");
 });
 
-Deno.test("monthStart - first day of month stays same", () => {
-  const result = monthStart(new Date("2026-01-01T00:00:00Z"));
-  assertEquals(result, "2026-01-01");
+Deno.test("periodStart - day before anchor is still in previous period", () => {
+  // anchor 2026-01-20, today 2026-02-18 → 29 days elapsed → still period 0
+  const result = periodStart("2026-01-20", new Date("2026-02-18T12:00:00Z"));
+  assertEquals(result, "2026-01-20");
 });
 
-Deno.test("monthStart - end of month uses correct month", () => {
-  const result = monthStart(new Date("2026-03-31T23:59:59Z"));
+Deno.test("periodStart - exactly 30 days later starts period 1", () => {
+  // anchor 2026-01-20, today 2026-02-19 → 30 days elapsed → period 1
+  const result = periodStart("2026-01-20", new Date("2026-02-19T00:00:00Z"));
+  assertEquals(result, "2026-02-19");
+});
+
+Deno.test("periodStart - mid second period returns correct start", () => {
+  // anchor 2026-01-20, today 2026-02-25 → 36 days → period 1 start = 2026-02-19
+  const result = periodStart("2026-01-20", new Date("2026-02-25T00:00:00Z"));
+  assertEquals(result, "2026-02-19");
+});
+
+Deno.test("periodStart - exactly 60 days later starts period 2", () => {
+  const result = periodStart("2026-01-20", new Date("2026-03-21T00:00:00Z"));
+  assertEquals(result, "2026-03-21");
+});
+
+Deno.test("periodStart - today before anchor clamps to anchor", () => {
+  // Should not return a date before the anchor
+  const result = periodStart("2026-03-01", new Date("2026-02-01T00:00:00Z"));
   assertEquals(result, "2026-03-01");
 });
 
-Deno.test("monthStart - uses current date when no arg", () => {
-  const result = monthStart();
+Deno.test("periodStart - returns YYYY-MM-DD format string", () => {
+  const result = periodStart("2026-01-15", new Date("2026-01-15T00:00:00Z"));
   assertEquals(typeof result, "string");
   assertEquals(result.length, 10);
-  assertEquals(result.slice(-2), "01");
 });
 
 // ─── decodeJwtPayload ───────────────────────────────────────────────────────

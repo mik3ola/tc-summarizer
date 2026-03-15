@@ -4,7 +4,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getMonthlyQuota, monthStart, decodeJwtPayload, buildPrompt, type Summary } from "./lib.ts";
+import { getMonthlyQuota, periodStart, decodeJwtPayload, buildPrompt, type Summary } from "./lib.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -112,15 +112,16 @@ serve(async (req: Request) => {
 
     // Check quota for the authenticated user
     {
-      const { data: sub } = await supabase
-        .from("subscriptions")
-        .select("status, plan")
-        .eq("user_id", userId)
-        .maybeSingle();
+      const [{ data: sub }, { data: profile }] = await Promise.all([
+        supabase.from("subscriptions").select("status, plan").eq("user_id", userId).maybeSingle(),
+        supabase.from("profiles").select("cycle_anchor_date").eq("user_id", userId).maybeSingle(),
+      ]);
 
       const plan = sub?.plan || "free";
-      const m = monthStart();
-      
+      // Fall back to today's date if the profile row is missing (should not happen)
+      const anchorDate = profile?.cycle_anchor_date ?? new Date().toISOString().slice(0, 10);
+      const m = periodStart(anchorDate);
+
       const { data: counter } = await supabase
         .from("usage_counters_monthly")
         .select("summaries_count")
@@ -158,7 +159,13 @@ serve(async (req: Request) => {
     // Try to record usage (non-blocking)
     if (userId) {
       try {
-        const m = monthStart();
+        const { data: profileForUsage } = await supabase
+          .from("profiles")
+          .select("cycle_anchor_date")
+          .eq("user_id", userId)
+          .maybeSingle();
+        const anchorForUsage = profileForUsage?.cycle_anchor_date ?? new Date().toISOString().slice(0, 10);
+        const m = periodStart(anchorForUsage);
         
         // Log usage event
         const { error: insertError } = await supabase.from("usage_events").insert({
