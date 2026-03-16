@@ -342,6 +342,9 @@
             <button id="signUpBtn">Create account</button>
             <button id="cancelAuthBtn">Cancel</button>
           </div>
+          <div style="text-align:right; margin-top:8px;">
+            <a href="#" id="forgotPasswordLink" style="font-size:0.72rem; color:var(--accent); text-decoration:none;">Forgot password?</a>
+          </div>
         </div>
       </div>
 
@@ -454,6 +457,33 @@
         logo.src = chrome.runtime.getURL("icons/icon48.png");
       }
       // Links use href="options.html" target="_blank" to open full settings in a new tab
+
+      // Forgot password
+      document.getElementById("forgotPasswordLink")?.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("authEmail")?.value?.trim();
+        if (!email) {
+          alert("Please enter your email address first, then click \"Forgot password?\".");
+          return;
+        }
+        try {
+          const res = await fetch("https://rsxvxezucgczesplmjiw.supabase.co/auth/v1/recover?redirect_to=https://termsdigest.com/auth/reset-password", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzeHZ4ZXp1Y2djemVzcGxtaml3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjcwNjYsImV4cCI6MjA4MzU0MzA2Nn0.1umoIH60gsytGtmfbgfxr1OZJs_L-62wT_BWVaMt5lw"
+            },
+            body: JSON.stringify({ email })
+          });
+          if (res.ok || res.status === 200) {
+            alert("Password reset email sent! Check your inbox.");
+          } else {
+            alert("Could not send reset email. Please try again.");
+          }
+        } catch {
+          alert("Something went wrong. Please try again.");
+        }
+      });
     </script>
   </body>
 </html>

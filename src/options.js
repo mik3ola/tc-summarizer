@@ -461,6 +461,31 @@ cancelAuthBtn?.addEventListener("click", () => {
   authFormEl.classList.add("hidden");
 });
 
+document.getElementById("forgotPasswordLink")?.addEventListener("click", async (e) => {
+  e.preventDefault();
+  const email = (authEmailEl?.value || "").trim();
+  if (!email) {
+    showModal("info", "Enter your email", "Please enter your email address in the field above, then click \"Forgot password?\".");
+    return;
+  }
+  try {
+    showModal("loading", "Sending reset email…", "Please wait.");
+    const { url, anon } = await requireBackendConfigOrThrow();
+    const res = await fetch(`${url}/auth/v1/recover?redirect_to=https://termsdigest.com/auth/reset-password`, {
+      method: "POST",
+      headers: { "content-type": "application/json", apikey: anon },
+      body: JSON.stringify({ email })
+    });
+    if (res.ok) {
+      showModal("success", "Reset email sent!", "Check your inbox for a link to reset your password. The link expires in 1 hour.");
+    } else {
+      showModal("error", "Could not send email", "Please try again or contact <a href=\"https://termsdigest.com/support\" target=\"_blank\">support</a>.");
+    }
+  } catch {
+    showModal("error", "Something went wrong", "Please try again.");
+  }
+});
+
 signInBtn?.addEventListener("click", async () => {
   try {
     await signInOrUp("signin");
