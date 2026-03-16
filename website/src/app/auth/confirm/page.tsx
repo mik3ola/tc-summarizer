@@ -115,7 +115,7 @@ function Success({ onOpenExtension }: { onOpenExtension: (() => void) | null }) 
       <h1 className="font-display text-3xl font-bold mb-3">
         Email <span className="gradient-text">confirmed</span>
       </h1>
-      <p className="text-gray-400 mb-10">
+      <p className="text-gray-400 text-sm mb-10">
         Your TermsDigest account is ready. Sign in from the extension to start summarising.
       </p>
 
@@ -167,7 +167,7 @@ function AlreadyConfirmed({ onOpenExtension }: { onOpenExtension: (() => void) |
       </div>
 
       <h1 className="font-display text-2xl font-bold mb-3">Already confirmed</h1>
-      <p className="text-gray-400 mb-8">
+      <p className="text-gray-400 text-sm mb-8">
         Your email has already been verified. Go ahead and sign in.
       </p>
 
@@ -216,7 +216,7 @@ function ErrorState({ message }: { message: string }) {
       </div>
 
       <h1 className="font-display text-2xl font-bold mb-3">Confirmation failed</h1>
-      <p className="text-gray-400 mb-8">{message}</p>
+      <p className="text-gray-400 text-sm mb-8">{message}</p>
 
       <div className="glass-card rounded-2xl p-5 text-left mb-6">
         <p className="text-sm text-gray-400 leading-relaxed">
