@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
@@ -46,17 +47,23 @@ function SuccessContent() {
     }
   }, [status, sessionId]);
 
+  const Logo = () => (
+    <div className="flex items-center gap-3 mb-12 justify-center">
+      <Image src="/logo.png" alt="TermsDigest" width={36} height={36} />
+      <span className="font-display text-xl font-bold tracking-tight">TermsDigest</span>
+    </div>
+  );
+
   if (status === "loading") {
     return (
-      <main className="min-h-screen flex items-center justify-center px-6">
-        <div className="max-w-lg w-full text-center">
-          <div className="mb-8 relative">
-            <div className="w-24 h-24 mx-auto bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-              <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
-            </div>
+      <main className="min-h-screen flex flex-col items-center justify-center px-6 py-16">
+        <Logo />
+        <div className="max-w-md w-full text-center">
+          <div className="w-20 h-20 mx-auto mb-8 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-600/20 border border-blue-500/30 flex items-center justify-center">
+            <div className="w-8 h-8 border-2 border-white/20 border-t-blue-400 rounded-full animate-spin"></div>
           </div>
-          <h1 className="text-3xl font-bold mb-4">Processing...</h1>
-          <p className="text-gray-400">{message}</p>
+          <h1 className="font-display text-2xl font-bold mb-3">Processing…</h1>
+          <p className="text-gray-400 text-sm">{message}</p>
         </div>
       </main>
     );
@@ -64,18 +71,19 @@ function SuccessContent() {
 
   if (status === "error") {
     return (
-      <main className="min-h-screen flex items-center justify-center px-6">
-        <div className="max-w-lg w-full text-center">
-          <div className="mb-8 relative">
-            <div className="w-24 h-24 mx-auto bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center">
-              <span className="text-5xl">✗</span>
-            </div>
+      <main className="min-h-screen flex flex-col items-center justify-center px-6 py-16">
+        <Logo />
+        <div className="max-w-md w-full text-center">
+          <div className="w-20 h-20 mx-auto mb-8 rounded-full bg-gradient-to-br from-red-500/20 to-red-600/20 border border-red-500/30 flex items-center justify-center">
+            <svg className="w-9 h-9 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6M9 9l6 6" />
+            </svg>
           </div>
-          <h1 className="text-3xl font-bold mb-4">Payment Verification Failed</h1>
-          <p className="text-gray-400 mb-8">{message}</p>
-          <Link 
+          <h1 className="font-display text-2xl font-bold mb-3">Payment verification failed</h1>
+          <p className="text-gray-400 text-sm mb-8">{message}</p>
+          <Link
             href="/pricing"
-            className="px-6 py-3 rounded bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all font-semibold inline-block"
+            className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all font-semibold text-sm inline-block"
           >
             Try Again
           </Link>
@@ -85,27 +93,28 @@ function SuccessContent() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-6">
-      <div className="max-w-lg w-full text-center">
-        {/* Success animation */}
-        <div className="mb-8 relative">
-          <div className="w-24 h-24 mx-auto bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center pulse-glow">
-            <span className="text-5xl">✓</span>
+    <main className="min-h-screen flex flex-col items-center justify-center px-6 py-16">
+      <Logo />
+      <div className="max-w-md w-full text-center">
+        <div className="relative w-20 h-20 mx-auto mb-8">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+            <svg className="w-9 h-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
           </div>
-          <div className="absolute inset-0 w-24 h-24 mx-auto bg-green-500/20 rounded-full animate-ping"></div>
+          <div className="absolute inset-0 w-20 h-20 rounded-full bg-green-500/20 animate-ping"></div>
         </div>
 
-        <h1 className="text-4xl font-bold mb-4">
+        <h1 className="font-display text-3xl font-bold mb-3">
           Welcome to <span className="gradient-text">Pro</span>!
         </h1>
-        
-        <p className="text-gray-400 text-lg mb-8">
-          {message} You now have access to 50 summaries per month 
-          and all Pro features.
+
+        <p className="text-gray-400 text-sm mb-8">
+          {message} You now have access to 50 summaries per month and all Pro features.
         </p>
 
         <div className="glass-card rounded-2xl p-6 mb-8 text-left">
-          <h2 className="font-semibold mb-4 text-center">What&apos;s included:</h2>
+          <h2 className="font-display font-semibold text-sm mb-4 text-center">What&apos;s included:</h2>
           <ul className="space-y-3">
             <li className="flex items-center gap-3">
               <span className="text-green-500 text-lg">✓</span>
@@ -132,27 +141,26 @@ function SuccessContent() {
 
         <div className="glass-card rounded-xl p-4 mb-8 bg-blue-500/10 border-blue-500/30">
           <p className="text-blue-300 text-sm">
-            <strong>Next step:</strong> Go back to the extension and click &quot;Refresh status&quot; 
-            to activate your Pro subscription.
+            <strong>Next step:</strong> Go back to the extension and click &quot;Refresh status&quot; to activate your Pro subscription.
           </p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link 
+          <Link
             href="/"
-            className="px-6 py-3 rounded border border-gray-700 hover:border-gray-500 transition-colors font-medium"
+            className="px-6 py-3 rounded-xl border border-gray-700 hover:border-gray-500 transition-colors font-semibold text-sm"
           >
             Back to Home
           </Link>
-          <Link 
+          <Link
             href="/support"
-            className="px-6 py-3 rounded bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all font-semibold"
+            className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all font-semibold text-sm"
           >
             Get Help
           </Link>
         </div>
 
-        <p className="text-gray-500 text-sm mt-8">
+        <p className="text-gray-500 text-xs mt-8">
           A receipt has been sent to your email address.
         </p>
       </div>
@@ -163,14 +171,16 @@ function SuccessContent() {
 export default function SuccessPage() {
   return (
     <Suspense fallback={
-      <main className="min-h-screen flex items-center justify-center px-6">
-        <div className="max-w-lg w-full text-center">
-          <div className="mb-8 relative">
-            <div className="w-24 h-24 mx-auto bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-              <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
-            </div>
+      <main className="min-h-screen flex flex-col items-center justify-center px-6 py-16">
+        <div className="flex items-center gap-3 mb-12">
+          <Image src="/logo.png" alt="TermsDigest" width={36} height={36} />
+          <span className="font-display text-xl font-bold tracking-tight">TermsDigest</span>
+        </div>
+        <div className="max-w-md w-full text-center">
+          <div className="w-20 h-20 mx-auto mb-8 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-600/20 border border-blue-500/30 flex items-center justify-center">
+            <div className="w-8 h-8 border-2 border-white/20 border-t-blue-400 rounded-full animate-spin"></div>
           </div>
-          <h1 className="text-3xl font-bold mb-4">Loading...</h1>
+          <h1 className="font-display text-2xl font-bold mb-3">Loading…</h1>
         </div>
       </main>
     }>
