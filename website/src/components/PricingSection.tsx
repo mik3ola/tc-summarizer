@@ -9,7 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Star } from "lucide-react";
+import { CheckCircle2, Star, X } from "lucide-react";
 import Link from "next/link";
 import { motion, type Transition } from "framer-motion";
 
@@ -19,6 +19,7 @@ const frequencies: FREQUENCY[] = ["monthly", "yearly"];
 interface Feature {
   text: string;
   tooltip?: string;
+  included?: boolean; // false = show red X (feature not in plan)
 }
 
 interface Plan {
@@ -46,7 +47,7 @@ const plans: Plan[] = [
       { text: "5 summaries per month" },
       { text: "All document types", tooltip: "Terms, Privacy Policy, EULA, Refund policies and more" },
       { text: "Summary caching" },
-      { text: "Unlimited with own API key", tooltip: "Bring your own OpenAI key for unlimited usage at cost price" },
+      { text: "Unlimited with own API key", tooltip: "Bring your own OpenAI key for unlimited usage at cost price", included: false },
     ],
     btn: { text: "Get Started Free", href: "https://chrome.google.com/webstore/detail/termsdigest", external: true },
   },
@@ -228,13 +229,18 @@ function PricingCard({
       >
         {plan.features.map((feature, index) => (
           <div key={index} className="flex items-start gap-2.5">
-            <CheckCircle2 className="text-foreground mt-0.5 h-4 w-4 flex-shrink-0" />
+            {feature.included === false ? (
+              <X className="text-red-500 mt-0.5 h-4 w-4 flex-shrink-0" />
+            ) : (
+              <CheckCircle2 className="text-foreground mt-0.5 h-4 w-4 flex-shrink-0" />
+            )}
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
                 <p
                   className={cn(
                     "text-left",
-                    feature.tooltip && "cursor-pointer border-b border-dashed border-muted-foreground/40"
+                    feature.tooltip && "cursor-pointer border-b border-dashed border-muted-foreground/40",
+                    feature.included === false && "text-muted-foreground/70"
                   )}
                 >
                   {feature.text}
