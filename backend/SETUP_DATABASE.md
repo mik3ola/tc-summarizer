@@ -121,8 +121,8 @@ This automatically creates a profile and subscription row when a new user signs 
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (user_id, email)
-  values (new.id, new.email);
+  insert into public.profiles (user_id, email, cycle_anchor_date)
+  values (new.id, new.email, new.created_at::date);
   
   insert into public.subscriptions (user_id, status, plan)
   values (new.id, 'free', 'free');
