@@ -20,12 +20,12 @@
 
 ---
 
-## Step 3: Create the Price (£4.99/year)
+## Step 3: Create the Price (£5.49/year)
 
 1. On the product page, under **Pricing**, click **Add a price**
 2. Fill in:
    - **Pricing model**: Standard pricing
-   - **Price**: `4.99`
+   - **Price**: `5.49`
    - **Currency**: `GBP`
    - **Billing period**: `Yearly`
 3. Click **Add price**
@@ -121,7 +121,7 @@ We need to deploy two Edge Functions to Supabase:
 
 - [ ] Created Stripe account
 - [ ] Created "TermsDigest Pro" product
-- [ ] Created £4.99/year price and noted the Price ID
+- [ ] Created £5.49/year price and noted the Price ID
 - [ ] Copied Stripe Secret Key
 - [ ] Created webhook endpoint
 - [ ] Copied webhook Signing Secret

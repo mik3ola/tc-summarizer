@@ -404,7 +404,8 @@ export const FlickeringFooter = () => {
 
         {/* Copyright */}
         <div className={cn("mt-8 pt-6 border-t text-xs font-light", isDark ? "border-gray-800 text-gray-500" : "border-gray-200 text-gray-400")}>
-          © {new Date().getFullYear()} TermsDigest. All rights reserved.
+          <p>© {new Date().getFullYear()} TermsDigest. All rights reserved.</p>
+          <p className="mt-1">A product of Screenx Ltd - Registered in England & Wales, Company No. 13283827.</p>
         </div>
       </div>
 
