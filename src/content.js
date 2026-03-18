@@ -514,15 +514,15 @@ function createUi() {
       border-radius: 12px;
       box-shadow: 0 18px 60px rgba(0,0,0,0.35);
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-      font-size: 12.5px;
-      line-height: 1.4;
+      font-size: 13px;
+      line-height: 1.6;
       padding: 0;
     }
     .popover::-webkit-scrollbar { width: 6px; }
     .popover::-webkit-scrollbar-track { background: transparent; }
     .popover::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.35); border-radius: 3px; }
     .popover::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.5); }
-    .header { display: flex; align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: 0; background: rgba(7, 11, 22, 0.9); backdrop-filter: blur(12px); padding: 12px 12px 8px; margin: 0; z-index: 1; border-radius: 12px 12px 0 0; }
+    .header { display: flex; align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: 0; background: rgba(7, 11, 22, 0.9); backdrop-filter: blur(12px); padding: 14px 14px 10px; margin: 0; z-index: 1; border-radius: 12px 12px 0 0; }
     .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .title {
       font-size: 12px;
@@ -561,19 +561,19 @@ function createUi() {
       border-color: rgba(239,68,68,0.35);
     }
     .muted { color: rgba(226,232,240,0.72); }
-    .section { margin-top: 10px; padding: 0 12px; }
+    .section { margin-top: 20px; padding: 0 14px; }
     .popover > .section:first-of-type { margin-top: 0; }
-    .h { font-weight: 700; color: rgba(226,232,240,0.95); margin-bottom: 4px; }
+    .h { font-weight: 700; color: rgba(226,232,240,0.95); margin-bottom: 8px; }
     ul { margin: 0; padding-left: 18px; }
-    li { margin: 2px 0; }
-    .divider { height: 1px; background: rgba(148,163,184,0.18); margin: 10px 12px 8px; }
-    .buttons { display:flex; gap: 8px; margin-top: 12px; padding: 0 12px 12px; }
+    li { margin: 6px 0; line-height: 1.6; }
+    .divider { height: 1px; background: rgba(148,163,184,0.18); margin: 18px 14px 14px; }
+    .buttons { display:flex; gap: 8px; margin-top: 14px; padding: 0 14px 14px; }
     .buttons button { flex: 1; }
     .footer-stats {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 4px 12px 12px;
+      padding: 6px 14px 14px;
       margin-top: 0;
       gap: 12px;
     }

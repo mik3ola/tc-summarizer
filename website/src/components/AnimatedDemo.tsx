@@ -117,7 +117,7 @@ export default function AnimatedDemo({ isDark }: { isDark: boolean }) {
       </div>
 
       {/* Simulated page body */}
-      <div ref={containerRef} className="relative p-6 sm:p-10 min-h-[340px] sm:min-h-[400px] overflow-hidden">
+      <div ref={containerRef} className="relative pt-3 px-6 pb-6 sm:pt-5 sm:px-10 sm:pb-10 min-h-[400px] sm:min-h-[440px] overflow-hidden">
 
         {/* Page text */}
         <div className="mb-6">
@@ -158,7 +158,7 @@ export default function AnimatedDemo({ isDark }: { isDark: boolean }) {
         {started && (
           <div
             className="absolute pointer-events-none z-30 transition-all duration-700 ease-in-out"
-            style={{ left: cursorPos.x, top: cursorPos.y, opacity: stage === 0 ? 0.5 : 1 }}
+            style={{ left: cursorPos.x, top: cursorPos.y - 24, opacity: stage === 0 ? 0.5 : 1 }}
           >
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <path
@@ -176,7 +176,7 @@ export default function AnimatedDemo({ isDark }: { isDark: boolean }) {
         {isLoading && (
           <div
             className="demo-summary-card absolute z-20 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-white bg-slate-800 border border-slate-700/60 shadow-xl"
-            style={{ left: loadingPos.x, top: loadingPos.y }}
+            style={{ left: loadingPos.x, top: loadingPos.y - 16 }}
           >
             <span className="flex gap-1">
               {[0, 1, 2].map((i) => (
@@ -193,39 +193,60 @@ export default function AnimatedDemo({ isDark }: { isDark: boolean }) {
 
         {/* Summary card — always dark, never responds to isDark */}
         <div
-          style={{ colorScheme: "dark", top: "3.5rem" }}
+          style={{ colorScheme: "dark", top: "1.5rem" }}
           className={`demo-summary-card absolute inset-x-4 sm:inset-x-auto sm:right-4 sm:left-auto sm:w-72 rounded-xl overflow-hidden shadow-2xl transition-all duration-500
             bg-slate-800 border border-slate-700/60
             ${showResult ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"}`}
         >
           {/* Card header */}
-          <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-2">
-            <span className="font-semibold text-xs text-white">Terms Summary</span>
-            <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full border border-green-500/30 whitespace-nowrap">
+          <div className="flex items-center justify-between px-4 pt-3.5 pb-2 gap-2">
+            <span className="font-semibold text-xs text-white leading-snug">Checkout Terms of Service</span>
+            <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full border border-green-500/30 whitespace-nowrap flex-shrink-0">
               high confidence
             </span>
           </div>
 
           {/* Body */}
-          <div className="px-4 pb-2">
-            <p className="text-xs text-gray-400 mb-3">
-              Standard e-commerce terms with auto-renewal subscription.
+          <div className="px-4 pb-2 space-y-2.5">
+
+            {/* TL;DR */}
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Standard e-commerce terms. Key risks are auto-renewal and limited refund rights.
             </p>
-            <div className="space-y-2 text-xs">
-              <div className="flex items-start gap-2">
-                <span>💰</span>
-                <span className="text-gray-300">Monthly billing, auto-renews at £9.99/month</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span>↩️</span>
-                <span className="text-gray-300">Cancel anytime, no refunds for partial months</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span>🚩</span>
-                <span className="text-red-400">Arbitration clause — cannot sue in court</span>
-              </div>
+
+            {/* Costs */}
+            <div>
+              <p className="text-xs font-semibold text-gray-300 mb-1">💰 Costs &amp; renewal</p>
+              <ul className="space-y-0.5 text-xs text-gray-400 pl-1">
+                <li className="flex gap-1.5"><span className="text-gray-600 flex-shrink-0">•</span>Auto-renews at £9.99/month unless cancelled</li>
+              </ul>
             </div>
-            <p className="text-xs text-gray-500 mt-3">
+
+            {/* Cancellation */}
+            <div>
+              <p className="text-xs font-semibold text-gray-300 mb-1">🔄 Cancellation &amp; refunds</p>
+              <ul className="space-y-0.5 text-xs text-gray-400 pl-1">
+                <li className="flex gap-1.5"><span className="text-gray-600 flex-shrink-0">•</span>No refunds for partial billing periods</li>
+              </ul>
+            </div>
+
+            {/* Privacy */}
+            <div>
+              <p className="text-xs font-semibold text-gray-300 mb-1">🔒 Privacy &amp; data</p>
+              <ul className="space-y-0.5 text-xs text-gray-400 pl-1">
+                <li className="flex gap-1.5"><span className="text-gray-600 flex-shrink-0">•</span>Data may be shared with advertising partners</li>
+              </ul>
+            </div>
+
+            {/* Red flags */}
+            <div>
+              <p className="text-xs font-semibold text-gray-300 mb-1">🚩 Red flags</p>
+              <ul className="space-y-0.5 text-xs pl-1">
+                <li className="flex gap-1.5 text-red-400"><span className="flex-shrink-0">•</span>Arbitration clause - waives right to sue in court</li>
+              </ul>
+            </div>
+
+            <p className="text-xs text-gray-500 pt-0.5">
               Note: automated summary.{" "}
               <span className="text-blue-400">View full content</span>.
             </p>
@@ -238,7 +259,7 @@ export default function AnimatedDemo({ isDark }: { isDark: boolean }) {
                 5<span className="text-gray-500 font-normal">/50 Used</span>
               </span>
               <span className="text-green-400 font-medium">
-                ~8<span className="text-gray-500 font-normal"> Mins saved</span>
+                ~12<span className="text-gray-500 font-normal"> Mins saved</span>
               </span>
             </div>
             <svg
