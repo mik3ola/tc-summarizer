@@ -200,6 +200,50 @@ serve(async (req: Request) => {
       }
     }
 
+    // If the user has remaining paid time, schedule the downgrade at period end
+    // so they keep their Pro quota (50/month) for every period they've already paid for.
+    // Only immediately drop to free if there is no remaining paid period.
+    if (currentPeriodEnd) {
+      if (stripe && sub.stripe_subscription_id) {
+        try {
+          await stripe.subscriptions.update(sub.stripe_subscription_id, {
+            cancel_at_period_end: true,
+          });
+        } catch (stripeErr) {
+          console.error("Stripe cancel_at_period_end error:", stripeErr);
+        }
+      }
+
+      const { error: updateErr } = await supabase
+        .from("subscriptions")
+        .update({
+          auto_renew: false,
+          downgrade_scheduled_for: currentPeriodEnd,
+          downgrade_reason: reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", userId);
+
+      if (updateErr) {
+        console.error("DB update error:", updateErr);
+        return json({ error: "Failed to downgrade subscription" }, 500);
+      }
+
+      await logChange(supabase, userId, "downgrade_now", reason, previousStatus, previousPlan, previousStatus, previousPlan);
+
+      return json({
+        success: true,
+        subscription: {
+          status: previousStatus,
+          plan: previousPlan,
+          current_period_end: currentPeriodEnd,
+          auto_renew: false,
+          downgrade_scheduled_for: currentPeriodEnd,
+        },
+      });
+    }
+
+    // No remaining paid period — downgrade immediately
     const { error: updateErr } = await supabase
       .from("subscriptions")
       .update({

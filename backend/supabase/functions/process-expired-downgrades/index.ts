@@ -94,6 +94,14 @@ serve(async (req: Request) => {
 
         if (updateErr) throw updateErr;
 
+        // Reset the billing cycle anchor to today so the user begins a fresh
+        // free 30-day period with 0 usage rather than inheriting the tail
+        // of their last Pro period (which could already be > the free limit of 5).
+        await supabase
+          .from("profiles")
+          .update({ cycle_anchor_date: new Date().toISOString().slice(0, 10) })
+          .eq("user_id", sub.user_id);
+
         await supabase.from("subscription_changes").insert({
           user_id: sub.user_id,
           action: "downgrade_now",
