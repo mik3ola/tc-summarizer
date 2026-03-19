@@ -1147,14 +1147,14 @@ async function renderSummary(summary, url, fromCache) {
   const footer = await getStatsFooter(url);
 
   UI.popover.innerHTML = `
+    <div class="header">
+      <div class="title" title="${escapeAttr(title)}">${escapeHtml(title)}</div>
+      <div class="header-right">
+        <span class="confidence-label">Confidence:</span>
+        <div class="badge ${badgeColorClass}" title="${escapeAttr(badgeTooltip)}">${escapeHtml(badgeText)}</div>
+      </div>
+    </div>
     <div class="summary-content-reveal">
-      <div class="reveal-line"><div class="header">
-        <div class="title" title="${escapeAttr(title)}">${escapeHtml(title)}</div>
-        <div class="header-right">
-          <span class="confidence-label">Confidence:</span>
-          <div class="badge ${badgeColorClass}" title="${escapeAttr(badgeTooltip)}">${escapeHtml(badgeText)}</div>
-        </div>
-      </div></div>
       <div class="reveal-line"><div class="section"><div class="h">Quick Summary</div></div></div>
       <div class="reveal-line"><div class="section"><div class="muted">${escapeHtml(summary?.tldr || "")}</div></div></div>
       ${renderListSection("💰 Costs & renewal", summary?.costs_and_renewal)}
