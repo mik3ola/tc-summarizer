@@ -561,6 +561,7 @@ function createUi() {
       border-color: rgba(239,68,68,0.35);
     }
     .muted { color: rgba(226,232,240,0.72); }
+    .red-flags-section li { color: #f87171; }
     .section { margin-top: 20px; padding: 0 14px; }
     .popover > .section:first-of-type { margin-top: 0; }
     .h { font-weight: 700; color: rgba(226,232,240,0.95); margin-bottom: 8px; }
@@ -853,7 +854,7 @@ async function renderLoading(url) {
       <div class="loading-title-viewport">
         <div class="loading-title-strip" data-loading-phase="thinking">
           <div class="loading-title-item">Thinking${LOADING_DOTS}</div>
-          <div class="loading-title-item">Summarizing${LOADING_DOTS}</div>
+          <div class="loading-title-item">Summarising${LOADING_DOTS}</div>
         </div>
       </div>
       <div class="header-right">
@@ -1160,7 +1161,7 @@ async function renderSummary(summary, url, fromCache) {
       ${renderListSection("↩️ Cancellation & refunds", summary?.cancellation_and_refunds)}
       ${renderListSection("⚖️ Liability & disputes", summary?.liability_and_disputes)}
       ${renderListSection("🔒 Privacy & data", summary?.privacy_and_data)}
-      ${preferences.showRedFlags ? renderListSection("🚩 Red flags", summary?.red_flags) : ""}
+      ${preferences.showRedFlags ? renderListSection("🚩 Red flags", summary?.red_flags, "red-flags-section") : ""}
       ${preferences.showQuotes ? renderQuotes(summary?.quotes) : ""}
       <div class="reveal-line"><div class="divider"></div></div>
       <div class="reveal-line"><div class="section muted" style="padding-bottom: 4px; margin-top: 0;">
@@ -1171,13 +1172,14 @@ async function renderSummary(summary, url, fromCache) {
   `;
 }
 
-function renderListSection(title, items) {
+function renderListSection(title, items, sectionClass) {
   const arr = Array.isArray(items) ? items.filter((x) => typeof x === "string" && x.trim()) : [];
   if (!arr.length) return "";
-  return `
+  const inner = `
     <div class="reveal-line"><div class="section"><div class="h">${escapeHtml(title)}</div></div></div>
     ${arr.slice(0, 6).map((x) => `<div class="reveal-line"><div class="section"><ul><li>${escapeHtml(x)}</li></ul></div></div>`).join("")}
   `;
+  return sectionClass ? `<div class="${sectionClass}">${inner}</div>` : inner;
 }
 
 function renderQuotes(quotes) {

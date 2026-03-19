@@ -1,7 +1,5 @@
 import Link from "next/link";
-import Navbar from "@/components/Navbar";
-import FlickeringFooter from "@/components/ui/flickering-footer";
-import ScrollAnimations from "@/components/ScrollAnimations";
+import PageLayout from "@/components/PageLayout";
 
 export const metadata = {
   title: "Support - TermsDigest",
@@ -83,11 +81,7 @@ const troubleshooting = [
 
 export default function SupportPage() {
   return (
-    <main className="min-h-screen">
-      <ScrollAnimations />
-      <Navbar />
-
-      <div className="pt-32 pb-20 px-6">
+    <PageLayout>
         <div className="max-w-4xl mx-auto">
 
           {/* Hero */}
@@ -205,7 +199,7 @@ export default function SupportPage() {
             <p className="text-sm text-muted-foreground mb-5">Still need help?</p>
             <a
               href="mailto:support@termsdigest.com"
-              className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-8 py-3 rounded-xl text-sm font-semibold transition-all text-white"
+              className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-8 py-3 rounded text-sm font-semibold transition-all text-white"
             >
               Contact Support
             </a>
@@ -216,9 +210,6 @@ export default function SupportPage() {
             </p>
           </div>
         </div>
-      </div>
-
-      <FlickeringFooter />
-    </main>
+    </PageLayout>
   );
 }
