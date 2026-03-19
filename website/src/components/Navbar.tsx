@@ -3,20 +3,29 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useTheme } from "@/components/ThemeProvider";
 
 export default function Navbar() {
   const { theme } = useTheme();
+  const pathname = usePathname();
   const isDark = theme === "dark";
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const handleLogoClick = (e: React.MouseEvent) => {
+    if (pathname === "/") {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
 
   return (
     <div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-6">
       <nav className={`w-full max-w-6xl rounded-2xl backdrop-blur-md border shadow-xl transition-colors ${isDark ? "bg-black/65 border-white/10" : "bg-white/85 border-gray-200/80"}`}>
         <div className="px-8 py-4 flex items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-3">
+          <Link href="/" onClick={handleLogoClick} className="flex items-center gap-3">
             <Image src="/logo.png" alt="TermsDigest" width={36} height={36} className="w-9 h-9" />
             <span className={`font-semibold text-lg tracking-tight ${isDark ? "text-white" : "text-gray-900"}`}>TermsDigest</span>
           </Link>
