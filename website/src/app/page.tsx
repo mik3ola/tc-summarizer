@@ -81,7 +81,7 @@ export default function Home() {
                 ),
                 step: "02",
                 title: "AI reads and analyses it",
-                desc: "Our AI instantly reads the full document and extracts what matters — costs, cancellation terms, data sharing, and red flags.",
+                desc: "Our AI instantly reads the full document and extracts what matters - costs, cancellation terms, data sharing, and red flags.",
               },
               {
                 icon: (
@@ -140,7 +140,7 @@ export default function Home() {
                   </svg>
                 ),
                 title: "Smart Detection",
-                desc: "Automatically detects Terms, Privacy, EULA, Refund policies — on any website. Recognised links are marked with a subtle animated underline sweep so you can spot them at a glance.",
+                desc: "Automatically detects Terms, Privacy, EULA, Refund policies - on any website. Recognised links are marked with a subtle animated underline sweep so you can spot them at a glance.",
                 color: isDark ? "bg-purple-500/15 text-purple-400" : "bg-purple-50 text-purple-600",
               },
               {

@@ -31,7 +31,7 @@ export default function Navbar() {
               href="https://chrome.google.com/webstore/detail/termsdigest"
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-5 py-2 rounded-lg text-sm font-medium transition-all text-white"
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-5 py-2 rounded text-sm font-medium transition-all text-white"
             >
               Install Free
             </a>
@@ -69,7 +69,7 @@ export default function Navbar() {
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setMenuOpen(false)}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-4 py-2.5 rounded-lg text-sm font-medium transition-all text-white text-center"
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-4 py-2.5 rounded text-sm font-medium transition-all text-white text-center"
             >
               Install Free
             </a>

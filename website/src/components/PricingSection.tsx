@@ -270,7 +270,7 @@ function PricingCard({
         )}
       >
         <Button
-          className="w-full"
+          className="w-full rounded"
           variant={plan.highlighted ? "default" : "outline"}
           asChild
         >

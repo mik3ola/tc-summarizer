@@ -158,7 +158,7 @@ export default function AnimatedDemo({ isDark }: { isDark: boolean }) {
         {started && (
           <div
             className="absolute pointer-events-none z-30 transition-all duration-700 ease-in-out"
-            style={{ left: cursorPos.x, top: cursorPos.y - 24, opacity: stage === 0 ? 0.5 : 1 }}
+            style={{ left: cursorPos.x, top: cursorPos.y, opacity: stage === 0 ? 0.5 : 1 }}
           >
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <path
@@ -176,7 +176,7 @@ export default function AnimatedDemo({ isDark }: { isDark: boolean }) {
         {isLoading && (
           <div
             className="demo-summary-card absolute z-20 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-white bg-slate-800 border border-slate-700/60 shadow-xl"
-            style={{ left: loadingPos.x, top: loadingPos.y - 16 }}
+            style={{ left: loadingPos.x, top: loadingPos.y + 8 }}
           >
             <span className="flex gap-1">
               {[0, 1, 2].map((i) => (
