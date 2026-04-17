@@ -43,7 +43,7 @@ A Chrome extension that summarizes legal documents (Terms of Service, Privacy Po
 2. Click **Sign in** or **Create account**
 3. Get 5 free summaries per month (no API key needed!)
 
-### Pro Tier (£4.99/year - Limited Time)
+### Pro Tier (£5.49/year - Limited Time)
 
 1. Click the extension icon → **Options**
 2. Click **Upgrade to Pro**

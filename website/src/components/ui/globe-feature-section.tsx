@@ -79,7 +79,7 @@ export default function GlobeFeatureSection() {
           )}
         >
           <a
-            href="https://chrome.google.com/webstore/detail/termsdigest"
+            href="https://chromewebstore.google.com/detail/elkhddigpcopldfijeaedkehfacdegeh"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-8 py-4 rounded text-lg font-medium transition-all hover:scale-105 text-white shadow-lg shadow-purple-500/25"
