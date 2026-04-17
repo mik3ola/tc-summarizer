@@ -34,19 +34,13 @@ Our AI extracts and highlights:
 ⚡ Smart Caching
 Summaries are cached for 30 days, so you won't waste time or API credits re-summarizing the same documents.
 
-🔒 Privacy First
-• Free tier: Use your own OpenAI API key (data stays local)
-• Pro tier: Text is processed but never stored permanently
-• No tracking of browsing history
-• All summaries cached locally in your browser
-
 💎 Subscription Tiers:
 
 Free Tier
 • 5 summaries per month (no API key needed)
 • Perfect for occasional use
 
-Pro Tier (£4.99/year - Limited Time Offer)
+Pro Tier (£5.49/year - Limited Time Offer)
 • 50 summaries per month
 • Unlimited summaries with your own API key
 • Priority support
@@ -72,8 +66,8 @@ Perfect for:
 🔐 Privacy & Security:
 
 We take your privacy seriously:
-• Free tier users: All processing happens locally or directly with OpenAI
-• Pro tier users: Text is sent to our backend for processing but never stored
+• All processing happens locally or directly with OpenAI
+• Text is sent to our backend for processing but never stored
 • No tracking of which websites you visit
 • All data encrypted in transit
 • Local cache stored securely in your browser

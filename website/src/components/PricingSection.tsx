@@ -49,7 +49,7 @@ const plans: Plan[] = [
       { text: "Summary caching" },
       { text: "Unlimited with own API key", tooltip: "Bring your own OpenAI key for unlimited usage at cost price", included: false },
     ],
-    btn: { text: "Get Started Free", href: "https://chrome.google.com/webstore/detail/termsdigest", external: true },
+    btn: { text: "Get Started Free", href: "https://chromewebstore.google.com/detail/elkhddigpcopldfijeaedkehfacdegeh", external: true },
   },
   {
     name: "Pro",
@@ -62,7 +62,7 @@ const plans: Plan[] = [
       { text: "Priority support" },
       { text: "Unlimited with own API key", tooltip: "Bring your own OpenAI key for unlimited usage at cost price" },
     ],
-    btn: { text: "Upgrade to Pro", href: "https://chrome.google.com/webstore/detail/termsdigest", external: true },
+    btn: { text: "Upgrade to Pro", href: "https://chromewebstore.google.com/detail/elkhddigpcopldfijeaedkehfacdegeh", external: true },
     highlighted: true,
   },
   {

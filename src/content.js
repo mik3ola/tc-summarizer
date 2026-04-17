@@ -105,7 +105,12 @@ function isLikelyLegalLink(el) {
   if (isInsideCode) return false;
   
   // Skip if element itself looks like code
-  const elClass = (el.className || "").toLowerCase();
+  // Note: on SVG elements, el.className is an SVGAnimatedString object (not a string),
+  // so we normalize to a plain string before calling toLowerCase().
+  const rawClass = typeof el.className === "string"
+    ? el.className
+    : (el.className?.baseVal || "");
+  const elClass = rawClass.toLowerCase();
   if (elClass.includes("code") || elClass.includes("syntax") || elClass.includes("hljs") || elClass.includes("prism")) {
     return false;
   }
@@ -425,17 +430,10 @@ function extractTextFromHtml(html, baseUrl) {
     }
     
     const doc = new DOMParser().parseFromString(html, "text/html");
-    // Try to set base URL, but ignore CSP errors (some sites like gov.uk block this)
-    if (baseUrl) {
-      try {
-        const base = doc.createElement("base");
-        base.href = baseUrl;
-        doc.head.appendChild(base);
-      } catch (e) {
-        // CSP may block base-uri, but that's okay - we just won't have relative URL resolution
-        console.warn("[TermsDigest] Could not set base URL (CSP restriction):", e.message);
-      }
-    }
+    // Note: we intentionally skip injecting a <base> element here.
+    // It would be nice for relative URL resolution, but many sites (GitHub, Stripe,
+    // gov.uk, etc.) enforce a strict base-uri CSP that spams the extension error
+    // console without us gaining anything — we only read text content, not URLs.
 
     // Remove only script/style (keep other elements - some sites put content in unusual places)
     doc.querySelectorAll("script, style, noscript, svg, canvas").forEach((el) => el.remove());
@@ -488,9 +486,19 @@ function extractTextFromHtml(html, baseUrl) {
 }
 
 function createUi() {
+  // Skip non-HTML documents (e.g. standalone SVG, XML, or image viewers)
+  // where injecting a UI element would fail or be meaningless.
+  // Return a harmless stub so downstream event listeners can still attach
+  // without crashing — we just gate any real work with `UI.host` checks.
+  if (!document.body || !(document.documentElement instanceof HTMLElement)) {
+    const noop = () => {};
+    const stubTarget = { addEventListener: noop, removeEventListener: noop };
+    return { host: null, shadow: null, popover: stubTarget };
+  }
+
   const host = document.createElement("div");
   host.id = "termsdigest-root";
-  host.style.all = "initial";
+  try { host.style.all = "initial"; } catch (_) { /* some doc types disallow */ }
   host.style.position = "fixed";
   host.style.zIndex = "2147483647";
   host.style.left = "0px";
@@ -595,8 +603,31 @@ function createUi() {
       color: rgba(226,232,240,0.6);
       line-height: 1;
     }
-    .footer-settings {
+    .footer-brand-settings {
       margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .footer-brand {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      opacity: 0.45;
+    }
+    .footer-brand img {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+    }
+    .footer-brand span {
+      font-size: 10px;
+      font-weight: 600;
+      color: rgba(226,232,240,0.9);
+      letter-spacing: 0.02em;
+    }
+    .footer-settings {
       display: flex;
       align-items: center;
       justify-content: center;
@@ -613,8 +644,8 @@ function createUi() {
       background: rgba(148,163,184,0.1);
     }
     .footer-settings svg {
-      width: 16px;
-      height: 16px;
+      width: 15px;
+      height: 15px;
     }
     button {
       all: unset;
@@ -627,6 +658,7 @@ function createUi() {
       color: rgba(226,232,240,0.95);
       background: rgba(30,41,59,0.9);
       transition: all 0.15s;
+      text-align: center;
     }
     button:hover { 
       background: rgba(51,65,85,0.95); 
@@ -846,6 +878,8 @@ function setPopoverPositionNearAnchor(anchor) {
 }
 
 const LOADING_DOTS = '<span class="loading-dots"><span>.</span><span>.</span><span>.</span><span>.</span></span>';
+const EXTENSION_LOGO_URL = (() => { try { return chrome.runtime.getURL("icons/icon48.png"); } catch (e) { return ""; } })();
+const GEAR_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>`;
 
 async function renderLoading(url) {
   const footer = await getStatsFooter();
@@ -902,13 +936,15 @@ async function getStatsFooter(currentSummaryUrl = null) {
   if (!isExtensionContextValid()) {
     return `
       <div class="footer-stats">
-        <a class="footer-settings" data-action="open-options" title="Open extension options">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M13.6569 8.65685C13.6569 8.65685 12.2426 10.0711 10.8284 11.4853C10.4142 11.8995 10.4142 12.5355 10.8284 12.9497C11.2426 13.364 11.8787 13.364 12.2929 12.9497C13.7071 11.5355 15.1213 10.1213 15.1213 10.1213C15.5355 9.70711 15.5355 9.07107 15.1213 8.65685C15.1213 8.65685 13.7071 7.24264 12.2929 5.82843C11.8787 5.41421 11.2426 5.41421 10.8284 5.82843C10.4142 6.24264 10.4142 6.87868 10.8284 7.29289C12.2426 8.70711 13.6569 10.1213 13.6569 10.1213L13.6569 8.65685Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M2.34315 7.34315C2.34315 7.34315 3.75736 5.92893 5.17157 4.51472C5.58579 4.1005 5.58579 3.46447 5.17157 3.05025C4.75736 2.63604 4.12132 2.63604 3.70711 3.05025C2.29289 4.46447 0.87868 5.87868 0.87868 5.87868C0.464466 6.29289 0.464466 6.92893 0.87868 7.34315C0.87868 7.34315 2.29289 8.75736 3.70711 10.1716C4.12132 10.5858 4.75736 10.5858 5.17157 10.1716C5.58579 9.75736 5.58579 9.12132 5.17157 8.70711C3.75736 7.29289 2.34315 5.87868 2.34315 5.87868L2.34315 7.34315Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </a>
+        <div class="footer-brand-settings">
+          <div class="footer-brand">
+            ${EXTENSION_LOGO_URL ? `<img src="${EXTENSION_LOGO_URL}" alt="" />` : ""}
+            <span>TermsDigest</span>
+          </div>
+          <a class="footer-settings" data-action="open-options" title="Open extension options">
+            ${GEAR_ICON}
+          </a>
+        </div>
       </div>
     `;
   }
@@ -971,13 +1007,15 @@ async function getStatsFooter(currentSummaryUrl = null) {
           <span class="footer-stat-value">~${minutesSaved}</span>
           <span class="footer-stat-label">Mins saved</span>
         </div>
-        <a class="footer-settings" data-action="open-options" title="Open extension options">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M13.6569 8.65685C13.6569 8.65685 12.2426 10.0711 10.8284 11.4853C10.4142 11.8995 10.4142 12.5355 10.8284 12.9497C11.2426 13.364 11.8787 13.364 12.2929 12.9497C13.7071 11.5355 15.1213 10.1213 15.1213 10.1213C15.5355 9.70711 15.5355 9.07107 15.1213 8.65685C15.1213 8.65685 13.7071 7.24264 12.2929 5.82843C11.8787 5.41421 11.2426 5.41421 10.8284 5.82843C10.4142 6.24264 10.4142 6.87868 10.8284 7.29289C12.2426 8.70711 13.6569 10.1213 13.6569 10.1213L13.6569 8.65685Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M2.34315 7.34315C2.34315 7.34315 3.75736 5.92893 5.17157 4.51472C5.58579 4.1005 5.58579 3.46447 5.17157 3.05025C4.75736 2.63604 4.12132 2.63604 3.70711 3.05025C2.29289 4.46447 0.87868 5.87868 0.87868 5.87868C0.464466 6.29289 0.464466 6.92893 0.87868 7.34315C0.87868 7.34315 2.29289 8.75736 3.70711 10.1716C4.12132 10.5858 4.75736 10.5858 5.17157 10.1716C5.58579 9.75736 5.58579 9.12132 5.17157 8.70711C3.75736 7.29289 2.34315 5.87868 2.34315 5.87868L2.34315 7.34315Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </a>
+        <div class="footer-brand-settings">
+          <div class="footer-brand">
+            ${EXTENSION_LOGO_URL ? `<img src="${EXTENSION_LOGO_URL}" alt="" />` : ""}
+            <span>TermsDigest</span>
+          </div>
+          <a class="footer-settings" data-action="open-options" title="Open extension options">
+            ${GEAR_ICON}
+          </a>
+        </div>
       </div>
     `;
   } catch (e) {
@@ -986,13 +1024,15 @@ async function getStatsFooter(currentSummaryUrl = null) {
     }
     return `
       <div class="footer-stats">
-        <a class="footer-settings" data-action="open-options" title="Open extension options">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M13.6569 8.65685C13.6569 8.65685 12.2426 10.0711 10.8284 11.4853C10.4142 11.8995 10.4142 12.5355 10.8284 12.9497C11.2426 13.364 11.8787 13.364 12.2929 12.9497C13.7071 11.5355 15.1213 10.1213 15.1213 10.1213C15.5355 9.70711 15.5355 9.07107 15.1213 8.65685C15.1213 8.65685 13.7071 7.24264 12.2929 5.82843C11.8787 5.41421 11.2426 5.41421 10.8284 5.82843C10.4142 6.24264 10.4142 6.87868 10.8284 7.29289C12.2426 8.70711 13.6569 10.1213 13.6569 10.1213L13.6569 8.65685Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M2.34315 7.34315C2.34315 7.34315 3.75736 5.92893 5.17157 4.51472C5.58579 4.1005 5.58579 3.46447 5.17157 3.05025C4.75736 2.63604 4.12132 2.63604 3.70711 3.05025C2.29289 4.46447 0.87868 5.87868 0.87868 5.87868C0.464466 6.29289 0.464466 6.92893 0.87868 7.34315C0.87868 7.34315 2.29289 8.75736 3.70711 10.1716C4.12132 10.5858 4.75736 10.5858 5.17157 10.1716C5.58579 9.75736 5.58579 9.12132 5.17157 8.70711C3.75736 7.29289 2.34315 5.87868 2.34315 5.87868L2.34315 7.34315Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </a>
+        <div class="footer-brand-settings">
+          <div class="footer-brand">
+            ${EXTENSION_LOGO_URL ? `<img src="${EXTENSION_LOGO_URL}" alt="" />` : ""}
+            <span>TermsDigest</span>
+          </div>
+          <a class="footer-settings" data-action="open-options" title="Open extension options">
+            ${GEAR_ICON}
+          </a>
+        </div>
       </div>
     `;
   }
@@ -1423,6 +1463,8 @@ function closePopover() {
 document.addEventListener(
   "mouseover",
   (e) => {
+    // Skip on non-HTML documents (SVG/XML viewers) where we have no UI
+    if (!UI.host) return;
     // Check if auto-hover is enabled
     if (!preferences.autoHover) return;
     
@@ -1447,6 +1489,7 @@ document.addEventListener(
 document.addEventListener(
   "mouseout",
   (e) => {
+    if (!UI.host) return;
     const target = e.target;
     if (!target || !target.closest) return;
     const el = target.closest('a, button, [role="link"], [role="button"]');
@@ -1738,6 +1781,8 @@ function setupMutationObserverForHighlight() {
 
 // Initialize highlighting when DOM is ready
 function initLinkHighlighting() {
+  // Skip on non-HTML documents (SVG/XML viewers) — no document.head, no document.body
+  if (!UI.host || !document.head || !document.body) return;
   // Don't highlight if auto-hover is disabled (user preference)
   if (!preferences.autoHover) return;
   
@@ -1813,6 +1858,8 @@ async function refreshFooterIfVisible() {
 }
 
 loadPreferences().then(() => {
+  // Skip link scanning on non-HTML documents (SVG/XML viewers, etc.)
+  if (!UI.host) return;
   if (preferences.autoHover) {
     initLinkHighlighting();
   }

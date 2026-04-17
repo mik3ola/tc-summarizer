@@ -37,7 +37,7 @@ export default function Navbar() {
             <Link href="/support" className={`text-sm font-medium transition-colors ${isDark ? "text-white/70 hover:text-white" : "text-gray-600 hover:text-gray-900"}`}>Support</Link>
             <ThemeToggle />
             <a
-              href="https://chrome.google.com/webstore/detail/termsdigest"
+              href="https://chromewebstore.google.com/detail/elkhddigpcopldfijeaedkehfacdegeh"
               target="_blank"
               rel="noopener noreferrer"
               className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-5 py-2 rounded text-sm font-medium transition-all text-white"
@@ -74,7 +74,7 @@ export default function Navbar() {
             <Link href="/#pricing" onClick={() => setMenuOpen(false)} className={`text-sm font-medium transition-colors ${isDark ? "text-white/80 hover:text-white" : "text-gray-700 hover:text-gray-900"}`}>Pricing</Link>
             <Link href="/support" onClick={() => setMenuOpen(false)} className={`text-sm font-medium transition-colors ${isDark ? "text-white/80 hover:text-white" : "text-gray-700 hover:text-gray-900"}`}>Support</Link>
             <a
-              href="https://chrome.google.com/webstore/detail/termsdigest"
+              href="https://chromewebstore.google.com/detail/elkhddigpcopldfijeaedkehfacdegeh"
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setMenuOpen(false)}
