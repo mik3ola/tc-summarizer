@@ -33,72 +33,78 @@ function json(data: unknown, status = 200) {
 
 function buildWelcomeEmailHtml(siteUrl: string): string {
   const year = new Date().getFullYear();
-  return `<!doctype html>
+  return `<!DOCTYPE html>
 <html lang="en">
-  <body style="margin:0;padding:0;background:#070b16;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#e5e7eb;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#070b16;padding:40px 16px;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="max-width:560px;background:#0b1220;border:1px solid rgba(148,163,184,0.15);border-radius:16px;overflow:hidden;">
-            <tr>
-              <td style="padding:32px 32px 8px 32px;">
-                <div style="font-size:20px;font-weight:600;color:#ffffff;letter-spacing:-0.01em;">TermsDigest</div>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:8px 32px 0 32px;">
-                <h1 style="margin:0 0 12px 0;font-size:24px;line-height:1.3;font-weight:600;color:#ffffff;letter-spacing:-0.02em;">
-                  Welcome to TermsDigest
-                </h1>
-                <p style="margin:0 0 20px 0;font-size:15px;line-height:1.6;color:#cbd5e1;">
-                  Thanks for confirming your email. You're all set to start understanding the fine print behind every Terms & Conditions, Privacy Policy, and Refund Policy you come across.
-                </p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:0 32px;">
-                <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:20px;">
-                  <div style="font-size:14px;font-weight:600;color:#ffffff;margin-bottom:10px;">Getting started</div>
-                  <ol style="margin:0;padding-left:20px;font-size:14px;line-height:1.7;color:#cbd5e1;">
-                    <li>Open the TermsDigest icon in your Chrome toolbar to sign in</li>
-                    <li>Browse any website normally</li>
-                    <li>Hover over a Terms, Privacy, or Refund link to see an instant summary</li>
-                  </ol>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:24px 32px 8px 32px;">
-                <p style="margin:0 0 12px 0;font-size:14px;line-height:1.6;color:#cbd5e1;">
-                  Free accounts include 5 AI summaries per month. Upgrade to Pro any time for 50 summaries plus the option to bring your own OpenAI key for unlimited use.
-                </p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:16px 32px 32px 32px;">
-                <a href="${siteUrl}" style="display:inline-block;background:linear-gradient(90deg,#3b82f6,#8b5cf6);color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:600;">
-                  Visit TermsDigest
-                </a>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:0 32px 32px 32px;">
-                <div style="border-top:1px solid rgba(148,163,184,0.15);padding-top:20px;font-size:12px;line-height:1.6;color:#94a3b8;">
-                  Need help? Reply to nothing — this inbox isn't monitored. Instead, email
-                  <a href="mailto:support@termsdigest.com" style="color:#60a5fa;text-decoration:none;">support@termsdigest.com</a>
-                  or visit our
-                  <a href="${siteUrl}/support" style="color:#60a5fa;text-decoration:none;">support page</a>.
-                </div>
-                <div style="padding-top:16px;font-size:11px;color:#64748b;">
-                  © ${year} Screenx Ltd. All rights reserved.
-                </div>
-              </td>
-            </tr>
+<head><meta charset="UTF-8" /><title>Welcome to TermsDigest</title></head>
+<body style="margin:0;padding:0;background-color:#0f172a;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f172a;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
+
+        <!-- Logo -->
+        <tr><td align="center" style="padding-bottom:32px;">
+          <table cellpadding="0" cellspacing="0" align="center"><tr>
+            <td style="vertical-align:middle;padding-right:10px;">
+              <img src="${siteUrl}/logo.png" alt="TermsDigest" width="36" height="36" style="display:block;border-radius:8px;" />
+            </td>
+            <td style="vertical-align:middle;">
+              <span style="font-size:20px;font-weight:700;color:#e2e8f0;">TermsDigest</span>
+            </td>
+          </tr></table>
+        </td></tr>
+
+        <!-- Card -->
+        <tr><td style="background-color:#1e293b;border:1px solid rgba(148,163,184,0.15);border-radius:16px;padding:40px 36px;">
+          <table width="100%" cellpadding="0" cellspacing="0">
+
+            <tr><td align="center" style="padding-bottom:24px;">
+              <span style="font-size:40px;">👋</span>
+            </td></tr>
+
+            <tr><td align="center" style="padding-bottom:12px;">
+              <h1 style="margin:0;font-size:24px;font-weight:700;color:#f1f5f9;">Welcome to TermsDigest</h1>
+            </td></tr>
+
+            <tr><td align="center" style="padding-bottom:28px;">
+              <p style="margin:0;font-size:15px;color:#94a3b8;line-height:1.6;">
+                Your email is confirmed and your account is ready. Start understanding the fine print behind every Terms &amp; Conditions, Privacy Policy, and Refund Policy you come across.
+              </p>
+            </td></tr>
+
+            <tr><td align="center" style="padding-bottom:24px;">
+              <a href="${siteUrl}" style="display:inline-block;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 36px;border-radius:8px;">
+                Visit TermsDigest →
+              </a>
+            </td></tr>
+
+            <tr><td style="padding-bottom:24px;"><div style="height:1px;background:rgba(148,163,184,0.15);"></div></td></tr>
+
+            <tr><td style="padding-bottom:8px;">
+              <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#e2e8f0;">Getting started</p>
+              <p style="margin:0 0 6px;font-size:13px;color:#94a3b8;line-height:1.7;">
+                1. Click the TermsDigest icon in your Chrome toolbar to sign in.
+              </p>
+              <p style="margin:0 0 6px;font-size:13px;color:#94a3b8;line-height:1.7;">
+                2. Browse any website normally.
+              </p>
+              <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.7;">
+                3. Hover over a Terms, Privacy, or Refund link for an instant summary.
+              </p>
+            </td></tr>
+
           </table>
-        </td>
-      </tr>
-    </table>
-  </body>
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td align="center" style="padding-top:28px;">
+          <p style="margin:0 0 6px;font-size:12px;color:#475569;">Free accounts include 5 summaries per month. Upgrade to Pro any time for 50 summaries — or bring your own OpenAI key for unlimited use.</p>
+          <p style="margin:0;font-size:11px;color:#334155;">© ${year} TermsDigest · <a href="${siteUrl}/support" style="color:#3b82f6;text-decoration:none;">Support</a></p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
 </html>`;
 }
 
