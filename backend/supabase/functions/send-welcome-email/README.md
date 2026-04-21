@@ -121,10 +121,10 @@ supabase functions deploy send-welcome-email --no-verify-jwt
 
 ```bash
 curl -X POST \
-  -H "Authorization: Bearer <YOUR-WELCOME-EMAIL-SECRET>" \
+  -H "Authorization: Bearer xxxxxxxxxxxxxx" \
   -H "Content-Type: application/json" \
-  -d '{"email":"your-own-test-email@gmail.com"}' \
-  https://<YOUR-PROJECT-REF>.supabase.co/functions/v1/send-welcome-email
+  -d '{"email":"testEmail@domain.com"}' \
+  https://rsxvxezucgczesplmjiw.supabase.co/functions/v1/send-welcome-email
 ```
 
 Expected response: `{"ok":true}` and the test email arrives in your inbox.

@@ -34,7 +34,7 @@ export default function Home() {
         badgeText="AI-powered summaries"
         badgeLabel="New"
         ctaButtons={[
-          { text: "Add to Chrome - Free", href: "https://chromewebstore.google.com/detail/elkhddigpcopldfijeaedkehfacdegeh", primary: true, external: true },
+          { text: "Add to Browser - Free", href: "https://chromewebstore.google.com/detail/elkhddigpcopldfijeaedkehfacdegeh", primary: true, external: true },
           { text: "See it in action", href: "#demo" }
         ]}
         microDetails={["5 free summaries/month", "No credit card", "Privacy first"]}
