@@ -1,6 +1,6 @@
 {
   "name": "tc-summarizer",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "scripts": {
     "test": "docker build -f Dockerfile.test -t termsdigest-test . && docker run --rm termsdigest-test",

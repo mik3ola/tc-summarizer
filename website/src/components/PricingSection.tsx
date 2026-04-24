@@ -54,7 +54,9 @@ const plans: Plan[] = [
   {
     name: "Pro",
     info: "For power users who need more",
-    price: { monthly: 0.60, yearly: 5.49 },
+    // Pro is billed annually. The monthly figure is the effective per-month
+    // cost of the yearly plan (yearly / 12), shown for comparison only.
+    price: { monthly: +(5.49 / 12).toFixed(2), yearly: 5.49 },
     features: [
       { text: "50 summaries per month" },
       { text: "All document types", tooltip: "Terms, Privacy Policy, EULA, Refund policies and more" },
@@ -81,7 +83,7 @@ const plans: Plan[] = [
 ];
 
 export default function PricingSection() {
-  const [frequency, setFrequency] = React.useState<FREQUENCY>("yearly");
+  const [frequency, setFrequency] = React.useState<FREQUENCY>("monthly");
 
   return (
     <TooltipProvider>
@@ -160,15 +162,7 @@ function PricingCard({
   const price = plan.price[frequency];
   const isNumeric = typeof price === "number";
   const isFree = isNumeric && price === 0;
-  const monthlyNum = typeof plan.price.monthly === "number" ? plan.price.monthly : 0;
-  const yearlyNum = typeof plan.price.yearly === "number" ? plan.price.yearly : 0;
-  const showYearlySavings =
-    frequency === "yearly" &&
-    monthlyNum > 0 &&
-    yearlyNum < monthlyNum * 12;
-  const yearlySavingsPct = showYearlySavings
-    ? Math.round(((monthlyNum * 12 - yearlyNum) / (monthlyNum * 12)) * 100)
-    : 0;
+  const showDiscountBadge = plan.highlighted && !isFree;
 
   return (
     <div
@@ -194,9 +188,9 @@ function PricingCard({
               Popular
             </p>
           )}
-          {showYearlySavings && (
+          {showDiscountBadge && (
             <p className="bg-blue-600 text-white flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium">
-              Save {yearlySavingsPct}%
+              30% off
             </p>
           )}
         </div>
