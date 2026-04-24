@@ -129,19 +129,55 @@ function isLikelyLegalLink(el) {
   const txt = normalizeText(el.textContent);
   const aria = normalizeText(el.getAttribute("aria-label"));
   const title = normalizeText(el.getAttribute("title"));
-  const hrefLower = normalizeText(href);
   const id = normalizeText(el.getAttribute("id") || "");
-  
-  let combined = `${txt} ${aria} ${title} ${hrefLower} ${id}`;
-  if (!combined.trim()) return false;
-  
+
+  // Visible-text signals (most reliable): link text, aria-label, title, id.
+  // URLs are NOT included here to avoid false positives from retail sites where
+  // navigation URLs contain words like "return" or "terms" as unrelated segments.
+  let visibleCombined = `${txt} ${aria} ${title} ${id}`;
+  if (!visibleCombined.trim() && !href) return false;
+
   // Skip if the text is too long (likely a code block or paragraph, not a link label)
   if (txt.length > 100) return false;
-  
+
   // Filter out "termsdigest" to avoid false positives on our own branding
-  combined = combined.replace(/termsdigest/gi, "");
-  
-  return KEYWORDS.some((k) => combined.includes(k));
+  visibleCombined = visibleCombined.replace(/termsdigest/gi, "");
+
+  if (KEYWORDS.some((k) => visibleCombined.includes(k))) return true;
+
+  // Fallback: match on URL ONLY if the keyword appears as a dedicated path segment
+  // near the end of the URL — e.g. "/terms", "/terms-of-service", "/privacy-policy".
+  // Rejects noisy URLs like "/womens/?return_policy=true" or "/search?q=terms".
+  return isLegalUrlPath(href);
+}
+
+// Strict URL matcher: keyword must be its own path segment (or segment-with-suffix)
+// at or near the end of the path. Query strings and fragments are ignored.
+function isLegalUrlPath(href) {
+  if (!href) return false;
+  let path = "";
+  try {
+    // Handle relative URLs by resolving against the current origin.
+    const url = new URL(href, window.location.origin);
+    path = url.pathname.toLowerCase();
+  } catch (_) {
+    // Not a resolvable URL (e.g. "javascript:void(0)"); skip URL matching.
+    return false;
+  }
+  if (!path || path === "/") return false;
+
+  // Strip trailing slash and split into segments.
+  const segments = path.replace(/\/+$/, "").split("/").filter(Boolean);
+  if (segments.length === 0) return false;
+
+  // Only inspect the last 2 segments — legitimate legal pages live near the
+  // end of the path (e.g. /help/legal/privacy-policy), not buried inside
+  // product/category structures (e.g. /terms/dresses/sale).
+  const tail = segments.slice(-2);
+
+  const segmentRegex = /^(terms|terms-of-(service|use|sale)|t-and-c|tandc|privacy|privacy-(policy|statement|notice)|cookie(s)?|cookie-policy|refund|refund-policy|return(s)?|return-policy|cancellation|cancellation-policy|legal|legal-notice|eula|end-user-license|licen[sc]e-agreement|data-protection|data-policy)$/;
+
+  return tail.some((seg) => segmentRegex.test(seg));
 }
 
 // Determine what TYPE of legal content a button/link is for

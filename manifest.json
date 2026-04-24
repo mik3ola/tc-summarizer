@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TermsDigest",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Understand Terms & Conditions instantly. Hover over legal links to get AI summaries highlighting costs, cancellation, and red flags.",
   "permissions": ["storage"],
   "host_permissions": ["<all_urls>"],

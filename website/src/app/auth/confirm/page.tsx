@@ -3,18 +3,19 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 
-// ─── Config ──────────────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://rsxvxezucgczesplmjiw.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzeHZ4ZXp1Y2djemVzcGxtaml3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjcwNjYsImV4cCI6MjA4MzU0MzA2Nn0.1umoIH60gsytGtmfbgfxr1OZJs_L-62wT_BWVaMt5lw";
 
-// Development unpacked extension ID — update to the Chrome Web Store ID once published.
-const EXTENSION_ID = "hhcahilgcmhkdlemlahmgchbjacohahm";
+// Drop the recorded clip at this path. ~15-25s, muted, ~1-2 MB H.264 MP4.
+const DEMO_VIDEO_SRC = "/demo-pin-extension.mp4";
+// Optional poster frame (first frame of the video) for instant render before the video loads.
+const DEMO_VIDEO_POSTER = "/demo-pin-extension.jpg";
 
 type Status = "verifying" | "success" | "error" | "already_confirmed";
 
 export default function ConfirmPage() {
-  const [status, setStatus] = useState<Status>("verifying");
+  const [status, setStatus] = useState<Status>("success");
   const [errorMessage, setErrorMessage] = useState("The confirmation link is invalid or has expired.");
 
   useEffect(() => {
@@ -22,7 +23,6 @@ export default function ConfirmPage() {
     const tokenHash = params.get("token_hash");
     const type = params.get("type") ?? "signup";
 
-    // If Supabase already verified and just redirected (no token in URL), show success
     if (!tokenHash) {
       const hash = window.location.hash;
       if (hash.includes("access_token")) {
@@ -61,31 +61,22 @@ export default function ConfirmPage() {
       });
   }, []);
 
-  const openExtension = () => {
-    if (EXTENSION_ID) {
-      window.open(`chrome-extension://${EXTENSION_ID}/src/options.html`, "_blank");
-    }
-  };
-
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6 py-16">
-      {/* Logo */}
       <div className="flex items-center gap-3 mb-12">
         <Image src="/logo.png" alt="TermsDigest" width={36} height={36} />
         <span className="font-display text-xl font-bold tracking-tight">TermsDigest</span>
       </div>
 
-      <div className="max-w-md w-full">
+      <div className="max-w-xl w-full">
         {status === "verifying" && <Verifying />}
-        {status === "success" && <Success onOpenExtension={EXTENSION_ID ? openExtension : null} />}
-        {status === "already_confirmed" && <AlreadyConfirmed onOpenExtension={EXTENSION_ID ? openExtension : null} />}
+        {status === "success" && <Success />}
+        {status === "already_confirmed" && <AlreadyConfirmed />}
         {status === "error" && <ErrorState message={errorMessage} />}
       </div>
     </main>
   );
 }
-
-// ─── States ──────────────────────────────────────────────────────────────────
 
 function Verifying() {
   return (
@@ -99,10 +90,9 @@ function Verifying() {
   );
 }
 
-function Success({ onOpenExtension }: { onOpenExtension: (() => void) | null }) {
+function Success() {
   return (
     <div className="text-center">
-      {/* Tick */}
       <div className="relative w-20 h-20 mx-auto mb-8">
         <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
           <svg className="w-9 h-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
@@ -116,48 +106,23 @@ function Success({ onOpenExtension }: { onOpenExtension: (() => void) | null }) 
         Email <span className="gradient-text">confirmed</span>
       </h1>
       <p className="text-gray-400 text-sm mb-10">
-        Your TermsDigest account is ready. Sign in from the extension to start summarising.
+        Your TermsDigest account is ready. Here&apos;s how to start using it.
       </p>
 
-      <div className="glass-card rounded-2xl p-6 mb-8 text-left">
-        <p className="text-sm font-semibold text-white/80 mb-4">Next step</p>
-        {onOpenExtension ? (
-          <>
-            <button
-              onClick={onOpenExtension}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all font-semibold text-white text-sm mb-4"
-            >
-              Open TermsDigest → Sign In
-            </button>
-            <p className="text-gray-500 text-xs text-center leading-relaxed">
-              Can&apos;t see the page? Open the <strong className="text-gray-300">extensions menu</strong> in your browser toolbar
-              (Chrome/Edge: 🧩 puzzle piece; Firefox: puzzle piece or ≡ menu), then pin and open <strong className="text-gray-300">TermsDigest</strong>.
-            </p>
-          </>
-        ) : (
-          <ol className="space-y-3 text-sm text-gray-300">
-            <li className="flex items-start gap-3">
-              <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">1</span>
-              <span>Open the <strong className="text-white">extensions menu</strong> in your toolbar (top-right, next to the address bar). In Chrome or Edge, it&apos;s the 🧩 puzzle piece; in Firefox, the puzzle piece or ≡ menu.</span>
-            </li>
-            <li className="flex items-start gap-3">
-              <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">2</span>
-              <span>Find <strong className="text-white">TermsDigest</strong> in the list and pin it (📌) to your toolbar so it&apos;s easy to access.</span>
-            </li>
-            <li className="flex items-start gap-3">
-              <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">3</span>
-              <span>Click the <strong className="text-white">TermsDigest icon</strong> and sign in with your email and password.</span>
-            </li>
-          </ol>
-        )}
-      </div>
+      <DemoVideo />
+      <NextStepsList />
 
-      <p className="text-gray-600 text-xs">You can close this tab after signing in.</p>
+      <p className="text-gray-600 text-xs mt-8">
+        Need help?{" "}
+        <a href="https://termsdigest.com/support" className="text-blue-400 hover:text-blue-300 transition-colors">
+          Contact support
+        </a>
+      </p>
     </div>
   );
 }
 
-function AlreadyConfirmed({ onOpenExtension }: { onOpenExtension: (() => void) | null }) {
+function AlreadyConfirmed() {
   return (
     <div className="text-center">
       <div className="w-20 h-20 mx-auto mb-8 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30 flex items-center justify-center">
@@ -167,41 +132,19 @@ function AlreadyConfirmed({ onOpenExtension }: { onOpenExtension: (() => void) |
       </div>
 
       <h1 className="font-display text-2xl font-bold mb-3">Already confirmed</h1>
-      <p className="text-gray-400 text-sm mb-8">
-        Your email has already been verified. Go ahead and sign in.
+      <p className="text-gray-400 text-sm mb-10">
+        Your email has already been verified. Here&apos;s how to sign in.
       </p>
 
-      {onOpenExtension ? (
-        <>
-          <button
-            onClick={onOpenExtension}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition-all font-semibold text-white text-sm mb-4"
-          >
-            Open TermsDigest → Sign In
-          </button>
-          <p className="text-gray-500 text-xs text-center leading-relaxed">
-            Can&apos;t see the page? Open the <strong className="text-gray-300">extensions menu</strong> in your browser toolbar
-            (Chrome/Edge: 🧩 puzzle piece; Firefox: puzzle piece or ≡ menu), then pin and open <strong className="text-gray-300">TermsDigest</strong>.
-          </p>
-        </>
-      ) : (
-        <div className="glass-card rounded-2xl p-5 text-left">
-          <ol className="space-y-3 text-sm text-gray-300">
-            <li className="flex items-start gap-3">
-              <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">1</span>
-              <span>Open the <strong className="text-white">extensions menu</strong> in your toolbar (top-right, next to the address bar). In Chrome or Edge, it&apos;s the 🧩 puzzle piece; in Firefox, the puzzle piece or ≡ menu.</span>
-            </li>
-            <li className="flex items-start gap-3">
-              <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">2</span>
-              <span>Find <strong className="text-white">TermsDigest</strong> in the list and pin it (📌) to your toolbar so it&apos;s easy to access.</span>
-            </li>
-            <li className="flex items-start gap-3">
-              <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">3</span>
-              <span>Click the <strong className="text-white">TermsDigest icon</strong> and sign in with your email and password.</span>
-            </li>
-          </ol>
-        </div>
-      )}
+      <DemoVideo />
+      <NextStepsList />
+
+      <p className="text-gray-600 text-xs mt-8">
+        Need help?{" "}
+        <a href="https://termsdigest.com/support" className="text-blue-400 hover:text-blue-300 transition-colors">
+          Contact support
+        </a>
+      </p>
     </div>
   );
 }
@@ -230,6 +173,52 @@ function ErrorState({ message }: { message: string }) {
       >
         Contact support
       </a>
+    </div>
+  );
+}
+
+function DemoVideo() {
+  return (
+    <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/40 mb-8 shadow-2xl">
+      <video
+        className="w-full h-auto block"
+        src={DEMO_VIDEO_SRC}
+        poster={DEMO_VIDEO_POSTER}
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        aria-label="Demo: pinning the TermsDigest extension and signing in"
+      />
+    </div>
+  );
+}
+
+function NextStepsList() {
+  return (
+    <div className="glass-card rounded-2xl p-6 text-left">
+      <p className="text-sm font-semibold text-white/80 mb-4">Next steps</p>
+      <ol className="space-y-3 text-sm text-gray-300">
+        <li className="flex items-start gap-3">
+          <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">1</span>
+          <span>
+            Open the <strong className="text-white">extensions menu</strong> in your browser toolbar (the <span aria-hidden>🧩</span> puzzle-piece icon).
+          </span>
+        </li>
+        <li className="flex items-start gap-3">
+          <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">2</span>
+          <span>
+            Find <strong className="text-white">TermsDigest</strong> in the list and click the pin icon (<span aria-hidden>📌</span>) so it stays in your toolbar.
+          </span>
+        </li>
+        <li className="flex items-start gap-3">
+          <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">3</span>
+          <span>
+            Click the <strong className="text-white">TermsDigest icon</strong> and sign in with your email and password.
+          </span>
+        </li>
+      </ol>
     </div>
   );
 }
