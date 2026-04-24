@@ -7,7 +7,6 @@ import Navbar from "@/components/Navbar";
 import NeuralNetworkHero from "@/components/NeuralNetworkHero";
 import GlobeFeatureSection from "@/components/ui/globe-feature-section";
 import FlickeringFooter from "@/components/ui/flickering-footer";
-import AnimatedDemo from "@/components/AnimatedDemo";
 import PricingSection from "@/components/PricingSection";
 import { useTheme } from "@/components/ThemeProvider";
 
@@ -44,10 +43,33 @@ export default function Home() {
       <section className="py-12 px-6 scroll-mt-24" id="demo">
         <div className="max-w-2xl mx-auto animate-on-scroll">
           <div className="text-center mb-8">
-            <p className={`text-sm font-medium uppercase tracking-widest mb-2 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Simple demo</p>
+            <p className={`text-sm font-medium uppercase tracking-widest mb-2 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Real example</p>
             <h2 className={`text-2xl md:text-3xl font-light tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>See it in action</h2>
           </div>
-          <AnimatedDemo isDark={isDark} />
+          <div
+            className={`rounded-2xl overflow-hidden border shadow-2xl ${
+              isDark ? 'border-white/10 bg-black/40' : 'border-gray-200 bg-white'
+            }`}
+          >
+            <video
+              className="w-full h-auto block"
+              src="/demo-pin-example.mp4"
+              poster="/demo-pin-example.jpg"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              aria-label="Demo: TermsDigest summarising the Terms & Conditions on a retailer checkout page"
+            />
+          </div>
+          <p
+            className={`text-xs text-center mt-3 ${
+              isDark ? 'text-white/40' : 'text-gray-400'
+            }`}
+          >
+            Demo recorded on a public retailer checkout page. TermsDigest is not affiliated with or endorsed by any third-party site shown.
+          </p>
         </div>
       </section>
 
