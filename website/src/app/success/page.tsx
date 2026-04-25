@@ -141,7 +141,7 @@ function SuccessContent() {
 
         <div className="glass-card rounded-xl p-4 mb-8 bg-blue-500/10 border-blue-500/30">
           <p className="text-blue-300 text-sm">
-            <strong>Next step:</strong> Go back to the extension and click &quot;Refresh status&quot; to activate your Pro subscription.
+            <strong>Next step:</strong> Switch back to your browser&apos;s extension &mdash; your Pro plan will activate automatically within a minute.
           </p>
         </div>
 

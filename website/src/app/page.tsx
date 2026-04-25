@@ -41,20 +41,27 @@ export default function Home() {
 
       {/* Demo Preview */}
       <section className="py-12 px-6 scroll-mt-24" id="demo">
-        <div className="max-w-2xl mx-auto animate-on-scroll">
+        <div className="max-w-[640px] mx-auto animate-on-scroll">
           <div className="text-center mb-8">
             <p className={`text-sm font-medium uppercase tracking-widest mb-2 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Real example</p>
             <h2 className={`text-2xl md:text-3xl font-light tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>See it in action</h2>
           </div>
-          <div
-            className={`rounded-2xl overflow-hidden border shadow-2xl ${
-              isDark ? 'border-white/10 bg-black/40' : 'border-gray-200 bg-white'
-            }`}
-          >
+          <div className="relative">
+            {/* Ambient glow (dark mode only) — simulates light pooling behind the video */}
+            {isDark && (
+              <>
+                <div className="pointer-events-none absolute -inset-10 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.22),rgba(139,92,246,0.14)_40%,transparent_70%)] blur-3xl" />
+                <div className="pointer-events-none absolute -bottom-6 left-1/2 -translate-x-1/2 w-[85%] h-10 bg-black/70 rounded-[50%] blur-2xl" />
+              </>
+            )}
             <video
-              className="w-full h-auto block"
-              src="/demo-pin-example.mp4"
-              poster="/demo-pin-example.jpg"
+              className={`relative w-full h-auto block rounded-xl ${
+                isDark
+                  ? 'ring-1 ring-white/10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.9),0_0_60px_-10px_rgba(59,130,246,0.35)]'
+                  : 'shadow-2xl'
+              }`}
+              src="/demo-pin-sample.mp4"
+              poster="/demo-pin-sample.jpg"
               autoPlay
               muted
               loop
@@ -64,11 +71,11 @@ export default function Home() {
             />
           </div>
           <p
-            className={`text-xs text-center mt-3 ${
-              isDark ? 'text-white/40' : 'text-gray-400'
+            className={`text-xs text-center mt-4 ${
+              isDark ? 'text-white/70' : 'text-gray-500'
             }`}
           >
-            Demo recorded on a public retailer checkout page. TermsDigest is not affiliated with or endorsed by any third-party site shown.
+            TermsDigest is not affiliated with or endorsed by any third-party site shown.
           </p>
         </div>
       </section>

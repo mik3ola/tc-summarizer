@@ -29,18 +29,30 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
-    // Check localStorage first, then system preference
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+
+    // Check localStorage first; if the user hasn't made an explicit choice,
+    // fall back to the operating system's preference.
     const stored = localStorage.getItem("theme") as Theme | null;
-    if (stored) {
+    if (stored === "light" || stored === "dark") {
       setThemeState(stored);
       applyThemeToDocument(stored);
     } else {
-      // Check system preference
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      const defaultTheme = prefersDark ? "dark" : "dark"; // Default to dark for now
+      const defaultTheme: Theme = mql.matches ? "dark" : "light";
       setThemeState(defaultTheme);
       applyThemeToDocument(defaultTheme);
     }
+
+    // Live-follow OS preference changes — only if the user hasn't explicitly
+    // overridden via the toggle (i.e. nothing stored in localStorage).
+    const handleChange = (e: MediaQueryListEvent) => {
+      if (localStorage.getItem("theme")) return;
+      const next: Theme = e.matches ? "dark" : "light";
+      setThemeState(next);
+      applyThemeToDocument(next);
+    };
+    mql.addEventListener("change", handleChange);
+    return () => mql.removeEventListener("change", handleChange);
   }, []);
 
   const setTheme = (newTheme: Theme) => {

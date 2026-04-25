@@ -801,7 +801,7 @@ upgradeBtn?.addEventListener("click", async () => {
           clearInterval(pollInterval);
           window.removeEventListener("focus", focusHandler);
           // Don't show error - user might have completed payment, just remind them to refresh
-          showModal("info", "Payment check complete", "If you completed payment, click 'Refresh status' to see your Pro subscription.");
+          showModal("info", "Payment check complete", "If you completed payment, your Pro subscription will activate automatically within a minute. Click 'Refresh' if it hasn't appeared by then.");
         }
       } catch (err) {
         console.error("Error polling subscription status:", err);
@@ -848,7 +848,7 @@ upgradeBtn?.addEventListener("click", async () => {
 
 refreshStatusBtn?.addEventListener("click", async () => {
   try {
-    showModal("loading", "Refreshing...", "Checking your subscription status.");
+    showModal("loading", "Refreshing...", "Updating your account info.");
     const data = await chrome.storage.local.get(["supabaseSession"]);
     await refreshSupabaseStatusIfPossible(data);
     const updated = await chrome.storage.local.get([
@@ -865,10 +865,10 @@ refreshStatusBtn?.addEventListener("click", async () => {
       updated.cycleAnchorDate
     );
     const isPro = updated.subscription === "active" && updated.subscriptionPlan === "pro";
-    showModal("success", "Status refreshed", isPro ? "Your Pro subscription is active!" : "Your subscription status has been updated.");
+    showModal("success", "Up to date", isPro ? "Your Pro subscription is active!" : "Your account is up to date.");
   } catch (e) {
     console.error("[Options] Refresh error:", e);
-    showModal("error", "Something went wrong", "We couldn't refresh your status. Please try again or contact our <a href=\"https://termsdigest.com/support\" target=\"_blank\">support team</a> for help.");
+    showModal("error", "Something went wrong", "We couldn't refresh right now. Please try again or contact our <a href=\"https://termsdigest.com/support\" target=\"_blank\">support team</a> for help.");
   }
 });
 
