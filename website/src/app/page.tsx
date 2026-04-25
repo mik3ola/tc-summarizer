@@ -7,7 +7,6 @@ import Navbar from "@/components/Navbar";
 import NeuralNetworkHero from "@/components/NeuralNetworkHero";
 import GlobeFeatureSection from "@/components/ui/globe-feature-section";
 import FlickeringFooter from "@/components/ui/flickering-footer";
-import AnimatedDemo from "@/components/AnimatedDemo";
 import PricingSection from "@/components/PricingSection";
 import { useTheme } from "@/components/ThemeProvider";
 
@@ -42,12 +41,42 @@ export default function Home() {
 
       {/* Demo Preview */}
       <section className="py-12 px-6 scroll-mt-24" id="demo">
-        <div className="max-w-2xl mx-auto animate-on-scroll">
+        <div className="max-w-[640px] mx-auto animate-on-scroll">
           <div className="text-center mb-8">
-            <p className={`text-sm font-medium uppercase tracking-widest mb-2 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Simple demo</p>
+            <p className={`text-sm font-medium uppercase tracking-widest mb-2 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Real example</p>
             <h2 className={`text-2xl md:text-3xl font-light tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>See it in action</h2>
           </div>
-          <AnimatedDemo isDark={isDark} />
+          <div className="relative">
+            {/* Ambient glow (dark mode only) — simulates light pooling behind the video */}
+            {isDark && (
+              <>
+                <div className="pointer-events-none absolute -inset-10 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.22),rgba(139,92,246,0.14)_40%,transparent_70%)] blur-3xl" />
+                <div className="pointer-events-none absolute -bottom-6 left-1/2 -translate-x-1/2 w-[85%] h-10 bg-black/70 rounded-[50%] blur-2xl" />
+              </>
+            )}
+            <video
+              className={`relative w-full h-auto block rounded-xl ${
+                isDark
+                  ? 'ring-1 ring-white/10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.9),0_0_60px_-10px_rgba(59,130,246,0.35)]'
+                  : 'shadow-2xl'
+              }`}
+              src="/demo-pin-sample.mp4"
+              poster="/demo-pin-sample.jpg"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              aria-label="Demo: TermsDigest summarising the Terms & Conditions on a retailer checkout page"
+            />
+          </div>
+          <p
+            className={`text-xs text-center mt-4 ${
+              isDark ? 'text-white/70' : 'text-gray-500'
+            }`}
+          >
+            TermsDigest is not affiliated with or endorsed by any third-party site shown.
+          </p>
         </div>
       </section>
 

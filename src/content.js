@@ -44,6 +44,8 @@ async function loadPreferences() {
 // Load preferences on startup
 loadPreferences();
 
+// Standalone keywords — flagging a link as legal as soon as any of these appear
+// in its visible text / aria / title / id.
 const KEYWORDS = [
   "terms",
   "terms of service",
@@ -63,8 +65,6 @@ const KEYWORDS = [
   "exchanges",
   "cancellation",
   "cancellation policy",
-  "billing",
-  "subscription",
   "eula",
   "end user license",
   "licence agreement",
@@ -73,6 +73,34 @@ const KEYWORDS = [
   "legal notice",
   "cookie policy",
   "data protection"
+];
+
+// Ambiguous keywords that frequently appear in non-legal contexts (e.g. the
+// "Subscriptions" tab on YouTube, "Billing" on a banking app, "Cookies" on a
+// recipe site). These only flag the link if a qualifier is *also* present —
+// turning bare "Subscriptions" into a no-op while still catching things like
+// "Subscription terms" or "Manage subscription".
+const QUALIFIED_KEYWORDS = [
+  {
+    word: "subscription",
+    qualifiers: ["terms", "agreement", "policy", "cancel", "manage", "billing"]
+  },
+  {
+    word: "subscriptions",
+    qualifiers: ["terms", "agreement", "policy", "cancel", "manage", "billing"]
+  },
+  {
+    word: "billing",
+    qualifiers: ["terms", "policy", "dispute", "support", "agreement"]
+  },
+  {
+    word: "cookie",
+    qualifiers: ["policy", "notice", "settings", "consent", "preferences"]
+  },
+  {
+    word: "cookies",
+    qualifiers: ["policy", "notice", "settings", "consent", "preferences"]
+  }
 ];
 
 function normalizeText(str) {
@@ -144,6 +172,17 @@ function isLikelyLegalLink(el) {
   visibleCombined = visibleCombined.replace(/termsdigest/gi, "");
 
   if (KEYWORDS.some((k) => visibleCombined.includes(k))) return true;
+
+  // Qualified keywords: only count if a supporting qualifier is also present.
+  if (
+    QUALIFIED_KEYWORDS.some(
+      ({ word, qualifiers }) =>
+        visibleCombined.includes(word) &&
+        qualifiers.some((q) => visibleCombined.includes(q))
+    )
+  ) {
+    return true;
+  }
 
   // Fallback: match on URL ONLY if the keyword appears as a dedicated path segment
   // near the end of the URL — e.g. "/terms", "/terms-of-service", "/privacy-policy".
@@ -1100,8 +1139,16 @@ async function renderError(errMsg, url) {
   let showRefreshButton = false;
   let isSignInIssue = false;
   let isProQuotaExceeded = false;
-  
-  if (isContextInvalidatedError({ message: msg })) {
+  let isInfoNotice = false;
+
+  if (msg === "UNREADABLE_PAGE" || msg.includes("Could not extract readable text")) {
+    // Friendly notice for pages we can't summarise (single-page apps, paywalls,
+    // anti-bot pages, login-walled content). No byte counts, no "blocked" wording.
+    displayMsg = "We couldn't read this page automatically. You can still open it to read it yourself.";
+    errorIcon = "ℹ️";
+    headerTitle = "Nothing to summarise";
+    isInfoNotice = true;
+  } else if (isContextInvalidatedError({ message: msg })) {
     displayMsg = "Extension needs a page refresh to continue";
     errorIcon = "⚠️";
     headerTitle = "Summary unavailable";
@@ -1159,22 +1206,43 @@ async function renderError(errMsg, url) {
       <button data-action="open-options">Sign in</button>
       <button data-action="open-link">View page</button>
     `;
+  } else if (isInfoNotice) {
+    buttonsHtml = `
+      <button data-action="open-link">View page</button>
+    `;
   } else {
     buttonsHtml = `
       <button data-action="open-options">Open Options</button>
       <button data-action="open-link">View page</button>
     `;
   }
-  
+
+  // Info notices get a softer style + an "info" badge instead of an alert banner.
+  const banner = isInfoNotice
+    ? `
+      <div class="section muted" style="margin-top:8px;display:flex;gap:8px;align-items:flex-start;">
+        <span style="font-size:14px;line-height:1.4;">${errorIcon}</span>
+        <span>${escapeHtml(displayMsg)}</span>
+      </div>
+    `
+    : `
+      <div class="error-banner">
+        <span class="error-icon">${errorIcon}</span>
+        <span>${escapeHtml(displayMsg)}</span>
+      </div>
+    `;
+
+  const headerExtra = isInfoNotice
+    ? `<div class="header-right"><div class="badge">info</div></div>`
+    : "";
+
   const footer = await getStatsFooter();
   UI.popover.innerHTML = `
     <div class="header">
       <div class="title">${escapeHtml(headerTitle)}</div>
+      ${headerExtra}
     </div>
-    <div class="error-banner">
-      <span class="error-icon">${errorIcon}</span>
-      <span>${escapeHtml(displayMsg)}</span>
-    </div>
+    ${banner}
     <div class="buttons">
       ${buttonsHtml}
     </div>
@@ -1407,8 +1475,10 @@ async function summarizeLink(url, anchor, requestId) {
 
   const text = extractTextFromHtml(result.html, result.finalUrl);
   if (!text.trim()) {
-    const htmlLen = result.html?.length || 0;
-    throw new Error(`Could not extract readable text. HTML received: ${htmlLen} chars. The page may require JavaScript or be blocked.`);
+    // Tagged so renderError can show this as a friendly info message rather than
+    // a scary technical error. Don't include byte counts or "JavaScript / blocked"
+    // wording in the user-facing string.
+    throw new Error("UNREADABLE_PAGE");
   }
 
   const sumRes = await chrome.runtime.sendMessage({
