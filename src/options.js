@@ -1,3 +1,11 @@
+// Footer version comes from manifest — avoids drift vs Chrome Web Store listing
+(function initFooterVersion() {
+  const el = document.getElementById("extensionVersion");
+  if (el && typeof chrome !== "undefined" && chrome.runtime?.getManifest) {
+    el.textContent = chrome.runtime.getManifest().version;
+  }
+})();
+
 // DOM Elements
 const apiKeyEl = document.getElementById("apiKey");
 const modelEl = document.getElementById("model");

@@ -584,18 +584,22 @@ function createUi() {
   const shadow = host.attachShadow({ mode: "open" });
   const style = document.createElement("style");
   style.textContent = `
+    /* Neumorphic surface — slightly tinted dark base so dual shadows are visible. */
     .popover {
       position: fixed;
       max-width: ${POPOVER_MAX_WIDTH_PX}px;
       min-width: 300px;
       max-height: 70vh;
       overflow-y: auto;
-      background: rgba(7, 11, 22, 0.88);
-      backdrop-filter: blur(12px);
+      background: linear-gradient(135deg, #2f3139 0%, #23262d 100%);
       color: #e5e7eb;
-      border: 1px solid rgba(148,163,184,0.25);
-      border-radius: 12px;
-      box-shadow: 0 18px 60px rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 18px;
+      box-shadow:
+        14px 18px 38px rgba(0,0,0,0.55),
+        6px 8px 14px rgba(0,0,0,0.42),
+        inset 1px 1px 0 rgba(255,255,255,0.05),
+        inset -1px -1px 0 rgba(0,0,0,0.35);
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
       font-size: 13px;
       line-height: 1.6;
@@ -605,43 +609,77 @@ function createUi() {
     .popover::-webkit-scrollbar-track { background: transparent; }
     .popover::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.35); border-radius: 3px; }
     .popover::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.5); }
-    .header { display: flex; align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: 0; background: rgba(7, 11, 22, 0.9); backdrop-filter: blur(12px); padding: 14px 14px 10px; margin: 0; z-index: 1; border-radius: 12px 12px 0 0; }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      position: sticky;
+      top: 0;
+      background: linear-gradient(180deg, rgba(47,49,57,0.97) 0%, rgba(40,43,51,0.85) 100%);
+      backdrop-filter: blur(12px);
+      padding: 14px 16px 10px;
+      margin: 0;
+      z-index: 1;
+      border-radius: 18px 18px 0 0;
+    }
+    .header::after {
+      content: "";
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: 0;
+      height: 1px;
+      background: rgba(0,0,0,0.4);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.04);
+      pointer-events: none;
+    }
     .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .title {
+      flex: 1;
+      min-width: 0;
       font-size: 12px;
       color: rgba(226,232,240,0.9);
       font-weight: 600;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 280px;
+      max-width: 290px;
     }
-    .header-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; white-space: nowrap; }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .header-right:empty { display: none; }
     .confidence-label { font-size: 10px; color: rgba(226,232,240,0.6); }
     .badge {
       font-size: 11px;
-      padding: 2px 8px;
+      padding: 5px 10px;
       border-radius: 999px;
-      border: 1px solid rgba(148,163,184,0.25);
-      background: rgba(15,23,42,0.8);
+      border: none;
+      background: linear-gradient(135deg, #1d2027 0%, #131519 100%);
       color: rgba(226,232,240,0.85);
       white-space: nowrap;
       flex-shrink: 0;
+      box-shadow:
+        4px 5px 10px rgba(0,0,0,0.56),
+        inset 1px 1px 0 rgba(255,255,255,0.035),
+        inset -1px -1px 0 rgba(0,0,0,0.42);
     }
     .badge-high {
-      background: rgba(34,197,94,0.15);
       color: rgba(134,239,172,0.95);
-      border-color: rgba(34,197,94,0.35);
+      text-shadow: 0 0 8px rgba(34,197,94,0.38);
     }
     .badge-medium {
-      background: rgba(234,179,8,0.15);
       color: rgba(253,224,71,0.95);
-      border-color: rgba(234,179,8,0.35);
+      text-shadow: 0 0 8px rgba(234,179,8,0.42);
     }
     .badge-low {
-      background: rgba(239,68,68,0.15);
       color: rgba(252,165,165,0.95);
-      border-color: rgba(239,68,68,0.35);
+      text-shadow: 0 0 8px rgba(239,68,68,0.42);
     }
     .muted { color: rgba(226,232,240,0.72); }
     .red-flags-section li { color: #f87171; }
@@ -650,7 +688,7 @@ function createUi() {
     .h { font-weight: 700; color: rgba(226,232,240,0.95); margin-bottom: 8px; }
     ul { margin: 0; padding-left: 18px; }
     li { margin: 6px 0; line-height: 1.6; }
-    .divider { height: 1px; background: rgba(148,163,184,0.18); margin: 18px 14px 14px; }
+    .divider { height: 1px; background: rgba(0,0,0,0.4); box-shadow: 0 1px 0 rgba(255,255,255,0.04); margin: 18px 14px 14px; }
     .buttons { display:flex; gap: 8px; margin-top: 14px; padding: 0 14px 14px; }
     .buttons button { flex: 1; }
     .footer-stats {
@@ -659,13 +697,14 @@ function createUi() {
       justify-content: space-between;
       padding: 6px 14px 14px;
       margin-top: 0;
-      gap: 12px;
+      gap: 10px;
     }
     .footer-stat {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
       gap: 2px;
+      min-width: 58px;
     }
     .footer-stat-value {
       font-size: 12px;
@@ -682,7 +721,7 @@ function createUi() {
       margin-left: auto;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 10px;
       flex-shrink: 0;
     }
     .footer-brand {
@@ -706,17 +745,23 @@ function createUi() {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 24px;
-      height: 24px;
-      color: rgba(148,163,184,0.7);
+      width: 28px;
+      height: 28px;
+      color: rgba(148,163,184,0.75);
       cursor: pointer;
-      border-radius: 4px;
-      transition: all 0.15s;
+      border-radius: 50%;
+      transition: transform 0.15s, color 0.15s, box-shadow 0.15s;
       flex-shrink: 0;
+      background: linear-gradient(135deg, #1d2027 0%, #131519 100%);
+      border: 1px solid rgba(255,255,255,0.05);
+      box-shadow:
+        4px 5px 10px rgba(0,0,0,0.6),
+        inset 1px 1px 0 rgba(255,255,255,0.04),
+        inset -1px -1px 0 rgba(0,0,0,0.4);
     }
     .footer-settings:hover {
       color: rgba(148,163,184,0.95);
-      background: rgba(148,163,184,0.1);
+      transform: translateY(-1px);
     }
     .footer-settings svg {
       width: 15px;
@@ -796,6 +841,43 @@ function createUi() {
       width: 100%;
       height: 100%;
     }
+    /* Neumorphic indeterminate bar — bright orange chunk sweeps left → right. */
+    .td-loading-bar {
+      position: relative;
+      height: 4px;
+      margin: 4px 16px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.04);
+      box-shadow:
+        inset 0 1px 2px rgba(0,0,0,0.55),
+        inset 0 -1px 0 rgba(255,255,255,0.04);
+      overflow: hidden;
+    }
+    .td-loading-bar-fill {
+      position: absolute;
+      top: 0;
+      left: -45%;
+      height: 100%;
+      width: 35%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, rgba(255,120,73,0.0), #ff7849 25%, #ff6a3d 70%, rgba(255,120,73,0.0));
+      box-shadow: 0 0 12px rgba(255,120,73,0.55);
+      animation: td-loading-sweep 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      will-change: left, width;
+    }
+    @keyframes td-loading-sweep {
+      0%   { left: -45%; width: 35%; }
+      55%  { left: 35%;  width: 45%; }
+      100% { left: 105%; width: 35%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .td-loading-bar-fill {
+        animation: none;
+        left: 0;
+        width: 100%;
+        opacity: 0.7;
+      }
+    }
     .reveal-line {
       opacity: 0;
       animation: slide-up-fade 0.4s ease-out forwards;
@@ -854,7 +936,7 @@ function createUi() {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 280px;
+      max-width: 290px;
     }
     .loading-title-item:first-child {
       animation: loading-title-slide-up 0.6s cubic-bezier(0.32, 0.72, 0, 1) forwards;
@@ -966,25 +1048,13 @@ async function renderLoading(url) {
           <div class="loading-title-item">Summarising${LOADING_DOTS}</div>
         </div>
       </div>
-      <div class="header-right">
-        <div class="ring-loader" aria-label="Loading">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" stroke="currentColor" fill="none">
-            <g fill="none" fill-rule="evenodd" stroke-width="2">
-              <circle cx="22" cy="22" r="1">
-                <animate attributeName="r" begin="0s" dur="1.8s" values="1; 20" calcMode="spline" keyTimes="0; 1" keySplines="0.165, 0.84, 0.44, 1" repeatCount="indefinite"/>
-                <animate attributeName="stroke-opacity" begin="0s" dur="1.8s" values="1; 0" calcMode="spline" keyTimes="0; 1" keySplines="0.3, 0.61, 0.355, 1" repeatCount="indefinite"/>
-              </circle>
-              <circle cx="22" cy="22" r="1">
-                <animate attributeName="r" begin="-0.9s" dur="1.8s" values="1; 20" calcMode="spline" keyTimes="0; 1" keySplines="0.165, 0.84, 0.44, 1" repeatCount="indefinite"/>
-                <animate attributeName="stroke-opacity" begin="-0.9s" dur="1.8s" values="1; 0" calcMode="spline" keyTimes="0; 1" keySplines="0.3, 0.61, 0.355, 1" repeatCount="indefinite"/>
-              </circle>
-            </g>
-          </svg>
-        </div>
-      </div>
+      <div class="header-right"></div>
     </div>
     <div class="section muted" style="margin-top:8px;">
       Fetching <span title="${escapeHtml(url)}">${escapeHtml(truncateUrl(url))}</span>
+    </div>
+    <div class="td-loading-bar" role="progressbar" aria-label="Summarising" aria-busy="true">
+      <div class="td-loading-bar-fill"></div>
     </div>
     <div class="divider"></div>
     <div class="section muted" style="padding-bottom: 12px; margin-top: 0;">Keep your mouse over the popover to view the summary.</div>
@@ -1786,21 +1856,170 @@ function injectHighlightStyles() {
         transform-origin: right center;
       }
     }
+
+    /* Two-pulse orange glow. The first pair runs on viewport entry; JS replays
+       the same short animation once more after 30s, instead of keeping a long
+       CSS animation active on every detected link. */
+    .td-glow-once {
+      animation: td-glow-pulse 3.4s ease-in-out 1;
+    }
+
+    /* Orange→coral: #c2410c / #ea580c / #f97316 / #fb923c / #ff7047 */
+    @keyframes td-glow-pulse {
+      /* invisible — mirror layer count so interpolation stays stable */
+      0%, 100% {
+        text-shadow:
+          0 0 0 rgba(234, 88, 12, 0),
+          0 0 0 rgba(249, 115, 22, 0),
+          0 0 0 rgba(251, 146, 60, 0),
+          0 0 0 rgba(255, 112, 67, 0),
+          0 0 0 rgba(249, 115, 22, 0),
+          0 0 0 rgba(255, 138, 91, 0);
+      }
+      /* ─── pulse 1 ─── */
+      5.88% {
+        text-shadow:
+          0 0 1px  rgba(194, 65, 12, 1),
+          0 0 2px  rgba(234, 88, 12, 1),
+          0 0 3px  rgba(249, 115, 22, 1),
+          0 0 5px  rgba(251, 146, 60, 0.98),
+          0 0 8px  rgba(249, 115, 22, 0.92),
+          0 0 11px rgba(255, 112, 67, 0.55);
+      }
+      20.59% {
+        text-shadow:
+          0 0 1px  rgba(194, 65, 12, 1),
+          0 0 2px  rgba(234, 88, 12, 1),
+          0 0 3px  rgba(249, 115, 22, 1),
+          0 0 5px  rgba(251, 146, 60, 0.98),
+          0 0 8px  rgba(249, 115, 22, 0.92),
+          0 0 11px rgba(255, 112, 67, 0.55);
+      }
+      /* pulse 1 fully off — t ≈ 1.00s */
+      29.41% {
+        text-shadow:
+          0 0 0 rgba(234, 88, 12, 0),
+          0 0 0 rgba(249, 115, 22, 0),
+          0 0 0 rgba(251, 146, 60, 0),
+          0 0 0 rgba(255, 112, 67, 0),
+          0 0 0 rgba(249, 115, 22, 0),
+          0 0 0 rgba(255, 138, 91, 0);
+      }
+
+      /* exactly 1.00s gap after pulse 1 */
+      58.82% {
+        text-shadow:
+          0 0 0 rgba(234, 88, 12, 0),
+          0 0 0 rgba(249, 115, 22, 0),
+          0 0 0 rgba(251, 146, 60, 0),
+          0 0 0 rgba(255, 112, 67, 0),
+          0 0 0 rgba(249, 115, 22, 0),
+          0 0 0 rgba(255, 138, 91, 0);
+      }
+
+      /* ─── pulse 2 — starts t ≈ 2.00s ─── */
+      58.83% {
+        text-shadow:
+          0 0 1px  rgba(194, 65, 12, 1),
+          0 0 2px  rgba(234, 88, 12, 1),
+          0 0 3px  rgba(249, 115, 22, 1),
+          0 0 5px  rgba(251, 146, 60, 0.98),
+          0 0 8px  rgba(249, 115, 22, 0.92),
+          0 0 11px rgba(255, 112, 67, 0.55);
+      }
+      85.29% {
+        text-shadow:
+          0 0 1px  rgba(194, 65, 12, 1),
+          0 0 2px  rgba(234, 88, 12, 1),
+          0 0 3px  rgba(249, 115, 22, 1),
+          0 0 5px  rgba(251, 146, 60, 0.98),
+          0 0 8px  rgba(249, 115, 22, 0.92),
+          0 0 11px rgba(255, 112, 67, 0.55);
+      }
+      /* pulse 2 off — t ≈ 3.4s */
+      100% {
+        text-shadow:
+          0 0 0 rgba(234, 88, 12, 0),
+          0 0 0 rgba(249, 115, 22, 0),
+          0 0 0 rgba(251, 146, 60, 0),
+          0 0 0 rgba(255, 112, 67, 0),
+          0 0 0 rgba(249, 115, 22, 0),
+          0 0 0 rgba(255, 138, 91, 0);
+      }
+    }
+
+    /* Respect users who've opted out of motion. */
+    @media (prefers-reduced-motion: reduce) {
+      .td-glow-once { animation: none !important; }
+    }
   `;
   
   document.head.appendChild(style);
+}
+
+const LATE_GLOW_REPLAY_DELAY_MS = 30000;
+
+function prefersReducedMotion() {
+  try {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function isElementInViewport(element) {
+  if (!element || !element.isConnected) return false;
+  const rect = element.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return false;
+
+  return (
+    rect.bottom >= 0 &&
+    rect.right >= 0 &&
+    rect.top <= (window.innerHeight || document.documentElement.clientHeight) &&
+    rect.left <= (window.innerWidth || document.documentElement.clientWidth)
+  );
+}
+
+function playGlowPair(element) {
+  if (!element || !element.isConnected || prefersReducedMotion()) return;
+
+  // Remove before re-adding so the same two-pulse animation can replay after
+  // the 30s reminder delay. offsetWidth intentionally forces a tiny reflow for
+  // this one element only; otherwise browsers may coalesce the class change.
+  element.classList.remove("td-glow-once");
+  void element.offsetWidth;
+  element.classList.add("td-glow-once");
+
+  element.addEventListener(
+    "animationend",
+    (e) => {
+      if (e.animationName === "td-glow-pulse") {
+        element.classList.remove("td-glow-once");
+      }
+    },
+    { once: true }
+  );
 }
 
 // Highlight a legal link element
 function highlightLegalLink(element) {
   if (highlightedElements.has(element)) return;
   if (!element || !element.isConnected) return;
-  
+
   highlightedElements.add(element);
-  
+
   // Use requestAnimationFrame for smooth DOM updates
   requestAnimationFrame(() => {
     element.classList.add("td-highlighted");
+    playGlowPair(element);
+
+    // If the user is still on the page and the link is still visible, repeat
+    // the same two-pulse glow once after 30s to re-capture attention.
+    window.setTimeout(() => {
+      if (document.visibilityState !== "visible") return;
+      if (!isElementInViewport(element)) return;
+      playGlowPair(element);
+    }, LATE_GLOW_REPLAY_DELAY_MS);
   });
 }
 

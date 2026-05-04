@@ -60,8 +60,8 @@ export default function Home() {
                   ? 'ring-1 ring-white/10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.9),0_0_60px_-10px_rgba(59,130,246,0.35)]'
                   : 'shadow-2xl'
               }`}
-              src="/demo-pin-example.mp4"
-              poster="/demo-pin-example.jpg"
+              src="/demo-pin-sample.mp4"
+              poster="/demo-pin-sample.jpg"
               autoPlay
               muted
               loop
