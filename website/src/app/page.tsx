@@ -165,7 +165,7 @@ export default function Home() {
                   </svg>
                 ),
                 title: "Smart Detection",
-                desc: "Automatically detects Terms, Privacy, EULA, Refund policies - on any website. Recognised links are marked with a subtle animated underline sweep so you can spot them at a glance.",
+                desc: "Automatically detects Terms, Privacy, EULA, Refund policies - on any website. Recognised links are marked with a subtle glow and animated underline so you can spot them at a glance.",
                 iconColor: isDark ? "text-purple-400" : "text-purple-600",
                 glow: "168,85,247",
               },
