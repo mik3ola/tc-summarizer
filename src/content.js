@@ -637,34 +637,7 @@ function createUi() {
       z-index: 1;
       border-radius: 18px 18px 0 0;
     }
-    /* Close button — absolutely positioned so flex flow is untouched */
-    .popover-close {
-      all: unset;
-      position: absolute;
-      top: 4px;
-      right: 2px;
-      width: 13px;
-      height: 13px;
-      border-radius: 3px;
-      background: rgba(10,12,16,0.72);
-      border: 1px solid rgba(255,255,255,0.08);
-      box-shadow: inset 1px 1px 0 rgba(255,255,255,0.04), 1px 1px 3px rgba(0,0,0,0.5);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      z-index: 10;
-      color: rgba(180,190,200,0.7);
-      font-size: 8px;
-      font-weight: 600;
-      line-height: 1;
-      transition: color 0.12s, background 0.12s;
-      flex-shrink: 0;
-    }
-    .popover-close:hover {
-      background: rgba(20,24,30,0.9);
-      color: rgba(220,230,240,0.95);
-    }
+    /* Close control — styled after generic button rules (see button.popover-close below) */
     .header::after {
       content: "";
       position: absolute;
@@ -731,43 +704,40 @@ function createUi() {
     ul { margin: 0; padding-left: 18px; }
     li { margin: 3px 0; line-height: 1.55; }
     .divider { height: 1px; background: rgba(0,0,0,0.4); box-shadow: 0 1px 0 rgba(255,255,255,0.04); margin: 20px 14px 14px; }
-    /* Footer quick-pref row */
+    /* Footer quick-pref row — flat; only checkbox toggle is clickable */
     .footer-quick-prefs {
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 16px;
+      flex-wrap: wrap;
       padding: 8px 14px 0;
     }
-    .footer-pref-chip {
+    .footer-pref-row {
       display: flex;
       align-items: center;
-      gap: 5px;
-      padding: 4px 9px 4px 7px;
-      border-radius: 999px;
+      gap: 7px;
+    }
+    .footer-pref-label {
       font-size: 10px;
       font-weight: 600;
-      color: rgba(226,232,240,0.7);
-      cursor: pointer;
+      color: rgba(226,232,240,0.72);
       user-select: none;
-      background: linear-gradient(135deg, #1d2027 0%, #131519 100%);
-      border: 1px solid rgba(255,255,255,0.05);
-      box-shadow:
-        3px 3px 7px rgba(0,0,0,0.48),
-        inset 1px 1px 0 rgba(255,255,255,0.035),
-        inset -1px -1px 0 rgba(0,0,0,0.38);
-      transition: box-shadow 0.22s ease, background 0.22s ease;
+      pointer-events: none;
     }
-    .footer-pref-chip:hover {
-      background:
-        radial-gradient(ellipse 125% 95% at 28% 16%, rgba(255,255,255,0.16) 0%, transparent 52%),
-        linear-gradient(135deg, #1d2027 0%, #131519 100%);
-      box-shadow:
-        3px 4px 9px rgba(0,0,0,0.45),
-        inset 3px 3px 8px rgba(255,255,255,0.07),
-        inset -2px -2px 6px rgba(0,0,0,0.42);
+    .footer-pref-toggle {
+      all: unset;
+      box-sizing: border-box;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    .footer-pref-chip.active { color: rgba(134,239,172,0.95); }
-    .footer-pref-chip .chip-icon {
+    .footer-pref-toggle:focus-visible .chip-icon {
+      outline: 1px solid rgba(96,165,250,0.45);
+      outline-offset: 2px;
+    }
+    .footer-pref-toggle .chip-icon {
       width: 12px;
       height: 12px;
       border-radius: 3px;
@@ -777,46 +747,22 @@ function createUi() {
       background: linear-gradient(135deg, #2a2d35, #1d2027);
       box-shadow: inset 2px 2px 4px rgba(0,0,0,0.5), inset -1px -1px 3px rgba(255,255,255,0.04);
       flex-shrink: 0;
+      transition: box-shadow 0.18s ease;
     }
-    .footer-pref-chip.active .chip-icon {
+    .footer-pref-toggle:hover .chip-icon {
+      box-shadow:
+        inset 2px 2px 4px rgba(0,0,0,0.45),
+        inset -1px -1px 3px rgba(255,255,255,0.07),
+        0 0 0 1px rgba(255,255,255,0.06);
+    }
+    .footer-pref-toggle.active .chip-icon {
       background: linear-gradient(135deg, #2a2d35, #1d2027);
       box-shadow: inset 2px 2px 4px rgba(0,0,0,0.5), inset -1px -1px 3px rgba(255,255,255,0.04);
     }
     .chip-tick { display: none; }
-    .footer-pref-chip.active .chip-tick { display: block; }
+    .footer-pref-toggle.active .chip-tick { display: block; }
     .chip-empty { display: block; }
-    .footer-pref-chip.active .chip-empty { display: none; }
-    /* Copy button */
-    .copy-summary-btn {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      margin-left: auto;
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: 10px;
-      font-weight: 600;
-      color: rgba(226,232,240,0.7);
-      cursor: pointer;
-      user-select: none;
-      background: linear-gradient(135deg, #1d2027 0%, #131519 100%);
-      border: 1px solid rgba(255,255,255,0.05);
-      box-shadow:
-        3px 3px 7px rgba(0,0,0,0.48),
-        inset 1px 1px 0 rgba(255,255,255,0.035),
-        inset -1px -1px 0 rgba(0,0,0,0.38);
-      transition: box-shadow 0.22s ease, background 0.22s ease;
-    }
-    .copy-summary-btn:hover {
-      background:
-        radial-gradient(ellipse 125% 95% at 28% 16%, rgba(255,255,255,0.16) 0%, transparent 52%),
-        linear-gradient(135deg, #1d2027 0%, #131519 100%);
-      box-shadow:
-        3px 4px 9px rgba(0,0,0,0.45),
-        inset 3px 3px 8px rgba(255,255,255,0.07),
-        inset -2px -2px 6px rgba(0,0,0,0.42);
-    }
-    .copy-summary-btn.copied { color: rgba(134,239,172,0.95); }
+    .footer-pref-toggle.active .chip-empty { display: none; }
     .buttons { display:flex; gap: 8px; margin-top: 14px; padding: 0 14px 14px; }
     .buttons button { flex: 1; }
     .footer-stats {
@@ -849,7 +795,7 @@ function createUi() {
       margin-left: auto;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 6px;
       flex-shrink: 0;
     }
     .footer-brand {
@@ -857,6 +803,7 @@ function createUi() {
       align-items: center;
       gap: 4px;
       opacity: 0.45;
+      margin-right: 2px;
     }
     .footer-brand img {
       width: 12px;
@@ -868,37 +815,6 @@ function createUi() {
       font-weight: 600;
       color: rgba(226,232,240,0.9);
       letter-spacing: 0.02em;
-    }
-    .footer-settings {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 18px;
-      height: 18px;
-      color: rgba(148,163,184,0.75);
-      cursor: pointer;
-      border-radius: 5px;
-      transition: box-shadow 0.22s ease, background 0.22s ease;
-      flex-shrink: 0;
-      background: linear-gradient(135deg, #1d2027 0%, #131519 100%);
-      border: 1px solid rgba(255,255,255,0.05);
-      box-shadow:
-        2px 3px 6px rgba(0,0,0,0.55),
-        inset 1px 1px 0 rgba(255,255,255,0.04),
-        inset -1px -1px 0 rgba(0,0,0,0.4);
-    }
-    .footer-settings:hover {
-      background:
-        radial-gradient(ellipse 125% 95% at 28% 16%, rgba(255,255,255,0.14) 0%, transparent 52%),
-        linear-gradient(135deg, #1d2027 0%, #131519 100%);
-      box-shadow:
-        2px 4px 8px rgba(0,0,0,0.48),
-        inset 3px 3px 7px rgba(255,255,255,0.07),
-        inset -2px -2px 5px rgba(0,0,0,0.42);
-    }
-    .footer-settings svg {
-      width: 11px;
-      height: 11px;
     }
     button {
       all: unset;
@@ -925,6 +841,93 @@ function createUi() {
     }
     button.primary:hover {
       background: linear-gradient(135deg, #2563eb, #7c3aed);
+    }
+    /* Header close — plain letter x, no chrome (must follow generic button rules) */
+    button.popover-close {
+      all: unset;
+      box-sizing: border-box;
+      position: absolute;
+      top: 1px;
+      right: 1px;
+      z-index: 10;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      color: #000;
+      padding: 2px 3px;
+      margin: 0;
+      background: transparent !important;
+      border: none !important;
+      border-radius: 0;
+      box-shadow: none !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-shadow:
+        0 1px 2px rgba(0,0,0,0.55),
+        0 2px 5px rgba(0,0,0,0.45),
+        0 4px 10px rgba(0,0,0,0.35),
+        0 0 1px rgba(255,255,255,0.12);
+      transition: opacity 0.15s ease, color 0.15s ease, text-shadow 0.15s ease;
+    }
+    button.popover-close:hover {
+      color: #0a0a0a;
+      opacity: 0.92;
+      background: transparent !important;
+      border: none !important;
+      text-shadow:
+        0 2px 4px rgba(0,0,0,0.65),
+        0 4px 12px rgba(0,0,0,0.4),
+        0 0 1px rgba(255,255,255,0.15);
+    }
+    button.popover-close:focus-visible {
+      outline: 1px solid rgba(96,165,250,0.55);
+      outline-offset: 2px;
+    }
+    /* Extension tile + copy — same square neumorphic control (after generic button rules) */
+    a.footer-settings,
+    button.footer-copy-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      color: rgba(148,163,184,0.75);
+      cursor: pointer;
+      border-radius: 5px;
+      transition: box-shadow 0.22s ease, background 0.22s ease, color 0.22s ease;
+      flex-shrink: 0;
+      background: linear-gradient(135deg, #1d2027 0%, #131519 100%);
+      border: 1px solid rgba(255,255,255,0.05);
+      box-shadow:
+        2px 3px 6px rgba(0,0,0,0.55),
+        inset 1px 1px 0 rgba(255,255,255,0.04),
+        inset -1px -1px 0 rgba(0,0,0,0.4);
+      text-decoration: none;
+      padding: 0;
+      margin: 0;
+      box-sizing: border-box;
+    }
+    a.footer-settings:hover,
+    button.footer-copy-btn:hover {
+      background:
+        radial-gradient(ellipse 125% 95% at 28% 16%, rgba(255,255,255,0.14) 0%, transparent 52%),
+        linear-gradient(135deg, #1d2027 0%, #131519 100%);
+      box-shadow:
+        2px 4px 8px rgba(0,0,0,0.48),
+        inset 3px 3px 7px rgba(255,255,255,0.07),
+        inset -2px -2px 5px rgba(0,0,0,0.42);
+    }
+    .footer-settings svg,
+    .footer-copy-btn svg {
+      width: 11px;
+      height: 11px;
+    }
+    button.footer-copy-btn.copied {
+      color: rgba(134,239,172,0.95);
     }
     a.link { color: rgba(96,165,250,0.95); text-decoration: none; }
     a.link:hover { text-decoration: underline; }
@@ -1192,24 +1195,25 @@ function renderFooterQuickPrefs() {
   const sqActive = preferences.showQuotes;
   return `
     <div class="footer-quick-prefs">
-      <button class="footer-pref-chip${rfActive ? " active" : ""}" data-action="toggle-pref" data-pref="showRedFlags" title="Toggle red flags">
-        <span class="chip-icon">${TICK_SVG}${EMPTY_SVG}</span>
-        🚩 Red flags
-      </button>
-      <button class="footer-pref-chip${sqActive ? " active" : ""}" data-action="toggle-pref" data-pref="showQuotes" title="Toggle supporting quotes">
-        <span class="chip-icon">${TICK_SVG}${EMPTY_SVG}</span>
-        💬 Quotes
-      </button>
-      <button class="copy-summary-btn" data-action="copy-summary" title="Copy summary to clipboard">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-        Copy
-      </button>
+      <div class="footer-pref-row">
+        <button type="button" class="footer-pref-toggle${rfActive ? " active" : ""}" data-action="toggle-pref" data-pref="showRedFlags" aria-pressed="${rfActive ? "true" : "false"}" title="Show red flags in summary">
+          <span class="chip-icon">${TICK_SVG}${EMPTY_SVG}</span>
+        </button>
+        <span class="footer-pref-label">🚩 Red flags</span>
+      </div>
+      <div class="footer-pref-row">
+        <button type="button" class="footer-pref-toggle${sqActive ? " active" : ""}" data-action="toggle-pref" data-pref="showQuotes" aria-pressed="${sqActive ? "true" : "false"}" title="Show supporting quotes">
+          <span class="chip-icon">${TICK_SVG}${EMPTY_SVG}</span>
+        </button>
+        <span class="footer-pref-label">💬 Quotes</span>
+      </div>
     </div>
   `;
 }
 const EXTENSION_LOGO_URL = (() => { try { return chrome.runtime.getURL("icons/icon48.png"); } catch (e) { return ""; } })();
 /** Square tile grid — reads “settings / menu” without a circular gear */
 const SETTINGS_TILE_ICON = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.75"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.75"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.75"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.75"/></svg>`;
+const COPY_SUMMARY_SVG = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
 
 async function renderLoading(url) {
   clearSummarySnapshot();
@@ -1251,7 +1255,7 @@ function truncateUrl(url, maxLen = 50) {
 }
 
 // Get usage stats and render footer
-// isSummaryView: true  → include quick-pref chips + copy button
+// isSummaryView: true → quick prefs row + copy icon beside settings tile
 async function getStatsFooter(currentSummaryUrl = null, isSummaryView = false) {
   const quickPrefs = isSummaryView ? renderFooterQuickPrefs() : "";
 
@@ -1267,6 +1271,7 @@ async function getStatsFooter(currentSummaryUrl = null, isSummaryView = false) {
           <a class="footer-settings" data-action="open-options" title="Open extension options">
             ${SETTINGS_TILE_ICON}
           </a>
+          ${isSummaryView ? `<button type="button" class="footer-copy-btn" data-action="copy-summary" title="Copy summary to clipboard">${COPY_SUMMARY_SVG}</button>` : ""}
         </div>
       </div>
     `;
@@ -1332,6 +1337,7 @@ async function getStatsFooter(currentSummaryUrl = null, isSummaryView = false) {
           <a class="footer-settings" data-action="open-options" title="Open extension options">
             ${SETTINGS_TILE_ICON}
           </a>
+          ${isSummaryView ? `<button type="button" class="footer-copy-btn" data-action="copy-summary" title="Copy summary to clipboard">${COPY_SUMMARY_SVG}</button>` : ""}
         </div>
       </div>
     `;
@@ -1350,6 +1356,7 @@ async function getStatsFooter(currentSummaryUrl = null, isSummaryView = false) {
           <a class="footer-settings" data-action="open-options" title="Open extension options">
             ${SETTINGS_TILE_ICON}
           </a>
+          ${isSummaryView ? `<button type="button" class="footer-copy-btn" data-action="copy-summary" title="Copy summary to clipboard">${COPY_SUMMARY_SVG}</button>` : ""}
         </div>
       </div>
     `;
@@ -1483,7 +1490,7 @@ async function renderError(errMsg, url) {
   const footer = await getStatsFooter();
   UI.popover.innerHTML = `
     <div class="header">
-      <button class="popover-close" data-action="close-popover" title="Close">&#x2715;</button>
+      <button type="button" class="popover-close" data-action="close-popover" title="Close" aria-label="Close">x</button>
       <div class="title">${escapeHtml(headerTitle)}</div>
       ${headerExtra}
     </div>
@@ -1500,7 +1507,7 @@ async function renderClickToLoad(element) {
   const footer = await getStatsFooter();
   UI.popover.innerHTML = `
     <div class="header">
-      <button class="popover-close" data-action="close-popover" title="Close">&#x2715;</button>
+      <button type="button" class="popover-close" data-action="close-popover" title="Close" aria-label="Close">x</button>
       <div class="title">Click to load content</div>
       <div class="header-right">
         <div class="badge">info</div>
@@ -1542,7 +1549,7 @@ async function renderSummary(summary, url, fromCache) {
 
   UI.popover.innerHTML = `
     <div class="header">
-      <button class="popover-close" data-action="close-popover" title="Close">&#x2715;</button>
+      <button type="button" class="popover-close" data-action="close-popover" title="Close" aria-label="Close">x</button>
       <div class="title" title="${escapeAttr(title)}">${escapeHtml(title)}</div>
       <div class="header-right">
         <span class="confidence-label">Confidence:</span>
@@ -1957,11 +1964,7 @@ UI.popover.addEventListener("click", (e) => {
         if (current.lastSummaryUrl) lines.push("\nSource: " + current.lastSummaryUrl);
         navigator.clipboard.writeText(lines.join("\n")).then(() => {
           btn.classList.add("copied");
-          btn.textContent = "Copied!";
-          setTimeout(() => {
-            btn.classList.remove("copied");
-            btn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy`;
-          }, 2000);
+          setTimeout(() => btn.classList.remove("copied"), 1600);
         }).catch(() => {});
       }
       return;
@@ -2421,37 +2424,23 @@ async function refreshSummaryIfVisible() {
 async function refreshFooterIfVisible() {
   try {
     if (!UI.popover || !UI.popover.shadowRoot) {
-      return; // Popover not visible
+      return;
     }
-    
-    const footerElement = UI.popover.shadowRoot.querySelector(".footer-stats");
-    if (!footerElement) {
-      return; // Footer not present
+
+    const footerStats = UI.popover.shadowRoot.querySelector(".footer-stats");
+    if (!footerStats) {
+      return;
     }
-    
-    // Get current URL from the popover's "View source" link or current state
+
     const viewSourceLink = UI.popover.shadowRoot.querySelector('a[data-action="view-source"]');
     const currentUrl = viewSourceLink?.getAttribute("href") || current.url || null;
-    
-    // Get fresh footer HTML with updated usage count
-    const newFooter = await getStatsFooter(currentUrl);
-    
-    // Replace the footer element
-    if (footerElement && footerElement.parentNode) {
-      footerElement.outerHTML = newFooter;
-      
-      // Re-attach event listeners for the settings button
-      const settingsBtn = UI.popover.shadowRoot.querySelector('.footer-settings[data-action="open-options"]');
-      if (settingsBtn) {
-        settingsBtn.addEventListener("click", (e) => {
-          e.preventDefault();
-          try {
-            chrome.runtime.sendMessage({ type: "open_options" }).catch(() => {});
-          } catch (err) {
-            if (!isContextInvalidatedError(err)) throw err;
-          }
-        });
-      }
+    const isSummary = !!UI.popover.shadowRoot.querySelector(".summary-content-reveal");
+    const html = await getStatsFooter(currentUrl, isSummary);
+    const wrap = document.createElement("div");
+    wrap.innerHTML = html.trim();
+    const nextStats = wrap.querySelector(".footer-stats");
+    if (nextStats) {
+      footerStats.innerHTML = nextStats.innerHTML;
     }
   } catch (e) {
     // Silently fail - footer refresh is optional
