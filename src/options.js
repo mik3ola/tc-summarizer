@@ -1102,35 +1102,57 @@ deleteAccountModalConfirm?.addEventListener("click", async () => {
 
 document.getElementById("deleteAccountBtn")?.addEventListener("click", showDeleteAccountModal);
 
-// Check for query parameters (e.g., ?upgrade=true)
-function handleQueryParams() {
+// Check for upgrade deep-link via ?upgrade=true or storage flag (Safari openOptionsPage)
+async function handleQueryParams() {
   const params = new URLSearchParams(window.location.search);
-  
-  if (params.get("upgrade") === "true") {
-    // Wait a moment for the page to load, then trigger upgrade
-    setTimeout(async () => {
-      // Check if user is logged in
-      const { supabaseSession } = await chrome.storage.local.get(["supabaseSession"]);
-      
-      if (supabaseSession?.access_token) {
-        // User is logged in, trigger upgrade flow
-        upgradeBtn?.click();
-      } else {
-        // User not logged in, show login form and info
-        authFormEl?.classList.remove("hidden");
-        showModal("info", "Sign in to upgrade", "Please sign in or create an account first, then click the 'Upgrade to Pro' button.");
-      }
-      
-      // Clear the query param from URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }, 500);
+  const fromQuery = params.get("upgrade") === "true";
+  const { openUpgradeIntent } = await chrome.storage.local.get(["openUpgradeIntent"]);
+  const shouldUpgrade = fromQuery || !!openUpgradeIntent;
+
+  if (!shouldUpgrade) return;
+
+  if (openUpgradeIntent) {
+    await chrome.storage.local.remove(["openUpgradeIntent"]);
   }
+
+  // Wait a moment for the page to load, then trigger upgrade
+  setTimeout(async () => {
+    const { supabaseSession } = await chrome.storage.local.get(["supabaseSession"]);
+
+    if (supabaseSession?.access_token) {
+      upgradeBtn?.click();
+    } else {
+      authFormEl?.classList.remove("hidden");
+      showModal("info", "Sign in to upgrade", "Please sign in or create an account first, then click the 'Upgrade to Pro' button.");
+    }
+
+    if (fromQuery) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, 500);
 }
 
 // Initialize logo
 const logoImg = document.getElementById("logoImg");
 if (logoImg) {
   logoImg.src = chrome.runtime.getURL("icons/icon48.png");
+}
+
+// Touch / iOS: clarify auto-summarize uses tap
+try {
+  const ua = navigator.userAgent || "";
+  const touchFirst =
+    window.matchMedia?.("(pointer: coarse)")?.matches ||
+    /iPhone|iPad|iPod/i.test(ua) ||
+    (/Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1);
+  if (touchFirst) {
+    const label = document.getElementById("autoHoverLabel");
+    const hint = document.getElementById("autoHoverHint");
+    if (label) label.textContent = "Auto-summarise on tap";
+    if (hint) hint.textContent = "Automatically show summary when tapping legal links";
+  }
+} catch {
+  // ignore
 }
 
 // Initialize
