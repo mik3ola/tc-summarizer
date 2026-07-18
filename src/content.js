@@ -1,6 +1,22 @@
 let HOVER_DELAY_MS = 750;
 const POPOVER_MAX_WIDTH_PX = 420;
 
+/** Prefer tap-to-summarize on phones/tablets and coarse pointers (iOS Safari). */
+function prefersTouchSummarize() {
+  try {
+    if (window.matchMedia?.("(pointer: coarse)")?.matches) return true;
+    const ua = navigator.userAgent || "";
+    if (/iPhone|iPad|iPod/i.test(ua)) return true;
+    // iPadOS 13+ may report as Macintosh but still be touch-first
+    if (/Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+const TOUCH_SUMMARIZE = prefersTouchSummarize();
+
 // Check if extension context is still valid (false after extension reload)
 function isExtensionContextValid() {
   try {
@@ -1827,27 +1843,27 @@ function closePopover() {
   hidePopover();
 }
 
-// Global event delegation - hover to trigger, hover out to dismiss
+function findLegalAnchorFromEventTarget(target) {
+  if (!target || !target.closest) return null;
+  const el = target.closest('a, button, [role="link"], [role="button"]');
+  if (!el || !isLikelyLegalLink(el)) return null;
+  return el;
+}
+
+// Desktop: hover to trigger. Touch/iOS uses tap path below instead.
 document.addEventListener(
   "mouseover",
   (e) => {
-    // Skip on non-HTML documents (SVG/XML viewers) where we have no UI
     if (!UI.host) return;
-    // Check if auto-hover is enabled
+    if (TOUCH_SUMMARIZE) return; // avoid hover+tap double-fire on touch laptops/tablets
     if (!preferences.autoHover) return;
-    
-    // Try to find a legal link/button near the hover target
-    const target = e.target;
-    if (!target || !target.closest) return;
-    
-    // Check for <a>, <button>, or elements with link/button role
-    const el = target.closest('a, button, [role="link"], [role="button"]');
+
+    const el = findLegalAnchorFromEventTarget(e.target);
     if (!el) return;
-    if (!isLikelyLegalLink(el)) return;
-    
+
     // Don't restart if already showing for this element
     if (current.anchor === el && UI.popover.style.display === "block") return;
-    
+
     startHover(el);
   },
   true
@@ -1858,14 +1874,41 @@ document.addEventListener(
 document.addEventListener(
   "mouseout",
   (e) => {
-    if (!UI.host) return;
-    const target = e.target;
-    if (!target || !target.closest) return;
-    const el = target.closest('a, button, [role="link"], [role="button"]');
+    if (!UI.host || TOUCH_SUMMARIZE) return;
+    const el = findLegalAnchorFromEventTarget(e.target);
     // Only cancel a pending (not-yet-shown) timer; if the popover is already visible, do nothing.
     if (el && el === current.anchor && UI.popover.style.display !== "block") {
       clearHoverTimer();
     }
+  },
+  true
+);
+
+// Touch / iOS Safari: tap a legal link to summarize (hover is unreliable).
+// First tap opens the summary; use "View source" in the popover to open the real page.
+document.addEventListener(
+  "click",
+  (e) => {
+    if (!UI.host || !TOUCH_SUMMARIZE) return;
+    if (!preferences.autoHover) return;
+    if (UI.host === e.target || UI.host.contains(e.target)) return;
+
+    const el = findLegalAnchorFromEventTarget(e.target);
+    if (!el) return;
+
+    // Already open for this anchor — let outside-click handler / popover handle it
+    if (current.anchor === el && UI.popover.style.display === "block") {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    const prevDelay = HOVER_DELAY_MS;
+    HOVER_DELAY_MS = 0;
+    startHover(el);
+    HOVER_DELAY_MS = prevDelay;
   },
   true
 );
@@ -1879,6 +1922,8 @@ document.addEventListener(
     if (!UI.host) return;
     if (UI.popover.style.display !== "block") return;
     if (UI.host === e.target || UI.host.contains(e.target)) return;
+    // Touch path already handled legal-link taps above; don't immediately close
+    if (TOUCH_SUMMARIZE && findLegalAnchorFromEventTarget(e.target)) return;
     closePopover();
   },
   true
