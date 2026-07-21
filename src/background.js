@@ -1,3 +1,6 @@
+// Pure helpers (normalizeUrl, safeJsonParse) — must load before this worker body runs.
+importScripts("parse-utils.js");
+
 // Configuration
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -42,16 +45,6 @@ async function openOptionsPage({ upgrade = false } = {}) {
   );
   if (chrome.tabs?.create) {
     await chrome.tabs.create({ url: optionsUrl });
-  }
-}
-
-function normalizeUrl(url) {
-  try {
-    const u = new URL(url);
-    u.hash = "";
-    return u.toString();
-  } catch {
-    return url;
   }
 }
 
@@ -272,24 +265,6 @@ async function callOpenAI({ apiKey, model, input }) {
 
   if (!outputText) throw new Error("Empty model response.");
   return outputText;
-}
-
-function safeJsonParse(maybeJson) {
-  try {
-    // Handle potential markdown code blocks
-    let cleaned = maybeJson.trim();
-    if (cleaned.startsWith("```json")) {
-      cleaned = cleaned.slice(7);
-    } else if (cleaned.startsWith("```")) {
-      cleaned = cleaned.slice(3);
-    }
-    if (cleaned.endsWith("```")) {
-      cleaned = cleaned.slice(0, -3);
-    }
-    return { ok: true, value: JSON.parse(cleaned.trim()) };
-  } catch (e) {
-    return { ok: false, error: e };
-  }
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
