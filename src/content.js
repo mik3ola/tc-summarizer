@@ -3,11 +3,18 @@ const POPOVER_MAX_WIDTH_PX = 420;
 
 /** Prefer tap-to-summarize on phones/tablets and coarse pointers (iOS Safari). */
 function prefersTouchSummarize() {
+  const utils = globalThis.TermsDigestLegalLinkUtils;
+  if (utils?.prefersTouchSummarize) {
+    return utils.prefersTouchSummarize({
+      matchMedia: window.matchMedia?.bind(window),
+      userAgent: navigator.userAgent || "",
+      maxTouchPoints: navigator.maxTouchPoints || 0
+    });
+  }
   try {
     if (window.matchMedia?.("(pointer: coarse)")?.matches) return true;
     const ua = navigator.userAgent || "";
     if (/iPhone|iPad|iPod/i.test(ua)) return true;
-    // iPadOS 13+ may report as Macintosh but still be touch-first
     if (/Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1) return true;
     return false;
   } catch {
@@ -43,6 +50,8 @@ let preferences = {
 
 /** Coerce checkbox prefs if storage ever has strings */
 function normalizePrefsPatch(patch) {
+  const utils = globalThis.TermsDigestLegalLinkUtils;
+  if (utils?.normalizePrefsPatch) return utils.normalizePrefsPatch(patch);
   if (!patch || typeof patch !== "object") return {};
   const out = { ...patch };
   for (const key of ["autoHover", "showRedFlags", "showQuotes", "enableCaching"]) {
@@ -74,179 +83,31 @@ async function loadPreferences() {
 // Load preferences on startup
 loadPreferences();
 
-// Standalone keywords — flagging a link as legal as soon as any of these appear
-// in its visible text / aria / title / id.
-const KEYWORDS = [
-  "terms",
-  "terms of service",
-  "terms & conditions",
-  "terms and conditions",
-  "t&c",
-  "t & c",
-  "privacy",
-  "privacy policy",
-  "privacy statement",
-  "refund",
-  "refund policy",
-  "return",
-  "returns",
-  "return policy",
-  "exchange",
-  "exchanges",
-  "cancellation",
-  "cancellation policy",
-  "eula",
-  "end user license",
-  "licence agreement",
-  "license agreement",
-  "legal",
-  "legal notice",
-  "cookie policy",
-  "data protection"
-];
-
-// Ambiguous keywords that frequently appear in non-legal contexts (e.g. the
-// "Subscriptions" tab on YouTube, "Billing" on a banking app, "Cookies" on a
-// recipe site). These only flag the link if a qualifier is *also* present —
-// turning bare "Subscriptions" into a no-op while still catching things like
-// "Subscription terms" or "Manage subscription".
-const QUALIFIED_KEYWORDS = [
-  {
-    word: "subscription",
-    qualifiers: ["terms", "agreement", "policy", "cancel", "manage", "billing"]
-  },
-  {
-    word: "subscriptions",
-    qualifiers: ["terms", "agreement", "policy", "cancel", "manage", "billing"]
-  },
-  {
-    word: "billing",
-    qualifiers: ["terms", "policy", "dispute", "support", "agreement"]
-  },
-  {
-    word: "cookie",
-    qualifiers: ["policy", "notice", "settings", "consent", "preferences"]
-  },
-  {
-    word: "cookies",
-    qualifiers: ["policy", "notice", "settings", "consent", "preferences"]
-  }
-];
-
-function normalizeText(str) {
-  // Normalize whitespace, ampersands, and common variations
-  // Also split compound words like "termsandconditions" → "terms and conditions"
-  return (str || "")
-    .toLowerCase()
-    .replace(/&amp;/g, "&")
-    .replace(/termsandconditions/g, "terms and conditions")
-    .replace(/privacystatement/g, "privacy statement")
-    .replace(/privacypolicy/g, "privacy policy")
-    .replace(/cookiepolicy/g, "cookie policy")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+// Shared legal-link helpers (src/legal-link-utils.js, loaded first in manifest).
+const {
+  KEYWORDS,
+  isLikelyLegalLinkSignals
+} = globalThis.TermsDigestLegalLinkUtils;
 
 function isLikelyLegalLink(el) {
   if (!el) return false;
-  
-  // Support <a>, <button>, and clickable elements
-  const tagName = el.tagName?.toUpperCase();
-  const isLink = tagName === "A";
-  const isButton = tagName === "BUTTON";
-  const isClickable = el.getAttribute("role") === "link" || el.getAttribute("role") === "button" || el.onclick || el.getAttribute("onclick");
-  
-  if (!isLink && !isButton && !isClickable) return false;
-  
-  // Skip code elements - avoid false positives from code snippets containing "return", "terms", etc.
-  const isInsideCode = el.closest("pre, code, .hljs, .highlight, .prism-code, [class*='code'], [class*='syntax']");
-  if (isInsideCode) return false;
-  
-  // Skip if element itself looks like code
-  // Note: on SVG elements, el.className is an SVGAnimatedString object (not a string),
-  // so we normalize to a plain string before calling toLowerCase().
+
   const rawClass = typeof el.className === "string"
     ? el.className
     : (el.className?.baseVal || "");
-  const elClass = rawClass.toLowerCase();
-  if (elClass.includes("code") || elClass.includes("syntax") || elClass.includes("hljs") || elClass.includes("prism")) {
-    return false;
-  }
-  
-  // Get the URL (if any)
-  const href = el.getAttribute("href") || el.getAttribute("data-href") || "";
-  
-  // For actual links, skip pure anchors (but allow defined anchors like #terms-section)
-  // BUT: allow javascript:void(0) if it matches legal keywords (might be modal trigger)
-  if (isLink && href) {
-    if (href === "#") return false;
-    // Don't filter out javascript:void(0) - might be a modal trigger we can handle
-  }
-  
-  // Gather text to match against
-  const txt = normalizeText(el.textContent);
-  const aria = normalizeText(el.getAttribute("aria-label"));
-  const title = normalizeText(el.getAttribute("title"));
-  const id = normalizeText(el.getAttribute("id") || "");
 
-  // Visible-text signals (most reliable): link text, aria-label, title, id.
-  // URLs are NOT included here to avoid false positives from retail sites where
-  // navigation URLs contain words like "return" or "terms" as unrelated segments.
-  let visibleCombined = `${txt} ${aria} ${title} ${id}`;
-  if (!visibleCombined.trim() && !href) return false;
-
-  // Skip if the text is too long (likely a code block or paragraph, not a link label)
-  if (txt.length > 100) return false;
-
-  // Filter out "termsdigest" to avoid false positives on our own branding
-  visibleCombined = visibleCombined.replace(/termsdigest/gi, "");
-
-  if (KEYWORDS.some((k) => visibleCombined.includes(k))) return true;
-
-  // Qualified keywords: only count if a supporting qualifier is also present.
-  if (
-    QUALIFIED_KEYWORDS.some(
-      ({ word, qualifiers }) =>
-        visibleCombined.includes(word) &&
-        qualifiers.some((q) => visibleCombined.includes(q))
-    )
-  ) {
-    return true;
-  }
-
-  // Fallback: match on URL ONLY if the keyword appears as a dedicated path segment
-  // near the end of the URL — e.g. "/terms", "/terms-of-service", "/privacy-policy".
-  // Rejects noisy URLs like "/womens/?return_policy=true" or "/search?q=terms".
-  return isLegalUrlPath(href);
-}
-
-// Strict URL matcher: keyword must be its own path segment (or segment-with-suffix)
-// at or near the end of the path. Query strings and fragments are ignored.
-function isLegalUrlPath(href) {
-  if (!href) return false;
-  let path = "";
-  try {
-    // Handle relative URLs by resolving against the current origin.
-    const url = new URL(href, window.location.origin);
-    path = url.pathname.toLowerCase();
-  } catch (_) {
-    // Not a resolvable URL (e.g. "javascript:void(0)"); skip URL matching.
-    return false;
-  }
-  if (!path || path === "/") return false;
-
-  // Strip trailing slash and split into segments.
-  const segments = path.replace(/\/+$/, "").split("/").filter(Boolean);
-  if (segments.length === 0) return false;
-
-  // Only inspect the last 2 segments — legitimate legal pages live near the
-  // end of the path (e.g. /help/legal/privacy-policy), not buried inside
-  // product/category structures (e.g. /terms/dresses/sale).
-  const tail = segments.slice(-2);
-
-  const segmentRegex = /^(terms|terms-of-(service|use|sale)|t-and-c|tandc|privacy|privacy-(policy|statement|notice)|cookie(s)?|cookie-policy|refund|refund-policy|return(s)?|return-policy|cancellation|cancellation-policy|legal|legal-notice|eula|end-user-license|licen[sc]e-agreement|data-protection|data-policy)$/;
-
-  return tail.some((seg) => segmentRegex.test(seg));
+  return isLikelyLegalLinkSignals({
+    tagName: el.tagName,
+    role: el.getAttribute("role"),
+    hasOnclick: !!(el.onclick || el.getAttribute("onclick")),
+    href: el.getAttribute("href") || el.getAttribute("data-href") || "",
+    text: el.textContent,
+    ariaLabel: el.getAttribute("aria-label"),
+    title: el.getAttribute("title"),
+    id: el.getAttribute("id") || "",
+    className: rawClass,
+    isInsideCode: !!el.closest("pre, code, .hljs, .highlight, .prism-code, [class*='code'], [class*='syntax']")
+  });
 }
 
 // Determine what TYPE of legal content a button/link is for
