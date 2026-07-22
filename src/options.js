@@ -256,23 +256,7 @@ function updateSubscriptionUI(subscription, email, plan, extra = {}) {
   }
 }
 
-/**
- * Returns a Date representing the start of the user's current 30-day quota period.
- * Falls back to the 1st of the current calendar month if anchorDate is unavailable.
- */
-function computePeriodStart(anchorDate) {
-  if (!anchorDate) {
-    const now = new Date();
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  }
-  const anchorMs = new Date(anchorDate + "T00:00:00Z").getTime();
-  const now = new Date();
-  const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const msPerPeriod = 30 * 24 * 60 * 60 * 1000;
-  const elapsed = Math.max(0, todayMs - anchorMs);
-  const periodsElapsed = Math.floor(elapsed / msPerPeriod);
-  return new Date(anchorMs + periodsElapsed * msPerPeriod);
-}
+// computePeriodStartDate / computePeriodStart come from period-utils.js (loaded before this file).
 
 function updateStats(cache, stats, monthlyUsage, plan, cycleAnchorDate) {
   const cacheCount = cache ? Object.keys(cache).length : 0;
@@ -307,7 +291,7 @@ function updateStats(cache, stats, monthlyUsage, plan, cycleAnchorDate) {
   // Update hint (include reset date based on user's rolling 30-day cycle)
   if (usageHintEl) {
     const now = new Date();
-    const periodStartMs = computePeriodStart(cycleAnchorDate).getTime();
+    const periodStartMs = computePeriodStartDate(cycleAnchorDate).getTime();
     const nextReset = new Date(periodStartMs + 30 * 24 * 60 * 60 * 1000);
     const resetFmt = nextReset.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
     const daysUntilReset = Math.ceil((nextReset - now) / (24 * 60 * 60 * 1000));
@@ -629,7 +613,7 @@ async function refreshSupabaseStatusIfPossible(data) {
 
             // Fetch usage for the current 30-day period
             let monthlyUsage = 0;
-            const retryPeriodStart = computePeriodStart(cycleAnchorDate).toISOString().slice(0, 10);
+            const retryPeriodStart = computePeriodStart(cycleAnchorDate);
             const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${retryPeriodStart}`;
             
             try {
@@ -701,7 +685,7 @@ async function refreshSupabaseStatusIfPossible(data) {
 
     // Fetch usage for the current 30-day period
     let monthlyUsage = 0;
-    const periodStart = computePeriodStart(cycleAnchorDate).toISOString().slice(0, 10);
+    const periodStart = computePeriodStart(cycleAnchorDate);
     const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${periodStart}`;
     
     try {
