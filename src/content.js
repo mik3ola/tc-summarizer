@@ -249,29 +249,7 @@ function isLegalUrlPath(href) {
   return tail.some((seg) => segmentRegex.test(seg));
 }
 
-// Determine what TYPE of legal content a button/link is for
-function getLegalContentType(element) {
-  const text = (element.textContent || "").toLowerCase();
-  const id = (element.getAttribute("id") || "").toLowerCase();
-  const combined = `${text} ${id}`;
-  
-  if (combined.includes("privacy") || combined.includes("privacystatement") || combined.includes("privacy-statement")) {
-    return "privacy";
-  }
-  if (combined.includes("terms") || combined.includes("termsandconditions") || combined.includes("conditions") || combined.includes("eula")) {
-    return "terms";
-  }
-  if (combined.includes("cookie")) {
-    return "cookie";
-  }
-  if (combined.includes("security")) {
-    return "security";
-  }
-  if (combined.includes("refund") || combined.includes("cancellation") || combined.includes("return")) {
-    return "refund";
-  }
-  return "legal"; // generic
-}
+// getLegalContentType comes from legal-content-type.js (loaded before this file).
 
 function findModalContent(element) {
   const contentType = getLegalContentType(element);
