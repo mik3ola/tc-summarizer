@@ -1,3 +1,6 @@
+// Pure helpers (computePeriodStart) — must load before this worker body runs.
+importScripts("period-utils.js");
+
 // Configuration
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -676,21 +679,7 @@ async function refreshSupabaseStatusIfPossible(data) {
       // Silently fail - will fall back to calendar month
     }
 
-    // Compute period start from anchor (mirrors periodStart() in the edge function)
-    function computePeriodStart(anchorDate) {
-      if (!anchorDate) {
-        const now = new Date();
-        return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
-      }
-      const anchorMs = new Date(anchorDate + "T00:00:00Z").getTime();
-      const now = new Date();
-      const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-      const msPerPeriod = 30 * 24 * 60 * 60 * 1000;
-      const elapsed = Math.max(0, todayMs - anchorMs);
-      const periodsElapsed = Math.floor(elapsed / msPerPeriod);
-      return new Date(anchorMs + periodsElapsed * msPerPeriod).toISOString().slice(0, 10);
-    }
-
+    // Compute period start from anchor (shared helper; mirrors summarize periodStart when anchored)
     const periodStart = computePeriodStart(cycleAnchorDate);
     const usageQs = `?select=summaries_count&user_id=eq.${encodeURIComponent(userId)}&month_start=eq.${periodStart}`;
     
