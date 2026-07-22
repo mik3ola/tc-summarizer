@@ -6,6 +6,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@13.10.0?target=deno";
+import {
+  authorizeCron,
+  buildCycleAnchorReset,
+  buildExpiredDowngradeChangeLog,
+  buildExpiredDowngradeUpdate,
+} from "./lib.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,10 +36,7 @@ serve(async (req: Request) => {
   }
 
   const cronSecret = Deno.env.get("CRON_SECRET");
-  const authHeader = req.headers.get("authorization") || "";
-  const providedSecret = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-
-  if (!cronSecret || providedSecret !== cronSecret) {
+  if (!authorizeCron(req.headers.get("authorization"), cronSecret)) {
     return json({ error: "Unauthorized" }, 401);
   }
 
@@ -46,7 +49,8 @@ serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const now = new Date().toISOString();
+    const now = new Date();
+    const nowIso = now.toISOString();
 
     const { data: subs, error } = await supabase
       .from("subscriptions")
@@ -54,7 +58,7 @@ serve(async (req: Request) => {
       .eq("status", "active")
       .eq("auto_renew", false)
       .not("downgrade_scheduled_for", "is", null)
-      .lte("downgrade_scheduled_for", now);
+      .lte("downgrade_scheduled_for", nowIso);
 
     if (error) {
       console.error("Query error:", error);
@@ -80,16 +84,7 @@ serve(async (req: Request) => {
 
         const { error: updateErr } = await supabase
           .from("subscriptions")
-          .update({
-            status: "canceled",
-            plan: "free",
-            auto_renew: false,
-            downgrade_scheduled_for: null,
-            downgrade_reason: "expired",
-            stripe_subscription_id: null,
-            current_period_end: null,
-            updated_at: new Date().toISOString(),
-          })
+          .update(buildExpiredDowngradeUpdate(now))
           .eq("user_id", sub.user_id);
 
         if (updateErr) throw updateErr;
@@ -99,18 +94,10 @@ serve(async (req: Request) => {
         // of their last Pro period (which could already be > the free limit of 5).
         await supabase
           .from("profiles")
-          .update({ cycle_anchor_date: new Date().toISOString().slice(0, 10) })
+          .update(buildCycleAnchorReset(now))
           .eq("user_id", sub.user_id);
 
-        await supabase.from("subscription_changes").insert({
-          user_id: sub.user_id,
-          action: "downgrade_now",
-          reason: "expired",
-          previous_status: sub.status,
-          previous_plan: sub.plan,
-          new_status: "canceled",
-          new_plan: "free",
-        });
+        await supabase.from("subscription_changes").insert(buildExpiredDowngradeChangeLog(sub));
 
         processed.push(sub.user_id);
       } catch (e) {
