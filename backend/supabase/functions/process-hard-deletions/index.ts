@@ -5,6 +5,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authorizeCron, buildHardDeletionResult } from "./lib.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,10 +30,7 @@ serve(async (req: Request) => {
   }
 
   const cronSecret = Deno.env.get("CRON_SECRET");
-  const authHeader = req.headers.get("authorization") || "";
-  const providedSecret = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-
-  if (!cronSecret || providedSecret !== cronSecret) {
+  if (!authorizeCron(req.headers.get("authorization"), cronSecret)) {
     return json({ error: "Unauthorized" }, 401);
   }
 
@@ -75,11 +73,7 @@ serve(async (req: Request) => {
       console.error("Deletion errors:", JSON.stringify(errors));
     }
 
-    return json({
-      success: true,
-      deleted: deleted.length,
-      errors: errors.length,
-    });
+    return json(buildHardDeletionResult(deleted, errors));
   } catch (err) {
     console.error("Cron error:", err);
     return json({ error: (err as Error).message }, 500);

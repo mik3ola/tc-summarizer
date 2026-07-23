@@ -273,54 +273,44 @@ function getLegalContentType(element) {
   return "legal"; // generic
 }
 
+const ModalDiscovery =
+  (typeof globalThis !== "undefined" && globalThis.TermsDigestModalDiscovery) ||
+  {};
+
 function findModalContent(element) {
   const contentType = getLegalContentType(element);
-  
+  const {
+    getTypeSpecificSelectors,
+    normalizeModalIdBase,
+    buildIdBasedModalSelectors,
+    visibleModalMatchesContentType,
+    scoreElementForContentType,
+    isSubstantialText,
+    hasKeywordRichText,
+    getGenericLegalSelectors
+  } = ModalDiscovery;
+
   // Strategy 1: Look for data-target or data-bs-target (Bootstrap)
   const modalTarget = element.getAttribute("data-target") || element.getAttribute("data-bs-target") || "";
   if (modalTarget && modalTarget.startsWith("#")) {
     const modal = document.querySelector(modalTarget);
     if (modal) return modal;
   }
-  
+
   // Strategy 2: Look for content that SPECIFICALLY matches the button's intent
   const elementId = element.getAttribute("id") || "";
-  
-  // Build selectors specific to this content type
-  const typeSpecificSelectors = [];
-  if (contentType === "privacy") {
-    typeSpecificSelectors.push(
-      '.privacy-statement', '.privacy-policy', '.privacy-notice', '.privacy-content',
-      'section[class*="privacy"]', 'div[class*="privacy"]',
-      '[id*="privacy"]', '[class*="privacystatement"]', '[class*="privacy-statement"]'
-    );
-  } else if (contentType === "terms") {
-    typeSpecificSelectors.push(
-      '.terms-conditions', '.terms-and-conditions', '.terms-content', '.terms-statement',
-      '.termsandconditions', '.terms-of-use', '.terms-of-service',
-      'section[class*="terms"]', 'div[class*="terms"]',
-      '[id*="terms"]', '[class*="termsandconditions"]', '[class*="conditions"]'
-    );
-  } else if (contentType === "cookie") {
-    typeSpecificSelectors.push(
-      '.cookie-policy', '.cookie-notice', '.cookie-content', '.cookies',
-      'section[class*="cookie"]', 'div[class*="cookie"]', '[id*="cookie"]'
-    );
-  } else if (contentType === "security") {
-    typeSpecificSelectors.push(
-      '.security-policy', '.security-notice', '.security-content', '.security-statement',
-      'section[class*="security"]', 'div[class*="security"]', '[id*="security"]'
-    );
-  }
-  
-  // Try type-specific selectors FIRST
+  const typeSpecificSelectors =
+    typeof getTypeSpecificSelectors === "function"
+      ? getTypeSpecificSelectors(contentType)
+      : [];
+
   for (const selector of typeSpecificSelectors) {
     try {
       const candidates = document.querySelectorAll(selector);
       for (const candidate of candidates) {
         if (candidate === element) continue;
         const text = (candidate.textContent || "").trim();
-        if (text.length > 100) {
+        if (typeof isSubstantialText === "function" ? isSubstantialText(text, 100) : text.length > 100) {
           return candidate;
         }
       }
@@ -328,25 +318,23 @@ function findModalContent(element) {
       // Invalid selector, skip
     }
   }
-  
+
   // Strategy 3: Try ID-based patterns
   if (elementId) {
-    const baseId = elementId
-      .replace(/-link$/, "")
-      .replace(/-button$/, "")
-      .replace(/^footer-/, "")
-      .replace(/^welcome-overlay-/, "");
-    
-    const candidates = [
-      `#${baseId}-modal`, `#${baseId}-overlay`, `#${baseId}-dialog`, `#${baseId}-content`,
-      `#${baseId}`, `.${baseId}`, `[class*="${baseId}"]`, `section.${baseId}`
-    ];
+    const baseId =
+      typeof normalizeModalIdBase === "function"
+        ? normalizeModalIdBase(elementId)
+        : elementId;
+    const candidates =
+      typeof buildIdBasedModalSelectors === "function"
+        ? buildIdBasedModalSelectors(baseId)
+        : [];
     for (const selector of candidates) {
       try {
         const modal = document.querySelector(selector);
         if (modal && modal !== element) {
           const text = (modal.textContent || "").trim();
-          if (text.length > 100) {
+          if (typeof isSubstantialText === "function" ? isSubstantialText(text, 100) : text.length > 100) {
             return modal;
           }
         }
@@ -355,74 +343,68 @@ function findModalContent(element) {
       }
     }
   }
-  
+
   // Strategy 4: Look for aria-controls or aria-describedby
   const ariaControls = element.getAttribute("aria-controls") || element.getAttribute("aria-describedby") || "";
   if (ariaControls) {
     const modal = document.querySelector(`#${ariaControls}`);
     if (modal) return modal;
   }
-  
+
   // Strategy 5: Look for visible modals that match our content type
   const visibleModals = document.querySelectorAll('.modal.show, .overlay.show, [role="dialog"], .modal:not([style*="display: none"])');
   for (const modal of visibleModals) {
     const modalText = (modal.textContent || "").toLowerCase();
     const modalClass = (modal.className || "").toLowerCase();
     const modalId = (modal.id || "").toLowerCase();
-    
-    // Check if this modal matches our content type
-    if (contentType === "privacy" && (modalText.includes("privacy") || modalClass.includes("privacy") || modalId.includes("privacy"))) {
-      if (modalText.length > 100) return modal;
-    }
-    if (contentType === "terms" && (modalText.includes("terms") || modalClass.includes("terms") || modalId.includes("terms"))) {
-      if (modalText.length > 100) return modal;
-    }
+    const matches =
+      typeof visibleModalMatchesContentType === "function"
+        ? visibleModalMatchesContentType(contentType, {
+            text: modalText,
+            className: modalClass,
+            id: modalId
+          })
+        : false;
+    if (matches && modalText.length > 100) return modal;
   }
-  
+
   // Strategy 6: Search ALL elements for content matching our type (last resort)
-  const allElements = document.querySelectorAll('section, div, article, main');
+  const allElements = document.querySelectorAll("section, div, article, main");
   let bestMatch = null;
   let bestMatchScore = 0;
-  
+
   for (const el of allElements) {
     if (el === element) continue;
     const text = (el.textContent || "").toLowerCase();
     const className = (el.className || "").toLowerCase();
     const id = (el.id || "").toLowerCase();
-    
-    // Score based on content type match
-    let score = 0;
-    if (contentType === "privacy") {
-      if (className.includes("privacy") || id.includes("privacy")) score += 10;
-      if (text.includes("privacy policy") || text.includes("privacy notice")) score += 5;
-    } else if (contentType === "terms") {
-      if (className.includes("terms") || id.includes("terms")) score += 10;
-      if (text.includes("terms of use") || text.includes("terms and conditions")) score += 5;
-    }
-    
-    // Must have substantial content
+    const score =
+      typeof scoreElementForContentType === "function"
+        ? scoreElementForContentType(contentType, { text, className, id })
+        : 0;
+
     if (text.length > 200 && score > bestMatchScore) {
       bestMatch = el;
       bestMatchScore = score;
     }
   }
-  
+
   if (bestMatch && bestMatchScore > 0) {
     return bestMatch;
   }
-  
+
   // Strategy 7: Generic fallback - any legal content
-  const legalSelectors = [
-    '.legal-content', '.legal-statement', '.legal-notice',
-    'section[class*="legal"]', 'div[class*="legal"]'
-  ];
+  const legalSelectors =
+    typeof getGenericLegalSelectors === "function"
+      ? getGenericLegalSelectors()
+      : [];
   for (const selector of legalSelectors) {
     try {
       const candidates = document.querySelectorAll(selector);
       for (const candidate of candidates) {
         if (candidate === element) continue;
         const text = (candidate.textContent || "").trim();
-        if (text.length > 100) {
+        if (typeof isSubstantialText === "function" ? isSubstantialText(text, 100) : text.length > 100) {
           return candidate;
         }
       }
@@ -430,51 +412,55 @@ function findModalContent(element) {
       // Invalid selector, skip
     }
   }
-  
-  // Strategy 7: Look for hidden modals that might contain the content
-  // Some frameworks keep modals in DOM but hidden
+
+  // Strategy 7b: Look for hidden modals that might contain the content
   const allModals = document.querySelectorAll('.modal, .overlay, [role="dialog"], [class*="modal"], [class*="overlay"]');
   for (const modal of allModals) {
     const text = (modal.textContent || "").toLowerCase();
-    // Check if it contains substantial legal content (even if hidden)
-    if (KEYWORDS.some(k => text.includes(k)) && text.length > 200) {
+    if (
+      typeof hasKeywordRichText === "function"
+        ? hasKeywordRichText(text, KEYWORDS, 200)
+        : KEYWORDS.some((k) => text.includes(k)) && text.length > 200
+    ) {
       return modal;
     }
   }
-  
+
   // Strategy 8: If link is inside a modal, look for sibling content or parent modal content
-  // (e.g., Terms link inside Welcome modal might load content in same modal)
   let checkParent = element.parentElement;
   let checkDepth = 0;
   while (checkParent && checkDepth < 10) {
-    // Check if parent is a modal/overlay
     const isModal = checkParent.matches && (
       checkParent.matches('.modal, .overlay, [role="dialog"]') ||
-      checkParent.className?.toLowerCase().includes('modal') ||
-      checkParent.className?.toLowerCase().includes('overlay')
+      checkParent.className?.toLowerCase().includes("modal") ||
+      checkParent.className?.toLowerCase().includes("overlay")
     );
     if (isModal) {
-      // This link is inside a modal - the content might be in this same modal
-      // or a nested modal/iframe
       const text = (checkParent.textContent || "").toLowerCase();
-      if (KEYWORDS.some(k => text.includes(k)) && text.length > 200) {
+      if (
+        typeof hasKeywordRichText === "function"
+          ? hasKeywordRichText(text, KEYWORDS, 200)
+          : KEYWORDS.some((k) => text.includes(k)) && text.length > 200
+      ) {
         return checkParent;
       }
     }
     checkParent = checkParent.parentElement;
     checkDepth++;
   }
-  
+
   // Strategy 9: Look for iframes that might contain the content
-  // Some sites load Terms in iframes
-  const iframes = document.querySelectorAll('iframe');
+  const iframes = document.querySelectorAll("iframe");
   for (const iframe of iframes) {
     try {
-      // Try to access iframe content (only works if same-origin)
       const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
       if (iframeDoc) {
         const text = (iframeDoc.body?.textContent || "").toLowerCase();
-        if (KEYWORDS.some(k => text.includes(k)) && text.length > 200) {
+        if (
+          typeof hasKeywordRichText === "function"
+            ? hasKeywordRichText(text, KEYWORDS, 200)
+            : KEYWORDS.some((k) => text.includes(k)) && text.length > 200
+        ) {
           return iframeDoc.body;
         }
       }
@@ -482,7 +468,7 @@ function findModalContent(element) {
       // Cross-origin iframe, can't access
     }
   }
-  
+
   return null;
 }
 

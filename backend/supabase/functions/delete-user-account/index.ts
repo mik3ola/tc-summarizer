@@ -5,6 +5,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@13.10.0?target=deno";
+import {
+  computeDeletionScheduledFor,
+  existingDeletionSchedule,
+  extractUserId,
+  isValidDeleteConfirmation,
+} from "./lib.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,23 +24,6 @@ function json(data: unknown, status = 200) {
     headers: { "Content-Type": "application/json", ...corsHeaders },
   });
 }
-
-function extractUserId(authHeader: string | null): string | null {
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  try {
-    const token = authHeader.replace("Bearer ", "");
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    let payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    while (payload.length % 4 !== 0) payload += "=";
-    const decoded = JSON.parse(atob(payload));
-    return decoded?.sub ?? null;
-  } catch {
-    return null;
-  }
-}
-
-const GRACE_DAYS = 30;
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -52,8 +41,7 @@ serve(async (req: Request) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const confirmation = (body?.confirmation as string)?.trim();
-    if (confirmation !== "DELETE") {
+    if (!isValidDeleteConfirmation(body?.confirmation)) {
       return json({ error: "Confirmation must be exactly 'DELETE'" }, 400);
     }
 
@@ -75,10 +63,11 @@ serve(async (req: Request) => {
       return json({ error: "Profile not found" }, 404);
     }
 
-    if (profile.deletion_scheduled_for) {
+    const alreadyScheduled = existingDeletionSchedule(profile);
+    if (alreadyScheduled) {
       return json({
         success: true,
-        deletion_scheduled_for: profile.deletion_scheduled_for,
+        deletion_scheduled_for: alreadyScheduled,
         message: "Deletion already scheduled",
       });
     }
@@ -101,9 +90,7 @@ serve(async (req: Request) => {
       }
     }
 
-    const scheduledFor = new Date();
-    scheduledFor.setDate(scheduledFor.getDate() + GRACE_DAYS);
-    const scheduledForIso = scheduledFor.toISOString();
+    const scheduledForIso = computeDeletionScheduledFor(new Date());
 
     const { error } = await supabase
       .from("profiles")
