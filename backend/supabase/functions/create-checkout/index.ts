@@ -5,6 +5,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@13.10.0?target=deno";
+import {
+  extractCheckoutUser,
+  isAlreadyProSubscriber,
+  resolveCheckoutCustomer,
+  resolveCheckoutSiteUrl,
+} from "./lib.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,20 +23,6 @@ function json(data: unknown, status = 200) {
     status,
     headers: { "Content-Type": "application/json", ...corsHeaders }
   });
-}
-
-function decodeJwtPayload(token: string): { sub: string; email?: string } | null {
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    
-    let payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    while (payload.length % 4 !== 0) payload += "=";
-    
-    return JSON.parse(atob(payload));
-  } catch {
-    return null;
-  }
 }
 
 serve(async (req: Request) => {
@@ -50,29 +42,16 @@ serve(async (req: Request) => {
     const priceId = Deno.env.get("STRIPE_PRICE_ID");
     // Use production URL by default - only use SITE_URL if explicitly set to a production domain
     // This prevents localhost from being used in production
-    const envSiteUrl = Deno.env.get("SITE_URL");
-    const siteUrl = (envSiteUrl && !envSiteUrl.includes("localhost")) 
-      ? envSiteUrl 
-      : "https://termsdigest.com";
+    const siteUrl = resolveCheckoutSiteUrl(Deno.env.get("SITE_URL"));
 
     if (!stripeSecretKey || !supabaseUrl || !serviceRoleKey || !priceId) {
       console.error("Missing config:", { stripeSecretKey: !!stripeSecretKey, supabaseUrl: !!supabaseUrl, serviceRoleKey: !!serviceRoleKey, priceId: !!priceId });
       return json({ error: "Server configuration error" }, 500);
     }
 
-    // Decode JWT from authorization header
-    const authHeader = req.headers.get("authorization") || "";
-    let userId: string | null = null;
-    let userEmail: string | null = null;
-
-    if (authHeader.startsWith("Bearer ")) {
-      const token = authHeader.replace("Bearer ", "");
-      const payload = decodeJwtPayload(token);
-      if (payload?.sub) {
-        userId = payload.sub;
-        userEmail = payload.email || null;
-      }
-    }
+    const authUser = extractCheckoutUser(req.headers.get("authorization"));
+    const userId = authUser?.userId ?? null;
+    const userEmail = authUser?.userEmail ?? null;
 
     console.log("User ID:", userId);
 
@@ -102,7 +81,7 @@ serve(async (req: Request) => {
       console.error("Subscription lookup error:", subError.message);
     }
 
-    if (subscription?.status === "active" && subscription?.plan === "pro") {
+    if (isAlreadyProSubscriber(subscription)) {
       return json({ error: "Already subscribed to Pro" }, 400);
     }
 
@@ -123,14 +102,8 @@ serve(async (req: Request) => {
       metadata: {
         user_id: userId,
       },
+      ...resolveCheckoutCustomer({ subscription, userEmail }),
     };
-
-    // Use existing Stripe customer or email
-    if (subscription?.stripe_customer_id) {
-      sessionParams.customer = subscription.stripe_customer_id;
-    } else if (userEmail) {
-      sessionParams.customer_email = userEmail;
-    }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
     console.log("Checkout session created:", session.id);
