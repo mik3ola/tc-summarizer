@@ -28,6 +28,10 @@ function isExtensionContextValid() {
 
 // True if error is due to extension reload (context invalidated)
 function isContextInvalidatedError(e) {
+  const utils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestContentSafeUtils) ||
+    null;
+  if (utils?.isContextInvalidatedError) return utils.isContextInvalidatedError(e);
   const msg = (e?.message || String(e)).toLowerCase();
   return msg.includes("context invalidated") || msg.includes("message port closed") ||
     msg.includes("reading 'get'") || msg.includes("reading 'sendmessage'") || msg.includes("reading 'runtime'");
@@ -1619,6 +1623,10 @@ function renderQuotes(quotes) {
 }
 
 function escapeHtml(s) {
+  const utils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestContentSafeUtils) ||
+    null;
+  if (utils?.escapeHtml) return utils.escapeHtml(s);
   return String(s)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -1628,6 +1636,10 @@ function escapeHtml(s) {
 }
 
 function escapeAttr(s) {
+  const utils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestContentSafeUtils) ||
+    null;
+  if (utils?.escapeAttr) return utils.escapeAttr(s);
   return escapeHtml(s).replaceAll("\n", " ");
 }
 

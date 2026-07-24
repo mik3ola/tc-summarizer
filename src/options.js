@@ -1107,11 +1107,14 @@ async function handleQueryParams() {
   const params = new URLSearchParams(window.location.search);
   const fromQuery = params.get("upgrade") === "true";
   const { openUpgradeIntent } = await chrome.storage.local.get(["openUpgradeIntent"]);
-  const shouldUpgrade = fromQuery || !!openUpgradeIntent;
+  const intent = resolveUpgradeIntent({
+    fromQuery,
+    openUpgradeIntent: !!openUpgradeIntent,
+  });
 
-  if (!shouldUpgrade) return;
+  if (!intent.shouldUpgrade) return;
 
-  if (openUpgradeIntent) {
+  if (intent.clearStorageFlag) {
     await chrome.storage.local.remove(["openUpgradeIntent"]);
   }
 
@@ -1126,7 +1129,7 @@ async function handleQueryParams() {
       showModal("info", "Sign in to upgrade", "Please sign in or create an account first, then click the 'Upgrade to Pro' button.");
     }
 
-    if (fromQuery) {
+    if (intent.clearQuery) {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, 500);
