@@ -1,3 +1,6 @@
+// Pure helpers — must load before this worker body runs.
+importScripts("upgrade-intent-utils.js");
+
 // Configuration
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -37,9 +40,7 @@ async function openOptionsPage({ upgrade = false } = {}) {
     }
   }
 
-  const optionsUrl = chrome.runtime.getURL(
-    upgrade ? "src/options.html?upgrade=true" : "src/options.html"
-  );
+  const optionsUrl = chrome.runtime.getURL(optionsPagePath(upgrade));
   if (chrome.tabs?.create) {
     await chrome.tabs.create({ url: optionsUrl });
   }
@@ -66,17 +67,17 @@ async function getSettings() {
   ]);
   
   const session = data.supabaseSession || null;
-  
+
   // Check if session is expired (with 5 minute buffer)
-  const isSessionExpired = session?.expires_at && (session.expires_at - 300000) < Date.now();
-  
+  const sessionExpired = isSessionExpired(session?.expires_at);
+
   return {
     openaiApiKey: typeof data.openaiApiKey === "string" ? data.openaiApiKey.trim() : "",
     openaiModel: typeof data.openaiModel === "string" && data.openaiModel.trim() ? data.openaiModel.trim() : DEFAULT_MODEL,
     supabaseUrl: DEFAULT_SUPABASE_URL.trim(), // Always use default
     supabaseAnonKey: DEFAULT_SUPABASE_ANON_KEY.trim(), // Always use default
     session: session,
-    isSessionExpired: isSessionExpired,
+    isSessionExpired: sessionExpired,
     subscription: data.subscription || null,
     subscriptionPlan: data.subscriptionPlan || null,
     preferences: data.preferences || {}

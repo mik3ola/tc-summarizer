@@ -11,8 +11,7 @@
 
   function isSafariExtension() {
     try {
-      const url = chrome?.runtime?.getURL?.("");
-      return typeof url === "string" && url.startsWith("safari-web-extension://");
+      return isSafariExtensionUrl(chrome?.runtime?.getURL?.(""));
     } catch {
       return false;
     }
