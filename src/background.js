@@ -1,7 +1,8 @@
+// Pure helpers — must load before this worker body runs.
+importScripts("cache-utils.js", "summary-access-utils.js");
+
 // Configuration
 const DEFAULT_MODEL = "gpt-4o-mini";
-const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
-const MAX_TEXT_CHARS = 45_000; // keep request size reasonable
 const DEFAULT_SUPABASE_URL = "https://rsxvxezucgczesplmjiw.supabase.co";
 // Anon key is safe to expose - it's a public key meant for client-side use
 // Must match the key in options.js for refresh to work
@@ -84,41 +85,30 @@ async function getSettings() {
 }
 
 async function getCache(cacheKey) {
-  // Check if caching is enabled
   const settings = await getSettings();
-  if (settings.preferences?.enableCaching === false) {
+  if (!isCachingEnabled(settings.preferences)) {
     return null; // Caching disabled
   }
-  
+
   const { summariesCache } = await chrome.storage.local.get(["summariesCache"]);
   if (!summariesCache || typeof summariesCache !== "object") return null;
-  const entry = summariesCache[cacheKey];
-  if (!entry || typeof entry !== "object") return null;
-  if (!entry.createdAt || typeof entry.createdAt !== "number") return null;
-  if (nowMs() - entry.createdAt > CACHE_TTL_MS) return null;
-  return entry;
+  return isCacheEntryFresh(summariesCache[cacheKey], nowMs(), CACHE_TTL_MS);
 }
 
 async function setCache(cacheKey, entry) {
-  // Check if caching is enabled
   const settings = await getSettings();
-  if (settings.preferences?.enableCaching === false) {
+  if (!isCachingEnabled(settings.preferences)) {
     return; // Don't cache if disabled
   }
-  
+
   const { summariesCache } = await chrome.storage.local.get(["summariesCache"]);
   const next = summariesCache && typeof summariesCache === "object" ? { ...summariesCache } : {};
   next[cacheKey] = entry;
-  
+
   // Cap to avoid unbounded growth
-  const keys = Object.keys(next);
-  if (keys.length > 200) {
-    keys
-      .sort((a, b) => (next[a]?.createdAt ?? 0) - (next[b]?.createdAt ?? 0))
-      .slice(0, keys.length - 200)
-      .forEach((k) => delete next[k]);
-  }
-  await chrome.storage.local.set({ summariesCache: next });
+  await chrome.storage.local.set({
+    summariesCache: pruneSummariesCache(next, MAX_CACHE_ENTRIES),
+  });
 }
 
 async function incrementStats() {
@@ -369,17 +359,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         // User is logged in - determine API access
-        const hasOwnApiKey = !!settings.openaiApiKey;
-        const isPro = settings.subscription === "active" && settings.subscriptionPlan === "pro";
-        const hasBackendAccess = !!settings.supabaseAnonKey;
-        
         // Priority: Pro users should use backend first (to consume their 50/month quota)
         // Only fall back to their own API key when quota is exhausted or backend fails
         // Free users must use backend (quota enforced server-side)
-        const shouldTryBackendFirst = hasBackendAccess;
-        const canFallbackToOwnKey = isPro && hasOwnApiKey;
+        const hasOwnApiKey = !!settings.openaiApiKey;
+        const hasBackendAccess = !!settings.supabaseAnonKey;
+        const {
+          isPro,
+          shouldTryBackendFirst,
+          canFallbackToOwnKey,
+          canSummarize,
+        } = resolveSummaryApiAccess({
+          hasOwnApiKey,
+          subscription: settings.subscription,
+          subscriptionPlan: settings.subscriptionPlan,
+          hasBackendAccess,
+        });
 
-        if (!shouldTryBackendFirst && !canFallbackToOwnKey) {
+        if (!canSummarize) {
           sendResponse({
             ok: false,
             error: "Backend configuration error. Please contact support."
@@ -387,8 +384,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           return;
         }
 
-        const rawText = typeof message.text === "string" ? message.text : "";
-        const text = rawText.length > MAX_TEXT_CHARS ? rawText.slice(0, MAX_TEXT_CHARS) : rawText;
+        const text = truncateTextForSummary(
+          typeof message.text === "string" ? message.text : "",
+          MAX_TEXT_CHARS
+        );
         if (!text.trim()) {
           sendResponse({ ok: false, error: "No text extracted from page." });
           return;
@@ -419,9 +418,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           } catch (e) {
             // On 401/unauthorized, try refresh once then retry
             const msg = e?.message || String(e);
-            // Check if error has quotaExceeded flag (from callSupabaseFunction)
-            const isQuotaExceeded = e?.quotaExceeded === true || e?.status === 429 || msg.includes("Quota exceeded") || msg.includes("quota exceeded");
-            
+            const isQuotaExceeded = isQuotaExceededError(e);
+
             // If quota exceeded and Pro user has own API key, fall back to it
             if (isQuotaExceeded && canFallbackToOwnKey) {
               const outputText = await callOpenAI({

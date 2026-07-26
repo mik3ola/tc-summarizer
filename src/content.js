@@ -487,63 +487,105 @@ function findModalContent(element) {
 }
 
 function getUrlFromElement(el) {
-  // Try various attributes for the URL
-  const href = el.getAttribute("href") || el.getAttribute("data-href") || "";
-  if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
-    return { type: "url", value: href };
+  const utils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestHtmlExtractUtils) ||
+    null;
+  const attrs = {
+    href: el.getAttribute("href") || "",
+    dataHref: el.getAttribute("data-href") || "",
+    dataUrl: el.getAttribute("data-url") || "",
+    dataLink: el.getAttribute("data-link") || "",
+    dataTarget: el.getAttribute("data-target") || "",
+    dataBsTarget: el.getAttribute("data-bs-target") || "",
+  };
+
+  const resolved = utils?.resolveElementNavigation
+    ? utils.resolveElementNavigation(attrs)
+    : null;
+
+  if (resolved?.type === "url" || resolved?.type === "modal") {
+    return resolved;
   }
-  // For buttons/clickable elements, check if there's a data attribute with URL
-  const dataUrl = el.getAttribute("data-url") || el.getAttribute("data-link") || "";
-  if (dataUrl) return { type: "url", value: dataUrl };
-  
-  // Check for Bootstrap modal trigger (common pattern for inline T&C)
-  const modalTarget = el.getAttribute("data-target") || el.getAttribute("data-bs-target") || "";
-  if (modalTarget && modalTarget.startsWith("#")) {
-    return { type: "modal", value: modalTarget };
-  }
-  
-  // Check if this is a JavaScript-triggered modal or button
-  if (href.startsWith("javascript:") || !href || href === "#") {
-    const modalContent = findModalContent(el);
-    if (modalContent) {
-      return { type: "modal-element", value: modalContent };
+
+  // Dynamic modal / click-to-load path (JS void, bare #, or empty href)
+  if (resolved?.type === "dynamic" || !resolved) {
+    const href = attrs.href || attrs.dataHref || "";
+    if (
+      !utils &&
+      href &&
+      !href.startsWith("#") &&
+      !href.startsWith("javascript:")
+    ) {
+      return { type: "url", value: href };
     }
-    
-    // Content not found in DOM - might need to be loaded first
-    // Return a special type that tells the UI to show a helpful message
-    return { type: "click-to-load", value: el };
+    if (!utils) {
+      const dataUrl = attrs.dataUrl || attrs.dataLink || "";
+      if (dataUrl) return { type: "url", value: dataUrl };
+      const modalTarget = attrs.dataTarget || attrs.dataBsTarget || "";
+      if (modalTarget && modalTarget.startsWith("#")) {
+        return { type: "modal", value: modalTarget };
+      }
+    }
+
+    if (
+      resolved?.type === "dynamic" ||
+      href.startsWith("javascript:") ||
+      !href ||
+      href === "#"
+    ) {
+      const modalContent = findModalContent(el);
+      if (modalContent) {
+        return { type: "modal-element", value: modalContent };
+      }
+      // Content not found in DOM - might need to be loaded first
+      return { type: "click-to-load", value: el };
+    }
   }
-  
+
   return null;
 }
 
 function toAbsoluteUrl(href) {
+  const utils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestHtmlExtractUtils) ||
+    null;
+  if (utils?.toAbsoluteUrl) {
+    return utils.toAbsoluteUrl(href, window.location.href);
+  }
   try {
-    // Handle relative URLs properly
-    const url = new URL(href, window.location.href);
-    return url.toString();
+    return new URL(href, window.location.href).toString();
   } catch {
     return null;
   }
 }
 
 function extractTextFromHtml(html, baseUrl) {
+  const utils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestHtmlExtractUtils) ||
+    null;
+  if (utils?.extractTextFromHtml) {
+    if (!html || typeof html !== "string") {
+      console.warn("[TermsDigest] No HTML provided");
+      return "";
+    }
+    try {
+      return utils.extractTextFromHtml(html);
+    } catch (e) {
+      console.error("[TermsDigest] extractTextFromHtml error:", e);
+      return "";
+    }
+  }
+
   try {
     if (!html || typeof html !== "string") {
       console.warn("[TermsDigest] No HTML provided");
       return "";
     }
-    
+
     const doc = new DOMParser().parseFromString(html, "text/html");
     // Note: we intentionally skip injecting a <base> element here.
-    // It would be nice for relative URL resolution, but many sites (GitHub, Stripe,
-    // gov.uk, etc.) enforce a strict base-uri CSP that spams the extension error
-    // console without us gaining anything — we only read text content, not URLs.
-
-    // Remove only script/style (keep other elements - some sites put content in unusual places)
     doc.querySelectorAll("script, style, noscript, svg, canvas").forEach((el) => el.remove());
 
-    // Try multiple strategies to find the main content
     const candidates = [
       doc.querySelector("main"),
       doc.querySelector('[role="main"]'),
@@ -557,23 +599,17 @@ function extractTextFromHtml(html, baseUrl) {
       doc.body
     ].filter(Boolean);
 
-    // Find the candidate with the most text content
     let bestText = "";
     for (const candidate of candidates) {
-      const rawText = candidate?.textContent || "";
-      const cleaned = rawText
+      const cleaned = (candidate?.textContent || "")
         .replace(/\u00a0/g, " ")
         .replace(/[\t ]+/g, " ")
         .replace(/ *\n */g, "\n")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
-      
-      if (cleaned.length > bestText.length) {
-        bestText = cleaned;
-      }
+      if (cleaned.length > bestText.length) bestText = cleaned;
     }
 
-    // Fallback: if still empty, try the entire HTML body
     if (!bestText && doc.body) {
       bestText = (doc.body.textContent || "")
         .replace(/\u00a0/g, " ")
@@ -595,7 +631,13 @@ function createUi() {
   // where injecting a UI element would fail or be meaningless.
   // Return a harmless stub so downstream event listeners can still attach
   // without crashing — we just gate any real work with `UI.host` checks.
-  if (!document.body || !(document.documentElement instanceof HTMLElement)) {
+  const utils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestHtmlExtractUtils) ||
+    null;
+  const canInject = utils?.canInjectPageUi
+    ? utils.canInjectPageUi(document)
+    : !!(document.body && document.documentElement instanceof HTMLElement);
+  if (!canInject) {
     const noop = () => {};
     const stubTarget = { addEventListener: noop, removeEventListener: noop };
     return { host: null, shadow: null, popover: stubTarget };
