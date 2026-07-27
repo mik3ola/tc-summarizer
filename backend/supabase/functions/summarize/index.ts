@@ -4,7 +4,16 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getMonthlyQuota, periodStart, decodeJwtPayload, buildPrompt, type Summary } from "./lib.ts";
+import {
+  periodStart,
+  buildPrompt,
+  extractUserIdFromAuthHeader,
+  parseSummarizeRequestBody,
+  resolveCycleAnchorDate,
+  evaluateQuota,
+  buildQuotaExceededPayload,
+  type Summary,
+} from "./lib.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -78,15 +87,7 @@ serve(async (req: Request) => {
 
     // Get and decode JWT from authorization header
     const authHeader = req.headers.get("authorization") || "";
-    let userId: string | null = null;
-    
-    if (authHeader.startsWith("Bearer ")) {
-      const token = authHeader.replace("Bearer ", "");
-      const payload = decodeJwtPayload(token);
-      if (payload?.sub) {
-        userId = payload.sub;
-      }
-    }
+    const userId = extractUserIdFromAuthHeader(authHeader);
 
     // Anonymous users are NOT allowed - must be authenticated
     if (!userId) {
@@ -98,12 +99,12 @@ serve(async (req: Request) => {
 
     // Parse request body
     const body = await req.json().catch(() => null);
-    const url = typeof body?.url === "string" ? body.url : "";
-    const text = typeof body?.text === "string" ? body.text : "";
+    const parsedBody = parseSummarizeRequestBody(body);
     
-    if (!url || !text) {
+    if (!parsedBody) {
       return json({ error: "Missing url or text" }, 400);
     }
+    const { url, text } = parsedBody;
 
     // Create Supabase client for DB operations
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
@@ -119,7 +120,7 @@ serve(async (req: Request) => {
 
       const plan = sub?.plan || "free";
       // Fall back to today's date if the profile row is missing (should not happen)
-      const anchorDate = profile?.cycle_anchor_date ?? new Date().toISOString().slice(0, 10);
+      const anchorDate = resolveCycleAnchorDate(profile?.cycle_anchor_date);
       const m = periodStart(anchorDate);
 
       const { data: counter } = await supabase
@@ -130,19 +131,10 @@ serve(async (req: Request) => {
         .maybeSingle();
 
       const used = counter?.summaries_count || 0;
-      const quota = getMonthlyQuota(plan);
+      const quotaCheck = evaluateQuota(used, plan);
       
-      if (used >= quota) {
-        return json({ 
-          error: "Quota exceeded",
-          quotaExceeded: true,
-          used,
-          quota,
-          plan,
-          message: plan === "free" 
-            ? "You've used all 5 free summaries this month. Upgrade to Pro for 50 summaries/month!"
-            : "You've reached your monthly limit. Contact us to upgrade your plan."
-        }, 429);
+      if (quotaCheck.exceeded) {
+        return json(buildQuotaExceededPayload(used, plan), 429);
       }
     }
 
@@ -164,7 +156,7 @@ serve(async (req: Request) => {
           .select("cycle_anchor_date")
           .eq("user_id", userId)
           .maybeSingle();
-        const anchorForUsage = profileForUsage?.cycle_anchor_date ?? new Date().toISOString().slice(0, 10);
+        const anchorForUsage = resolveCycleAnchorDate(profileForUsage?.cycle_anchor_date);
         const m = periodStart(anchorForUsage);
         
         // Log usage event

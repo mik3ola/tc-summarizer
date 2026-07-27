@@ -85,3 +85,68 @@ export function resolvedSiteUrl(envSiteUrl: string | undefined): string {
     ? envSiteUrl
     : "https://termsdigest.com";
 }
+
+/** Extract authenticated user id from a Bearer Authorization header. */
+export function extractUserIdFromAuthHeader(authHeader: string | null | undefined): string | null {
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const payload = decodeJwtPayload(authHeader.replace("Bearer ", ""));
+  return payload?.sub ?? null;
+}
+
+/** Validate summarize POST body; returns null when url or text is missing. */
+export function parseSummarizeRequestBody(
+  body: unknown,
+): { url: string; text: string } | null {
+  const b = body as { url?: unknown; text?: unknown } | null;
+  const url = typeof b?.url === "string" ? b.url : "";
+  const text = typeof b?.text === "string" ? b.text : "";
+  if (!url || !text) return null;
+  return { url, text };
+}
+
+/**
+ * Cycle anchor used for quota period queries.
+ * Missing profile anchor falls back to today's UTC date (YYYY-MM-DD) —
+ * intentionally different from the client calendar-month fallback.
+ */
+export function resolveCycleAnchorDate(
+  profileAnchor: string | null | undefined,
+  today = new Date(),
+): string {
+  return profileAnchor ?? today.toISOString().slice(0, 10);
+}
+
+export type QuotaEvaluation = {
+  exceeded: boolean;
+  used: number;
+  quota: number;
+  plan: string;
+};
+
+export function evaluateQuota(used: number, plan: string): QuotaEvaluation {
+  const resolvedPlan = plan || "free";
+  const quota = getMonthlyQuota(resolvedPlan);
+  const usedCount = used || 0;
+  return {
+    exceeded: usedCount >= quota,
+    used: usedCount,
+    quota,
+    plan: resolvedPlan,
+  };
+}
+
+/** Payload returned with HTTP 429 when the user is over quota. */
+export function buildQuotaExceededPayload(used: number, plan: string) {
+  const evaluation = evaluateQuota(used, plan);
+  return {
+    error: "Quota exceeded",
+    quotaExceeded: true as const,
+    used: evaluation.used,
+    quota: evaluation.quota,
+    plan: evaluation.plan,
+    message:
+      evaluation.plan === "free"
+        ? "You've used all 5 free summaries this month. Upgrade to Pro for 50 summaries/month!"
+        : "You've reached your monthly limit. Contact us to upgrade your plan.",
+  };
+}
