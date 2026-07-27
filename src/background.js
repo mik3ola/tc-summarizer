@@ -1,3 +1,6 @@
+// Pure helpers — must load before this worker body runs.
+importScripts("auth-session-utils.js");
+
 // Configuration
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -199,17 +202,11 @@ async function callSupabaseFunction({ supabaseUrl, anonKey, accessToken, input }
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    // Try to parse error as JSON to preserve quotaExceeded flag
-    let errorData = null;
-    try {
-      errorData = JSON.parse(txt);
-    } catch {}
-    
-    // Create error with both message and structured data
-    const error = new Error(`Backend error (${res.status}): ${txt.slice(0, 200)}`);
-    error.status = res.status;
-    error.data = errorData;
-    error.quotaExceeded = errorData?.quotaExceeded === true;
+    const parsed = parseBackendErrorResponse(res.status, txt);
+    const error = new Error(parsed.message);
+    error.status = parsed.status;
+    error.data = parsed.data;
+    error.quotaExceeded = parsed.quotaExceeded;
     throw error;
   }
 
@@ -227,13 +224,8 @@ async function refreshSessionIfPossible({ supabaseUrl, anonKey, session }) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return null;
 
-  const expiresAt = Date.now() + (Number(data.expires_in || 0) * 1000);
-  const next = {
-    access_token: data.access_token,
-    refresh_token: data.refresh_token,
-    expires_at: expiresAt,
-    user: data.user ? { id: data.user.id, email: data.user.email } : session.user
-  };
+  const next = buildSessionFromRefreshResponse(data, session, Date.now());
+  if (!next?.access_token) return null;
   await chrome.storage.local.set({
     supabaseSession: next,
     userEmail: next.user?.email || null
@@ -341,18 +333,31 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         let settings = await getSettings();
 
         // If session is expired, try to refresh proactively
-        if (settings.session?.access_token && settings.isSessionExpired && settings.supabaseAnonKey) {
+        if (
+          shouldProactivelyRefreshSession({
+            hasAccessToken: !!settings.session?.access_token,
+            isSessionExpired: !!settings.isSessionExpired,
+            hasAnonKey: !!settings.supabaseAnonKey,
+          })
+        ) {
           const refreshed = await refreshSessionIfPossible({
             supabaseUrl: settings.supabaseUrl,
             anonKey: settings.supabaseAnonKey,
             session: settings.session
           });
-          if (refreshed?.access_token) {
+          const proactive = resolveProactiveSessionRefresh({
+            refreshSucceeded: !!refreshed?.access_token,
+          });
+          if (proactive.action === "use_refreshed_session") {
             // Reload settings with new session
             settings = await getSettings();
           } else {
-            // Clear expired session
-            await chrome.storage.local.set({ supabaseSession: null, subscription: null, subscriptionPlan: null });
+            // Clear expired session (keep CLEARED_SESSION_STORAGE keys that options also wipe)
+            await chrome.storage.local.set({
+              supabaseSession: null,
+              subscription: null,
+              subscriptionPlan: null,
+            });
             settings.session = null;
           }
         }
@@ -417,13 +422,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             });
             usedBackend = true;
           } catch (e) {
-            // On 401/unauthorized, try refresh once then retry
-            const msg = e?.message || String(e);
-            // Check if error has quotaExceeded flag (from callSupabaseFunction)
-            const isQuotaExceeded = e?.quotaExceeded === true || e?.status === 429 || msg.includes("Quota exceeded") || msg.includes("quota exceeded");
-            
-            // If quota exceeded and Pro user has own API key, fall back to it
-            if (isQuotaExceeded && canFallbackToOwnKey) {
+            const failure = resolveBackendFailureAction({
+              error: e,
+              canFallbackToOwnKey,
+            });
+
+            if (failure.action === "own_key_fallback") {
               const outputText = await callOpenAI({
                 apiKey: settings.openaiApiKey,
                 model: settings.openaiModel,
@@ -442,7 +446,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                 confidence: "low",
                 _note: "Model did not return valid JSON; showing raw output."
               };
-            } else if (msg.includes("401") || msg.includes("Invalid JWT") || msg.includes("Unauthorized") || msg.includes("Auth failed")) {
+            } else if (failure.action === "auth_refresh") {
               const refreshed = await refreshSessionIfPossible({
                 supabaseUrl: settings.supabaseUrl,
                 anonKey: settings.supabaseAnonKey,
@@ -457,8 +461,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                 });
                 usedBackend = true;
               } else {
-                // Token refresh failed - if Pro user has own API key, use that as fallback
-                if (canFallbackToOwnKey) {
+                const refreshFailure = resolveAuthRefreshFailure({ canFallbackToOwnKey });
+                if (refreshFailure.action === "own_key_fallback") {
                   const outputText = await callOpenAI({
                     apiKey: settings.openaiApiKey,
                     model: settings.openaiModel,
@@ -478,40 +482,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                     _note: "Model did not return valid JSON; showing raw output."
                   };
                 } else {
-                  await chrome.storage.local.set({ 
-                    supabaseSession: null, 
-                    subscription: null, 
-                    subscriptionPlan: null,
-                    userEmail: null,
-                    monthlyUsage: null
-                  });
+                  await chrome.storage.local.set(CLEARED_SESSION_STORAGE);
                   throw new Error("Please sign in again");
                 }
               }
             } else {
-              // Other backend errors - if Pro user has own API key, fall back to it
-              if (canFallbackToOwnKey) {
-                const outputText = await callOpenAI({
-                  apiKey: settings.openaiApiKey,
-                  model: settings.openaiModel,
-                  input: { url, text }
-                });
-                const parsed = safeJsonParse(outputText);
-                summary = parsed.ok ? parsed.value : {
-                  title: "",
-                  tldr: outputText.trim(),
-                  costs_and_renewal: [],
-                  cancellation_and_refunds: [],
-                  liability_and_disputes: [],
-                  privacy_and_data: [],
-                  red_flags: [],
-                  quotes: [],
-                  confidence: "low",
-                  _note: "Model did not return valid JSON; showing raw output."
-                };
-              } else {
-                throw e;
-              }
+              throw e;
             }
           }
         } else if (canFallbackToOwnKey) {
