@@ -1,6 +1,23 @@
 // Unit tests for summarize lib
 import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.168.0/testing/asserts.ts";
-import { getMonthlyQuota, periodStart, decodeJwtPayload, buildPrompt, resolvedSiteUrl } from "./lib.ts";
+import {
+  getMonthlyQuota,
+  periodStart,
+  decodeJwtPayload,
+  buildPrompt,
+  resolvedSiteUrl,
+  extractUserIdFromAuthHeader,
+  parseSummarizeRequestBody,
+  resolveCycleAnchorDate,
+  evaluateQuota,
+  buildQuotaExceededPayload,
+} from "./lib.ts";
+
+function makeJwt(payload: Record<string, unknown>): string {
+  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const payloadB64 = btoa(JSON.stringify(payload));
+  return `${header}.${payloadB64}.fake-signature`;
+}
 
 // ─── getMonthlyQuota ────────────────────────────────────────────────────────
 
@@ -65,12 +82,6 @@ Deno.test("periodStart - returns YYYY-MM-DD format string", () => {
 
 // ─── decodeJwtPayload ───────────────────────────────────────────────────────
 
-function makeJwt(payload: Record<string, unknown>): string {
-  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const payloadB64 = btoa(JSON.stringify(payload));
-  return `${header}.${payloadB64}.fake-signature`;
-}
-
 Deno.test("decodeJwtPayload - valid JWT returns payload", () => {
   const jwt = makeJwt({ sub: "user-123", role: "authenticated" });
   const result = decodeJwtPayload(jwt);
@@ -121,4 +132,84 @@ Deno.test("resolvedSiteUrl - falls back to production when env is localhost", ()
 
 Deno.test("resolvedSiteUrl - falls back to production when env is undefined", () => {
   assertEquals(resolvedSiteUrl(undefined), "https://termsdigest.com");
+});
+
+// ─── extractUserIdFromAuthHeader ────────────────────────────────────────────
+
+Deno.test("extractUserIdFromAuthHeader - reads sub from Bearer JWT", () => {
+  const jwt = makeJwt({ sub: "user-abc", role: "authenticated" });
+  assertEquals(extractUserIdFromAuthHeader(`Bearer ${jwt}`), "user-abc");
+});
+
+Deno.test("extractUserIdFromAuthHeader - rejects missing/invalid headers", () => {
+  assertEquals(extractUserIdFromAuthHeader(null), null);
+  assertEquals(extractUserIdFromAuthHeader(""), null);
+  assertEquals(extractUserIdFromAuthHeader("Basic abc"), null);
+  assertEquals(extractUserIdFromAuthHeader("Bearer not-a-jwt"), null);
+});
+
+// ─── parseSummarizeRequestBody ──────────────────────────────────────────────
+
+Deno.test("parseSummarizeRequestBody - requires non-empty url and text", () => {
+  assertEquals(
+    parseSummarizeRequestBody({ url: "https://example.com/terms", text: "hello" }),
+    { url: "https://example.com/terms", text: "hello" },
+  );
+  assertEquals(parseSummarizeRequestBody({ url: "", text: "hello" }), null);
+  assertEquals(parseSummarizeRequestBody({ url: "https://x.com", text: "" }), null);
+  assertEquals(parseSummarizeRequestBody(null), null);
+  assertEquals(parseSummarizeRequestBody({ url: 1, text: "x" }), null);
+});
+
+// ─── resolveCycleAnchorDate ─────────────────────────────────────────────────
+
+Deno.test("resolveCycleAnchorDate - uses profile anchor when present", () => {
+  assertEquals(
+    resolveCycleAnchorDate("2026-01-20", new Date("2026-07-27T12:00:00Z")),
+    "2026-01-20",
+  );
+});
+
+Deno.test("resolveCycleAnchorDate - falls back to today's UTC date (not month start)", () => {
+  // Server missing-anchor path uses today; client uses calendar month start.
+  assertEquals(
+    resolveCycleAnchorDate(null, new Date("2026-07-27T15:30:00Z")),
+    "2026-07-27",
+  );
+  assertEquals(
+    resolveCycleAnchorDate(undefined, new Date("2026-12-01T00:00:00Z")),
+    "2026-12-01",
+  );
+});
+
+// ─── evaluateQuota / buildQuotaExceededPayload ──────────────────────────────
+
+Deno.test("evaluateQuota - free plan exceeds at 5", () => {
+  assertEquals(evaluateQuota(4, "free"), {
+    exceeded: false,
+    used: 4,
+    quota: 5,
+    plan: "free",
+  });
+  assertEquals(evaluateQuota(5, "free").exceeded, true);
+  assertEquals(evaluateQuota(0, "").quota, 5);
+});
+
+Deno.test("evaluateQuota - pro plan exceeds at 50", () => {
+  assertEquals(evaluateQuota(49, "pro").exceeded, false);
+  assertEquals(evaluateQuota(50, "pro").exceeded, true);
+  assertEquals(evaluateQuota(50, "pro").quota, 50);
+});
+
+Deno.test("buildQuotaExceededPayload - sets quotaExceeded and plan-specific message", () => {
+  const free = buildQuotaExceededPayload(5, "free");
+  assertEquals(free.quotaExceeded, true);
+  assertEquals(free.error, "Quota exceeded");
+  assertEquals(free.quota, 5);
+  assertStringIncludes(free.message, "Upgrade to Pro");
+
+  const pro = buildQuotaExceededPayload(50, "pro");
+  assertEquals(pro.quota, 50);
+  assertEquals(pro.plan, "pro");
+  assertStringIncludes(pro.message, "monthly limit");
 });
