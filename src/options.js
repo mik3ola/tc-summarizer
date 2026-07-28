@@ -529,10 +529,18 @@ async function refreshSessionToken(supabaseUrl, anon, session) {
     if (!data?.access_token) return null;
     
     const expiresAt = Date.now() + (Number(data.expires_in || 0) * 1000);
+    const pickToken =
+      (typeof pickNextRefreshToken === "function" && pickNextRefreshToken) ||
+      globalThis.TermsDigestSessionRefreshUtils?.pickNextRefreshToken;
     const refreshed = {
       ...session,
       access_token: data.access_token,
-      refresh_token: data.refresh_token || session.refresh_token,
+      // Options policy: preserve previous refresh_token if response omits one.
+      refresh_token: pickToken
+        ? pickToken(data.refresh_token, session.refresh_token, {
+            preservePreviousIfMissing: true,
+          })
+        : data.refresh_token || session.refresh_token,
       expires_at: expiresAt,
       user: data.user ? { id: data.user.id, email: data.user.email } : session.user
     };
