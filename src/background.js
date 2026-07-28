@@ -1,3 +1,6 @@
+// Pure helpers — must load before this worker body runs.
+importScripts("session-refresh-utils.js");
+
 // Configuration
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -230,7 +233,8 @@ async function refreshSessionIfPossible({ supabaseUrl, anonKey, session }) {
   const expiresAt = Date.now() + (Number(data.expires_in || 0) * 1000);
   const next = {
     access_token: data.access_token,
-    refresh_token: data.refresh_token,
+    // Background policy: no previous-token fallback (see pickNextRefreshToken).
+    refresh_token: pickNextRefreshToken(data.refresh_token, session.refresh_token),
     expires_at: expiresAt,
     user: data.user ? { id: data.user.id, email: data.user.email } : session.user
   };
