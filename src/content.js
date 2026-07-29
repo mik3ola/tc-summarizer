@@ -62,7 +62,10 @@ async function loadPreferences() {
     const response = await chrome.runtime.sendMessage({ type: "get_preferences" });
     if (response?.ok && response.preferences) {
       preferences = { ...preferences, ...normalizePrefsPatch(response.preferences) };
-      HOVER_DELAY_MS = parseInt(String(preferences.hoverDelay), 10) || 750;
+      const displayUtils = globalThis.TermsDigestSummaryDisplayUtils;
+      HOVER_DELAY_MS = displayUtils?.parseHoverDelayMs
+        ? displayUtils.parseHoverDelayMs(preferences.hoverDelay)
+        : (parseInt(String(preferences.hoverDelay), 10) || 750);
     }
   } catch (e) {
     if (!isContextInvalidatedError(e)) {
@@ -1306,31 +1309,40 @@ async function getStatsFooter(currentSummaryUrl = null, isSummaryView = false) {
     const plan = data.subscriptionPlan || "free";
 
     // Determine quota based on plan
-    let quota = 5;
-    if (plan === "pro") quota = 50;
-    else if (plan === "enterprise") quota = 5000;
+    const displayUtils = globalThis.TermsDigestSummaryDisplayUtils;
+    const quota = displayUtils?.getDisplayQuotaForPlan
+      ? displayUtils.getDisplayQuotaForPlan(plan)
+      : (plan === "pro" ? 50 : plan === "enterprise" ? 5000 : 5);
 
     // Calculate minutes saved for current summary only
     let minutesSaved = 0;
     if (currentSummaryUrl && cache) {
-      const normalizedUrl = currentSummaryUrl.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();
-      const possibleKeys = [
-        `summary:${normalizedUrl}`,
-        `summary:${currentSummaryUrl}`,
-        `summary:${currentSummaryUrl.toLowerCase()}`
-      ];
-      const matchingKey = possibleKeys.find(key => cache[key]) ||
-        Object.keys(cache).find(key => {
-          if (!key.startsWith("summary:")) return false;
-          const keyUrl = key.replace(/^summary:/, "").toLowerCase();
-          return keyUrl === normalizedUrl ||
-                 keyUrl.includes(normalizedUrl) ||
-                 normalizedUrl.includes(keyUrl) ||
-                 keyUrl.split("#")[0] === normalizedUrl.split("#")[0];
-        });
+      const matchingKey = displayUtils?.resolveSummaryCacheKey
+        ? displayUtils.resolveSummaryCacheKey(cache, currentSummaryUrl)
+        : (() => {
+            const normalizedUrl = currentSummaryUrl.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();
+            const possibleKeys = [
+              `summary:${normalizedUrl}`,
+              `summary:${currentSummaryUrl}`,
+              `summary:${currentSummaryUrl.toLowerCase()}`
+            ];
+            return possibleKeys.find(key => cache[key]) ||
+              Object.keys(cache).find(key => {
+                if (!key.startsWith("summary:")) return false;
+                const keyUrl = key.replace(/^summary:/, "").toLowerCase();
+                return keyUrl === normalizedUrl ||
+                       keyUrl.includes(normalizedUrl) ||
+                       normalizedUrl.includes(keyUrl) ||
+                       keyUrl.split("#")[0] === normalizedUrl.split("#")[0];
+              }) || null;
+          })();
       if (matchingKey && cache[matchingKey]?.originalTextLength) {
-        const words = Math.floor(cache[matchingKey].originalTextLength / 5);
-        minutesSaved = Math.floor(words / 200);
+        minutesSaved = displayUtils?.estimateMinutesSaved
+          ? displayUtils.estimateMinutesSaved(cache[matchingKey].originalTextLength)
+          : (() => {
+              const words = Math.floor(cache[matchingKey].originalTextLength / 5);
+              return Math.floor(words / 200);
+            })();
       }
     }
 
@@ -1985,32 +1997,45 @@ UI.popover.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       if (current.lastSummary) {
-        const s = current.lastSummary;
-        const lines = [];
-        if (s.title) lines.push(s.title);
-        if (s.tldr) lines.push("\nQuick Summary\n" + s.tldr);
-        const addSection = (heading, arr) => {
-          if (!Array.isArray(arr) || !arr.length) return;
-          lines.push("\n" + heading);
-          arr.forEach(x => lines.push("• " + x));
-        };
-        addSection("Costs & renewal", s.costs_and_renewal);
-        addSection("Cancellation & refunds", s.cancellation_and_refunds);
-        addSection("Liability & disputes", s.liability_and_disputes);
-        addSection("Privacy & data", s.privacy_and_data);
-        if (preferences.showRedFlags) addSection("Red flags", s.red_flags);
-        if (preferences.showQuotes && Array.isArray(s.quotes)) {
-          const validQuotes = s.quotes.filter(q => q?.quote);
-          if (validQuotes.length) {
-            lines.push("\nSupporting quotes");
-            validQuotes.slice(0, 3).forEach(q => lines.push(`"${q.quote}"${q.why_it_matters ? " — " + q.why_it_matters : ""}`));
-          }
+        const displayUtils = globalThis.TermsDigestSummaryDisplayUtils;
+        const text = displayUtils?.formatSummaryClipboardText
+          ? displayUtils.formatSummaryClipboardText({
+              summary: current.lastSummary,
+              sourceUrl: current.lastSummaryUrl,
+              showRedFlags: !!preferences.showRedFlags,
+              showQuotes: !!preferences.showQuotes,
+            })
+          : (() => {
+              const s = current.lastSummary;
+              const lines = [];
+              if (s.title) lines.push(s.title);
+              if (s.tldr) lines.push("\nQuick Summary\n" + s.tldr);
+              const addSection = (heading, arr) => {
+                if (!Array.isArray(arr) || !arr.length) return;
+                lines.push("\n" + heading);
+                arr.forEach(x => lines.push("• " + x));
+              };
+              addSection("Costs & renewal", s.costs_and_renewal);
+              addSection("Cancellation & refunds", s.cancellation_and_refunds);
+              addSection("Liability & disputes", s.liability_and_disputes);
+              addSection("Privacy & data", s.privacy_and_data);
+              if (preferences.showRedFlags) addSection("Red flags", s.red_flags);
+              if (preferences.showQuotes && Array.isArray(s.quotes)) {
+                const validQuotes = s.quotes.filter(q => q?.quote);
+                if (validQuotes.length) {
+                  lines.push("\nSupporting quotes");
+                  validQuotes.slice(0, 3).forEach(q => lines.push(`"${q.quote}"${q.why_it_matters ? " — " + q.why_it_matters : ""}`));
+                }
+              }
+              if (current.lastSummaryUrl) lines.push("\nSource: " + current.lastSummaryUrl);
+              return lines.join("\n");
+            })();
+        if (text) {
+          navigator.clipboard.writeText(text).then(() => {
+            btn.classList.add("copied");
+            setTimeout(() => btn.classList.remove("copied"), 1600);
+          }).catch(() => {});
         }
-        if (current.lastSummaryUrl) lines.push("\nSource: " + current.lastSummaryUrl);
-        navigator.clipboard.writeText(lines.join("\n")).then(() => {
-          btn.classList.add("copied");
-          setTimeout(() => btn.classList.remove("copied"), 1600);
-        }).catch(() => {});
       }
       return;
     }
@@ -2438,7 +2463,10 @@ try {
         const next = changes.preferences.newValue;
         if (next && typeof next === "object") {
           preferences = { ...preferences, ...normalizePrefsPatch(next) };
-          HOVER_DELAY_MS = parseInt(String(preferences.hoverDelay), 10) || 750;
+          const displayUtils = globalThis.TermsDigestSummaryDisplayUtils;
+          HOVER_DELAY_MS = displayUtils?.parseHoverDelayMs
+            ? displayUtils.parseHoverDelayMs(preferences.hoverDelay)
+            : (parseInt(String(preferences.hoverDelay), 10) || 750);
           refreshSummaryIfVisible().catch(() => {});
         } else {
           loadPreferences().then(() => refreshSummaryIfVisible()).catch(() => {});
