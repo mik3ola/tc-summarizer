@@ -31,9 +31,11 @@ describe("formatResetClause", () => {
 
   it("says today / tomorrow / in N days", () => {
     const now = new Date("2026-07-30T12:00:00Z");
-    expect(
-      formatResetClause(new Date("2026-07-30T18:00:00Z"), now, formatDate)
-    ).toBe("Resets today (Jul 30, 2026)");
+    // Same instant → 0 days (ceil) → today
+    expect(formatResetClause(now, now, formatDate)).toBe(
+      "Resets today (Jul 30, 2026)"
+    );
+    // ~24h later → ceil ≈ 1 → tomorrow (matches options.js Math.ceil day math)
     expect(
       formatResetClause(new Date("2026-07-31T12:00:00Z"), now, formatDate)
     ).toBe("Resets tomorrow (Jul 30, 2026)");
