@@ -291,14 +291,11 @@ function updateStats(cache, stats, monthlyUsage, plan, cycleAnchorDate) {
   }
   const minutesSaved = Math.floor(totalWords / 200); // 200 words per minute reading speed
   
-  // Determine quota based on plan
-  let quota = 5; // Free tier default
-  if (plan === "pro") quota = 50;
-  else if (plan === "enterprise") quota = 5000;
+  const quota = getPlanQuota(plan);
   
   // Use monthly usage if available, otherwise use local stats
   const used = monthlyUsage ?? totalSummaries;
-  const remaining = Math.max(0, quota - used);
+  const remaining = computeRemainingSummaries(used, quota);
   
   statSummariesEl.textContent = `${used}/${quota}`;
   statCachedEl.textContent = cacheCount;
@@ -309,20 +306,15 @@ function updateStats(cache, stats, monthlyUsage, plan, cycleAnchorDate) {
     const now = new Date();
     const periodStartMs = computePeriodStart(cycleAnchorDate).getTime();
     const nextReset = new Date(periodStartMs + 30 * 24 * 60 * 60 * 1000);
-    const resetFmt = nextReset.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-    const daysUntilReset = Math.ceil((nextReset - now) / (24 * 60 * 60 * 1000));
-    const resetText = daysUntilReset <= 1 ? `Resets ${daysUntilReset === 1 ? "tomorrow" : "today"} (${resetFmt})` : `Resets ${resetFmt} (in ${daysUntilReset} days)`;
-
-    if (remaining === 0) {
-      usageHintEl.textContent = `You've used all your inclusive summaries this month. ${resetText}. Upgrade for more!`;
-      usageHintEl.style.color = "#f87171";
-    } else if (remaining <= 2) {
-      usageHintEl.textContent = `Only ${remaining} ${remaining === 1 ? "summary" : "summaries"} left this month. ${resetText}`;
-      usageHintEl.style.color = "#f59e0b";
-    } else {
-      usageHintEl.textContent = `${remaining} ${remaining === 1 ? "summary" : "summaries"} remaining this month. ${resetText}`;
-      usageHintEl.style.color = "var(--text-muted)";
-    }
+    const resetClause = formatResetClause(nextReset, now);
+    const hint = buildUsageHint({ remaining, resetClause });
+    usageHintEl.textContent = hint.text;
+    usageHintEl.style.color =
+      hint.tone === "exhausted"
+        ? "#f87171"
+        : hint.tone === "low"
+          ? "#f59e0b"
+          : "var(--text-muted)";
   }
 }
 

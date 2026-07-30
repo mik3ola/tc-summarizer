@@ -1,3 +1,6 @@
+// Pure helpers — must load before this worker body runs.
+importScripts("open-options-utils.js");
+
 // Configuration
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -14,11 +17,14 @@ function nowMs() {
 /** Open the options UI without relying on tabs permission (Safari-friendly). */
 async function openOptionsPage({ upgrade = false } = {}) {
   // Persist upgrade intent so openOptionsPage() (no query string) still works on Safari.
-  if (upgrade) {
+  if (shouldPersistUpgradeIntent(upgrade)) {
     await chrome.storage.local.set({ openUpgradeIntent: true });
   }
 
-  if (chrome.runtime.openOptionsPage) {
+  const hasOpenOptionsPageApi = typeof chrome.runtime.openOptionsPage === "function";
+  let openOptionsPageSucceeded = null;
+
+  if (hasOpenOptionsPageApi) {
     try {
       await new Promise((resolve, reject) => {
         try {
@@ -31,17 +37,22 @@ async function openOptionsPage({ upgrade = false } = {}) {
           reject(e);
         }
       });
-      return;
+      openOptionsPageSucceeded = true;
     } catch {
-      // Fall through to tabs.create
+      openOptionsPageSucceeded = false;
     }
   }
 
-  const optionsUrl = chrome.runtime.getURL(
-    upgrade ? "src/options.html?upgrade=true" : "src/options.html"
-  );
-  if (chrome.tabs?.create) {
-    await chrome.tabs.create({ url: optionsUrl });
+  const plan = resolveOpenOptionsFallback({
+    hasOpenOptionsPageApi,
+    openOptionsPageSucceeded,
+    hasTabsCreate: typeof chrome.tabs?.create === "function",
+    upgrade,
+  });
+
+  if (plan.action === "done") return;
+  if (plan.action === "tabs_create") {
+    await chrome.tabs.create({ url: chrome.runtime.getURL(plan.path) });
   }
 }
 

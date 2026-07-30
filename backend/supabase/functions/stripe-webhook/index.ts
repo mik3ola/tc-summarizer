@@ -11,7 +11,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@13.10.0?target=deno";
-import { mapStripeStatus, buildSubscriptionUpdateData, shouldSkipCreatedEvent } from "./lib.ts";
+import {
+  mapStripeStatus,
+  buildSubscriptionUpdateData,
+  shouldSkipCreatedEvent,
+  stripeUnixToIso,
+  extractCheckoutUserId,
+  buildCheckoutCompletedUpdate,
+  upgradeCycleAnchorDate,
+  buildSubscriptionDeletedUpdate,
+} from "./lib.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
   apiVersion: "2023-10-16",
@@ -135,9 +144,9 @@ serve(async (req: Request) => {
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // Get the user_id from metadata (we'll set this when creating the checkout session)
-  const userId = session.metadata?.user_id;
-  const customerId = session.customer as string;
-  const subscriptionId = session.subscription as string;
+  const userId = extractCheckoutUserId(session.metadata);
+  const customerId = (session.customer as string) || null;
+  const subscriptionId = (session.subscription as string) || null;
 
   if (!userId) {
     console.error("No user_id in checkout session metadata");
@@ -148,21 +157,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     `Checkout completed for user ${userId}, customer ${customerId}, subscription ${subscriptionId}`
   );
 
-  const upgradeDate = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const upgradeDate = upgradeCycleAnchorDate(now);
+  const updatePayload = buildCheckoutCompletedUpdate(
+    customerId,
+    subscriptionId,
+    now.toISOString(),
+  );
 
   // Update the user's subscription in Supabase
   const { error } = await supabase
     .from("subscriptions")
-    .update({
-      status: "active",
-      plan: "pro",
-      stripe_customer_id: customerId,
-      stripe_subscription_id: subscriptionId,
-      auto_renew: true,
-      downgrade_scheduled_for: null,
-      downgrade_reason: null,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("user_id", userId);
 
   if (error) {
@@ -188,13 +194,15 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   const subscriptionId = subscription.id;
 
-  let currentPeriodEnd: string | null = null;
-  if (subscription.current_period_end && typeof subscription.current_period_end === "number") {
-    try {
-      currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
-    } catch (err) {
-      console.warn(`Invalid current_period_end for subscription ${subscriptionId}:`, subscription.current_period_end);
-    }
+  const currentPeriodEnd = stripeUnixToIso(subscription.current_period_end);
+  if (
+    subscription.current_period_end != null &&
+    currentPeriodEnd == null
+  ) {
+    console.warn(
+      `Invalid current_period_end for subscription ${subscriptionId}:`,
+      subscription.current_period_end,
+    );
   }
 
   const { data: existing } = await supabase
@@ -231,16 +239,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
 
   const { error } = await supabase
     .from("subscriptions")
-    .update({
-      status: "canceled",
-      plan: "free",
-      auto_renew: false,
-      downgrade_scheduled_for: null,
-      downgrade_reason: null,
-      stripe_subscription_id: null,
-      current_period_end: null,
-      updated_at: new Date().toISOString(),
-    })
+    .update(buildSubscriptionDeletedUpdate(new Date().toISOString()))
     .eq("stripe_subscription_id", subscriptionId);
 
   if (error) {
