@@ -1,6 +1,15 @@
 // Unit tests for stripe-webhook lib
 import { assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
-import { mapStripeStatus, buildSubscriptionUpdateData, shouldSkipCreatedEvent } from "./lib.ts";
+import {
+  mapStripeStatus,
+  buildSubscriptionUpdateData,
+  shouldSkipCreatedEvent,
+  stripeUnixToIso,
+  extractCheckoutUserId,
+  buildCheckoutCompletedUpdate,
+  upgradeCycleAnchorDate,
+  buildSubscriptionDeletedUpdate,
+} from "./lib.ts";
 
 const NOW = "2026-02-01T00:00:00.000Z";
 const PERIOD_END = "2026-03-01T00:00:00.000Z";
@@ -117,4 +126,64 @@ Deno.test("shouldSkipCreatedEvent - does not skip when existing is free", () => 
 
 Deno.test("shouldSkipCreatedEvent - does not skip when no existing record", () => {
   assertEquals(shouldSkipCreatedEvent(null), false);
+});
+
+// ─── stripeUnixToIso ────────────────────────────────────────────────────────
+
+Deno.test("stripeUnixToIso - converts unix seconds to ISO", () => {
+  assertEquals(stripeUnixToIso(1_735_689_600), "2025-01-01T00:00:00.000Z");
+});
+
+Deno.test("stripeUnixToIso - returns null for non-numbers", () => {
+  assertEquals(stripeUnixToIso(null), null);
+  assertEquals(stripeUnixToIso("1735689600"), null);
+  assertEquals(stripeUnixToIso(Number.NaN), null);
+});
+
+// ─── extractCheckoutUserId ──────────────────────────────────────────────────
+
+Deno.test("extractCheckoutUserId - requires non-empty string user_id", () => {
+  assertEquals(extractCheckoutUserId({ user_id: "user-abc" }), "user-abc");
+  assertEquals(extractCheckoutUserId({ user_id: "" }), null);
+  assertEquals(extractCheckoutUserId({}), null);
+  assertEquals(extractCheckoutUserId(null), null);
+});
+
+// ─── buildCheckoutCompletedUpdate ───────────────────────────────────────────
+
+Deno.test("buildCheckoutCompletedUpdate - activates Pro and clears downgrade", () => {
+  const result = buildCheckoutCompletedUpdate("cus_1", "sub_1", NOW);
+  assertEquals(result.status, "active");
+  assertEquals(result.plan, "pro");
+  assertEquals(result.stripe_customer_id, "cus_1");
+  assertEquals(result.stripe_subscription_id, "sub_1");
+  assertEquals(result.auto_renew, true);
+  assertEquals(result.downgrade_scheduled_for, null);
+  assertEquals(result.downgrade_reason, null);
+  assertEquals(result.updated_at, NOW);
+});
+
+Deno.test("buildCheckoutCompletedUpdate - allows null Stripe ids", () => {
+  const result = buildCheckoutCompletedUpdate(null, null, NOW);
+  assertEquals(result.stripe_customer_id, null);
+  assertEquals(result.stripe_subscription_id, null);
+  assertEquals(result.plan, "pro");
+});
+
+Deno.test("upgradeCycleAnchorDate - returns YYYY-MM-DD in UTC", () => {
+  assertEquals(upgradeCycleAnchorDate(new Date("2026-07-30T15:22:00Z")), "2026-07-30");
+});
+
+// ─── buildSubscriptionDeletedUpdate ─────────────────────────────────────────
+
+Deno.test("buildSubscriptionDeletedUpdate - forces Free and clears Stripe linkage", () => {
+  const result = buildSubscriptionDeletedUpdate(NOW);
+  assertEquals(result.status, "canceled");
+  assertEquals(result.plan, "free");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, null);
+  assertEquals(result.downgrade_reason, null);
+  assertEquals(result.stripe_subscription_id, null);
+  assertEquals(result.current_period_end, null);
+  assertEquals(result.updated_at, NOW);
 });
