@@ -1140,10 +1140,6 @@ function setPopoverPositionNearAnchor(anchor) {
   const vpW = window.innerWidth;
   const vpH = window.innerHeight;
 
-  // default right/below the link
-  const desiredLeft = rect.left + Math.min(rect.width, 40) + 12;
-  const desiredTop = rect.top + rect.height + 10;
-
   UI.popover.style.display = "block";
   UI.popover.style.left = "0px";
   UI.popover.style.top = "0px";
@@ -1152,50 +1148,35 @@ function setPopoverPositionNearAnchor(anchor) {
   const popRect = UI.popover.getBoundingClientRect();
   const popWidth = popRect.width;
   const popHeight = popRect.height;
-  
-  // Calculate horizontal position - ensure fully visible
-  let left = desiredLeft;
-  const rightEdge = left + popWidth;
-  
-  if (rightEdge > vpW - padding) {
-    // Doesn't fit on right, try left side
-    left = rect.left - popWidth - 12;
-    if (left < padding) {
-      // Still doesn't fit, position to fit within viewport
-      left = Math.max(padding, vpW - popWidth - padding);
-    }
-  }
-  
-  // Ensure left edge is visible
-  if (left < padding) {
-    left = padding;
-  }
-  
-  // Calculate vertical position - ensure fully visible
-  let top = desiredTop;
-  const bottomEdge = top + popHeight;
-  
-  if (bottomEdge > vpH - padding) {
-    // Doesn't fit below, try above
-    top = rect.top - popHeight - 10;
-    if (top < padding) {
-      // Still doesn't fit, position to fit within viewport
-      top = Math.max(padding, vpH - popHeight - padding);
-    }
-  }
-  
-  // Ensure top edge is visible
-  if (top < padding) {
-    top = padding;
-  }
-  
-  // Final check: ensure both edges are within bounds
-  if (left + popWidth > vpW - padding) {
-    left = vpW - popWidth - padding;
-  }
-  if (top + popHeight > vpH - padding) {
-    top = vpH - popHeight - padding;
-  }
+
+  const positionUtils = globalThis.TermsDigestPopoverPositionUtils;
+  const { left, top } = positionUtils?.computePopoverPosition
+    ? positionUtils.computePopoverPosition({
+        anchorRect: rect,
+        popWidth,
+        popHeight,
+        viewportWidth: vpW,
+        viewportHeight: vpH,
+        padding,
+      })
+    : (() => {
+        // Fallback if util script failed to load (keeps Chrome/Safari usable).
+        let left = rect.left + Math.min(rect.width, 40) + 12;
+        let top = rect.top + rect.height + 10;
+        if (left + popWidth > vpW - padding) {
+          left = rect.left - popWidth - 12;
+          if (left < padding) left = Math.max(padding, vpW - popWidth - padding);
+        }
+        if (left < padding) left = padding;
+        if (top + popHeight > vpH - padding) {
+          top = rect.top - popHeight - 10;
+          if (top < padding) top = Math.max(padding, vpH - popHeight - padding);
+        }
+        if (top < padding) top = padding;
+        if (left + popWidth > vpW - padding) left = vpW - popWidth - padding;
+        if (top + popHeight > vpH - padding) top = vpH - popHeight - padding;
+        return { left, top };
+      })();
 
   UI.popover.style.left = `${left}px`;
   UI.popover.style.top = `${top}px`;
@@ -2255,8 +2236,6 @@ function injectHighlightStyles() {
   document.head.appendChild(style);
 }
 
-const LATE_GLOW_REPLAY_DELAY_MS = 30000;
-
 function prefersReducedMotion() {
   try {
     return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
@@ -2265,21 +2244,43 @@ function prefersReducedMotion() {
   }
 }
 
+function getHighlightGlowUtils() {
+  return globalThis.TermsDigestHighlightGlowUtils || null;
+}
+
+function lateGlowReplayDelayMs() {
+  return getHighlightGlowUtils()?.LATE_GLOW_REPLAY_DELAY_MS ?? 30000;
+}
+
 function isElementInViewport(element) {
   if (!element || !element.isConnected) return false;
   const rect = element.getBoundingClientRect();
+  const viewport = {
+    width: window.innerWidth || document.documentElement.clientWidth,
+    height: window.innerHeight || document.documentElement.clientHeight,
+  };
+  const glowUtils = getHighlightGlowUtils();
+  if (glowUtils?.isRectInViewport) {
+    return glowUtils.isRectInViewport(rect, viewport);
+  }
   if (rect.width <= 0 || rect.height <= 0) return false;
-
   return (
     rect.bottom >= 0 &&
     rect.right >= 0 &&
-    rect.top <= (window.innerHeight || document.documentElement.clientHeight) &&
-    rect.left <= (window.innerWidth || document.documentElement.clientWidth)
+    rect.top <= viewport.height &&
+    rect.left <= viewport.width
   );
 }
 
 function playGlowPair(element) {
-  if (!element || !element.isConnected || prefersReducedMotion()) return;
+  const glowUtils = getHighlightGlowUtils();
+  const allow = glowUtils?.shouldPlayGlow
+    ? glowUtils.shouldPlayGlow({
+        isConnected: !!element?.isConnected,
+        prefersReducedMotion: prefersReducedMotion(),
+      })
+    : !!(element?.isConnected && !prefersReducedMotion());
+  if (!element || !allow) return;
 
   // Remove before re-adding so the same two-pulse animation can replay after
   // the 30s reminder delay. offsetWidth intentionally forces a tiny reflow for
@@ -2314,10 +2315,19 @@ function highlightLegalLink(element) {
     // If the user is still on the page and the link is still visible, repeat
     // the same two-pulse glow once after 30s to re-capture attention.
     window.setTimeout(() => {
-      if (document.visibilityState !== "visible") return;
-      if (!isElementInViewport(element)) return;
+      const glowUtils = getHighlightGlowUtils();
+      const pageVisible = document.visibilityState === "visible";
+      const inViewport = isElementInViewport(element);
+      const replay = glowUtils?.shouldReplayLateGlow
+        ? glowUtils.shouldReplayLateGlow({
+            isConnected: !!element?.isConnected,
+            pageVisible,
+            inViewport,
+          })
+        : !!(element?.isConnected && pageVisible && inViewport);
+      if (!replay) return;
       playGlowPair(element);
-    }, LATE_GLOW_REPLAY_DELAY_MS);
+    }, lateGlowReplayDelayMs());
   });
 }
 
