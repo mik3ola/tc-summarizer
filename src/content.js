@@ -28,6 +28,10 @@ function isExtensionContextValid() {
 
 // True if error is due to extension reload (context invalidated)
 function isContextInvalidatedError(e) {
+  const utils = globalThis.TermsDigestSummaryErrorUtils;
+  if (utils?.isContextInvalidatedMessage) {
+    return utils.isContextInvalidatedMessage(e?.message || String(e));
+  }
   const msg = (e?.message || String(e)).toLowerCase();
   return msg.includes("context invalidated") || msg.includes("message port closed") ||
     msg.includes("reading 'get'") || msg.includes("reading 'sendmessage'") || msg.includes("reading 'runtime'");
@@ -1389,65 +1393,79 @@ async function renderError(errMsg, url) {
   if (isExtensionContextValid()) {
     try {
       const data = await chrome.storage.local.get(["subscription", "subscriptionPlan", "openaiApiKey"]);
-      isProUser = (data.subscription === "active" && data.subscriptionPlan === "pro") || data.subscriptionPlan === "pro";
-      hasOpenAIKey = !!data.openaiApiKey && data.openaiApiKey.trim().length > 0;
+      const errorUtils = globalThis.TermsDigestSummaryErrorUtils;
+      isProUser = errorUtils?.isProForErrorUi
+        ? errorUtils.isProForErrorUi(data.subscription, data.subscriptionPlan)
+        : (data.subscription === "active" && data.subscriptionPlan === "pro") || data.subscriptionPlan === "pro";
+      hasOpenAIKey = errorUtils?.hasUsableOpenAIKey
+        ? errorUtils.hasUsableOpenAIKey(data.openaiApiKey)
+        : !!data.openaiApiKey && data.openaiApiKey.trim().length > 0;
     } catch (e) {
       if (!isContextInvalidatedError(e)) {
         console.warn("[TermsDigest] Could not check subscription status:", e);
       }
     }
   }
-  
-  // Determine error type and icon
-  let displayMsg = msg;
-  let errorIcon = "⚠️";
-  let headerTitle = "Summary unavailable";
-  let showUpgradeButton = false;
-  let showRefreshButton = false;
-  let isSignInIssue = false;
-  let isProQuotaExceeded = false;
-  let isInfoNotice = false;
 
-  if (msg === "UNREADABLE_PAGE" || msg.includes("Could not extract readable text")) {
-    // Friendly notice for pages we can't summarise (single-page apps, paywalls,
-    // anti-bot pages, login-walled content). No byte counts, no "blocked" wording.
-    displayMsg = "We couldn't read this page automatically. You can still open it to read it yourself.";
-    errorIcon = "ℹ️";
-    headerTitle = "Nothing to summarise";
-    isInfoNotice = true;
-  } else if (isContextInvalidatedError({ message: msg })) {
-    displayMsg = "Extension needs a page refresh to continue";
-    errorIcon = "⚠️";
-    headerTitle = "Summary unavailable";
-    showRefreshButton = true;
-  } else if (msg.includes("No API access") || msg.includes("Please login") || msg.includes("sign in")) {
-    displayMsg = "Please sign in to continue";
-    errorIcon = "🔒";
-    headerTitle = "Sign in required";
-    isSignInIssue = true;
-  } else if (msg.includes("Quota exceeded") || msg.includes("quotaExceeded")) {
-    if (isProUser && hasOpenAIKey) {
-      // Pro user with API key - should work automatically, don't show error
-      // This case shouldn't happen, but if it does, just return early
-      return;
-    } else if (isProUser) {
-      // Pro user without API key hit quota
-      isProQuotaExceeded = true;
-      displayMsg = "Monthly limit reached. Add your OpenAI API key for unlimited summaries, or contact support.";
+  const errorUtils = globalThis.TermsDigestSummaryErrorUtils;
+  const classified = errorUtils?.classifySummaryErrorUi
+    ? errorUtils.classifySummaryErrorUi({ errMsg: msg, isProUser, hasOpenAIKey })
+    : null;
+
+  // Determine error type and icon (inline fallback if util failed to load)
+  let displayMsg = classified?.displayMsg ?? msg;
+  let errorIcon = classified?.errorIcon ?? "⚠️";
+  let headerTitle = classified?.headerTitle ?? "Summary unavailable";
+  let showUpgradeButton = classified?.showUpgradeButton ?? false;
+  let showRefreshButton = classified?.showRefreshButton ?? false;
+  let isSignInIssue = classified?.isSignInIssue ?? false;
+  let isProQuotaExceeded = classified?.isProQuotaExceeded ?? false;
+  let isInfoNotice = classified?.isInfoNotice ?? false;
+
+  if (!classified) {
+    if (msg === "UNREADABLE_PAGE" || msg.includes("Could not extract readable text")) {
+      // Friendly notice for pages we can't summarise (single-page apps, paywalls,
+      // anti-bot pages, login-walled content). No byte counts, no "blocked" wording.
+      displayMsg = "We couldn't read this page automatically. You can still open it to read it yourself.";
+      errorIcon = "ℹ️";
+      headerTitle = "Nothing to summarise";
+      isInfoNotice = true;
+    } else if (isContextInvalidatedError({ message: msg })) {
+      displayMsg = "Extension needs a page refresh to continue";
       errorIcon = "⚠️";
-      headerTitle = "Usage limit reached";
-    } else {
-      // Free user hit quota
-      displayMsg = "You've hit your usage limit";
-      errorIcon = "⚠️";
-      headerTitle = "Usage limit reached";
-      showUpgradeButton = true;
+      headerTitle = "Summary unavailable";
+      showRefreshButton = true;
+    } else if (msg.includes("No API access") || msg.includes("Please login") || msg.includes("sign in")) {
+      displayMsg = "Please sign in to continue";
+      errorIcon = "🔒";
+      headerTitle = "Sign in required";
+      isSignInIssue = true;
+    } else if (msg.includes("Quota exceeded") || msg.includes("quotaExceeded")) {
+      if (isProUser && hasOpenAIKey) {
+        // Pro user with API key - should work automatically, don't show error
+        return;
+      } else if (isProUser) {
+        // Pro user without API key hit quota
+        isProQuotaExceeded = true;
+        displayMsg = "Monthly limit reached. Add your OpenAI API key for unlimited summaries, or contact support.";
+        errorIcon = "⚠️";
+        headerTitle = "Usage limit reached";
+      } else {
+        // Free user hit quota
+        displayMsg = "You've hit your usage limit";
+        errorIcon = "⚠️";
+        headerTitle = "Usage limit reached";
+        showUpgradeButton = true;
+      }
+    } else if (msg.includes("Session expired") || msg.includes("Invalid JWT") || msg.includes("401") || msg.includes("Unauthorized")) {
+      displayMsg = "Session expired";
+      errorIcon = "🔒";
+      headerTitle = "Sign in required";
+      isSignInIssue = true;
     }
-  } else if (msg.includes("Session expired") || msg.includes("Invalid JWT") || msg.includes("401") || msg.includes("Unauthorized")) {
-    displayMsg = "Session expired";
-    errorIcon = "🔒";
-    headerTitle = "Sign in required";
-    isSignInIssue = true;
+  } else if (classified.suppress) {
+    // Pro user with API key - should work automatically, don't show error
+    return;
   }
   
   // Build buttons based on error type

@@ -1,3 +1,6 @@
+// Pure helpers — must load before this worker body runs.
+importScripts("summary-fallback-utils.js");
+
 // Configuration
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -430,18 +433,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                 input: { url, text }
               });
               const parsed = safeJsonParse(outputText);
-              summary = parsed.ok ? parsed.value : {
-                title: "",
-                tldr: outputText.trim(),
-                costs_and_renewal: [],
-                cancellation_and_refunds: [],
-                liability_and_disputes: [],
-                privacy_and_data: [],
-                red_flags: [],
-                quotes: [],
-                confidence: "low",
-                _note: "Model did not return valid JSON; showing raw output."
-              };
+              summary = parsed.ok ? parsed.value : buildFallbackSummary(outputText);
             } else if (msg.includes("401") || msg.includes("Invalid JWT") || msg.includes("Unauthorized") || msg.includes("Auth failed")) {
               const refreshed = await refreshSessionIfPossible({
                 supabaseUrl: settings.supabaseUrl,
@@ -465,18 +457,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                     input: { url, text }
                   });
                   const parsed = safeJsonParse(outputText);
-                  summary = parsed.ok ? parsed.value : {
-                    title: "",
-                    tldr: outputText.trim(),
-                    costs_and_renewal: [],
-                    cancellation_and_refunds: [],
-                    liability_and_disputes: [],
-                    privacy_and_data: [],
-                    red_flags: [],
-                    quotes: [],
-                    confidence: "low",
-                    _note: "Model did not return valid JSON; showing raw output."
-                  };
+                  summary = parsed.ok ? parsed.value : buildFallbackSummary(outputText);
                 } else {
                   await chrome.storage.local.set({ 
                     supabaseSession: null, 
@@ -497,18 +478,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
                   input: { url, text }
                 });
                 const parsed = safeJsonParse(outputText);
-                summary = parsed.ok ? parsed.value : {
-                  title: "",
-                  tldr: outputText.trim(),
-                  costs_and_renewal: [],
-                  cancellation_and_refunds: [],
-                  liability_and_disputes: [],
-                  privacy_and_data: [],
-                  red_flags: [],
-                  quotes: [],
-                  confidence: "low",
-                  _note: "Model did not return valid JSON; showing raw output."
-                };
+                summary = parsed.ok ? parsed.value : buildFallbackSummary(outputText);
               } else {
                 throw e;
               }
@@ -525,18 +495,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           const parsed = safeJsonParse(outputText);
           summary = parsed.ok
             ? parsed.value
-            : {
-                title: "",
-                tldr: outputText.trim(),
-                costs_and_renewal: [],
-                cancellation_and_refunds: [],
-                liability_and_disputes: [],
-                privacy_and_data: [],
-                red_flags: [],
-                quotes: [],
-                confidence: "low",
-                _note: "Model did not return valid JSON; showing raw output."
-              };
+            : buildFallbackSummary(outputText);
         }
 
         // Cache the result (store original text length for minutes saved calculation)
