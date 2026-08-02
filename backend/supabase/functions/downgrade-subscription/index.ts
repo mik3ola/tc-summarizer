@@ -5,7 +5,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@13.10.0?target=deno";
-import { extractUserId, validateRequestBody } from "./lib.ts";
+import {
+  extractUserId,
+  validateRequestBody,
+  resolveDowngradeAction,
+  type Action,
+  type Reason,
+} from "./lib.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -77,28 +83,25 @@ serve(async (req: Request) => {
       return json({ error: "No subscription found" }, 404);
     }
 
-    if (sub.plan !== "pro" && sub.plan !== "enterprise") {
+    const outcome = resolveDowngradeAction(
+      action as Action,
+      sub,
+      reason as Reason
+    );
+
+    if (outcome.kind === "reject_unpaid") {
       return json({ error: "No active paid subscription to downgrade" }, 400);
     }
 
-    const previousStatus = sub.status;
-    const previousPlan = sub.plan;
-    const currentPeriodEnd = sub.current_period_end;
+    if (outcome.kind === "cancel_noop" || outcome.kind === "reenable_noop") {
+      return json({
+        success: true,
+        subscription: outcome.subscription,
+      });
+    }
 
-    if (action === "cancel_auto_renew") {
-      if (!sub.auto_renew) {
-        return json({
-          success: true,
-          subscription: {
-            status: sub.status,
-            plan: sub.plan,
-            current_period_end: currentPeriodEnd,
-            auto_renew: false,
-            downgrade_scheduled_for: sub.downgrade_scheduled_for,
-          },
-        });
-      }
-
+    // Stripe side-effects (unchanged policies; failures are logged, not fatal)
+    if (outcome.kind === "cancel_schedule") {
       if (stripe && sub.stripe_subscription_id) {
         try {
           await stripe.subscriptions.update(sub.stripe_subscription_id, {
@@ -108,50 +111,7 @@ serve(async (req: Request) => {
           console.error("Stripe cancel_at_period_end error:", stripeErr);
         }
       }
-
-      const { error: updateErr } = await supabase
-        .from("subscriptions")
-        .update({
-          auto_renew: false,
-          downgrade_scheduled_for: currentPeriodEnd,
-          downgrade_reason: reason,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", userId);
-
-      if (updateErr) {
-        console.error("DB update error:", updateErr);
-        return json({ error: "Failed to update subscription" }, 500);
-      }
-
-      await logChange(supabase, userId, "cancel_auto_renew", reason, previousStatus, previousPlan, "active", previousPlan);
-
-      return json({
-        success: true,
-        subscription: {
-          status: "active",
-          plan: previousPlan,
-          current_period_end: currentPeriodEnd,
-          auto_renew: false,
-          downgrade_scheduled_for: currentPeriodEnd,
-        },
-      });
-    }
-
-    if (action === "re_enable_auto_renew") {
-      if (sub.auto_renew) {
-        return json({
-          success: true,
-          subscription: {
-            status: sub.status,
-            plan: sub.plan,
-            current_period_end: currentPeriodEnd,
-            auto_renew: true,
-            downgrade_scheduled_for: null,
-          },
-        });
-      }
-
+    } else if (outcome.kind === "reenable") {
       if (stripe && sub.stripe_subscription_id) {
         try {
           await stripe.subscriptions.update(sub.stripe_subscription_id, {
@@ -161,50 +121,20 @@ serve(async (req: Request) => {
           console.error("Stripe re-enable error:", stripeErr);
         }
       }
-
-      const { error: updateErr } = await supabase
-        .from("subscriptions")
-        .update({
-          auto_renew: true,
-          downgrade_scheduled_for: null,
-          downgrade_reason: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", userId);
-
-      if (updateErr) {
-        console.error("DB update error:", updateErr);
-        return json({ error: "Failed to update subscription" }, 500);
-      }
-
-      await logChange(supabase, userId, "re_enable_auto_renew", reason, previousStatus, previousPlan, "active", previousPlan);
-
-      return json({
-        success: true,
-        subscription: {
-          status: "active",
-          plan: previousPlan,
-          current_period_end: currentPeriodEnd,
-          auto_renew: true,
-          downgrade_scheduled_for: null,
-        },
-      });
-    }
-
-    // action === "downgrade_now"
-    if (stripe && sub.stripe_subscription_id) {
-      try {
-        await stripe.subscriptions.cancel(sub.stripe_subscription_id);
-      } catch (stripeErr) {
-        console.error("Stripe cancel error:", stripeErr);
-      }
-    }
-
-    // If the user has remaining paid time, schedule the downgrade at period end
-    // so they keep their Pro quota (50/month) for every period they've already paid for.
-    // Only immediately drop to free if there is no remaining paid period.
-    if (currentPeriodEnd) {
+    } else if (
+      outcome.kind === "downgrade_schedule" ||
+      outcome.kind === "downgrade_immediate"
+    ) {
       if (stripe && sub.stripe_subscription_id) {
+        try {
+          await stripe.subscriptions.cancel(sub.stripe_subscription_id);
+        } catch (stripeErr) {
+          console.error("Stripe cancel error:", stripeErr);
+        }
+      }
+      // If the user has remaining paid time, also mark cancel_at_period_end
+      // (historical behavior preserved for schedule path).
+      if (outcome.kind === "downgrade_schedule" && stripe && sub.stripe_subscription_id) {
         try {
           await stripe.subscriptions.update(sub.stripe_subscription_id, {
             cancel_at_period_end: true,
@@ -213,65 +143,38 @@ serve(async (req: Request) => {
           console.error("Stripe cancel_at_period_end error:", stripeErr);
         }
       }
-
-      const { error: updateErr } = await supabase
-        .from("subscriptions")
-        .update({
-          auto_renew: false,
-          downgrade_scheduled_for: currentPeriodEnd,
-          downgrade_reason: reason,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", userId);
-
-      if (updateErr) {
-        console.error("DB update error:", updateErr);
-        return json({ error: "Failed to downgrade subscription" }, 500);
-      }
-
-      await logChange(supabase, userId, "downgrade_now", reason, previousStatus, previousPlan, previousStatus, previousPlan);
-
-      return json({
-        success: true,
-        subscription: {
-          status: previousStatus,
-          plan: previousPlan,
-          current_period_end: currentPeriodEnd,
-          auto_renew: false,
-          downgrade_scheduled_for: currentPeriodEnd,
-        },
-      });
     }
 
-    // No remaining paid period — downgrade immediately
+    const updateErrorLabel =
+      outcome.kind === "downgrade_schedule" || outcome.kind === "downgrade_immediate"
+        ? "Failed to downgrade subscription"
+        : "Failed to update subscription";
+
     const { error: updateErr } = await supabase
       .from("subscriptions")
-      .update({
-        status: "canceled",
-        plan: "free",
-        auto_renew: false,
-        downgrade_scheduled_for: null,
-        downgrade_reason: reason,
-        stripe_subscription_id: null,
-        current_period_end: null,
-        updated_at: new Date().toISOString(),
-      })
+      .update(outcome.dbUpdate)
       .eq("user_id", userId);
 
     if (updateErr) {
       console.error("DB update error:", updateErr);
-      return json({ error: "Failed to downgrade subscription" }, 500);
+      return json({ error: updateErrorLabel }, 500);
     }
 
-    await logChange(supabase, userId, "downgrade_now", reason, previousStatus, previousPlan, "canceled", "free");
+    const { changeLog } = outcome;
+    await logChange(
+      supabase,
+      userId,
+      changeLog.action,
+      changeLog.reason,
+      changeLog.previous_status,
+      changeLog.previous_plan,
+      changeLog.new_status,
+      changeLog.new_plan
+    );
 
     return json({
       success: true,
-      subscription: {
-        status: "canceled",
-        plan: "free",
-        current_period_end: null,
-      },
+      subscription: outcome.subscription,
     });
   } catch (err) {
     console.error("Downgrade error:", err);
