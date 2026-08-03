@@ -11,7 +11,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@13.10.0?target=deno";
-import { mapStripeStatus, buildSubscriptionUpdateData, shouldSkipCreatedEvent } from "./lib.ts";
+import { mapStripeStatus, buildSubscriptionUpdateData, shouldSkipCreatedEvent, resolveInvoicePaymentFailedAction } from "./lib.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
   apiVersion: "2023-10-16",
@@ -90,10 +90,10 @@ serve(async (req: Request) => {
         case "invoice.payment_failed": {
           const invoice = event.data.object as Stripe.Invoice;
           console.log("Invoice payment failed:", invoice.id);
-          // Mark subscription as past_due
-          if (invoice.subscription) {
+          const failedAction = resolveInvoicePaymentFailedAction(invoice);
+          if (failedAction.action === "mark_past_due") {
             await updateSubscriptionStatus(
-              invoice.subscription as string,
+              failedAction.subscriptionId,
               "past_due"
             );
           }

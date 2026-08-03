@@ -76,3 +76,29 @@ export function buildSubscriptionUpdateData(
 export function shouldSkipCreatedEvent(existing: ExistingSubscription): boolean {
   return !!(existing && existing.plan === "pro" && existing.status === "active");
 }
+
+export type InvoicePaymentFailedAction =
+  | { action: "mark_past_due"; subscriptionId: string }
+  | { action: "noop" };
+
+/**
+ * Decide whether invoice.payment_failed should mark a subscription past_due.
+ * Accepts Stripe's string id or expanded subscription object.
+ */
+export function resolveInvoicePaymentFailedAction(
+  invoice: { subscription?: unknown } | null | undefined,
+): InvoicePaymentFailedAction {
+  const sub = invoice?.subscription;
+  if (typeof sub === "string" && sub.length > 0) {
+    return { action: "mark_past_due", subscriptionId: sub };
+  }
+  if (
+    sub &&
+    typeof sub === "object" &&
+    typeof (sub as { id?: unknown }).id === "string" &&
+    (sub as { id: string }).id.length > 0
+  ) {
+    return { action: "mark_past_due", subscriptionId: (sub as { id: string }).id };
+  }
+  return { action: "noop" };
+}
