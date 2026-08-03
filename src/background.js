@@ -1,7 +1,11 @@
+// Pure helpers — must load before this worker body runs.
+importScripts("plan-entitlement-utils.js", "summary-flow-utils.js");
+
 // Configuration
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
-const MAX_TEXT_CHARS = 45_000; // keep request size reasonable
+const MAX_TEXT_CHARS =
+  (typeof DEFAULT_MAX_TEXT_CHARS === "number" && DEFAULT_MAX_TEXT_CHARS) || 45_000;
 const DEFAULT_SUPABASE_URL = "https://rsxvxezucgczesplmjiw.supabase.co";
 // Anon key is safe to expose - it's a public key meant for client-side use
 // Must match the key in options.js for refresh to work
@@ -358,19 +362,30 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         // AUTHENTICATION REQUIRED - guests cannot use the service
-        const isLoggedIn = !!settings.session?.access_token;
-        
-        if (!isLoggedIn) {
+        const authGate =
+          typeof resolveSummarizeAuthGate === "function"
+            ? resolveSummarizeAuthGate({
+                hasAccessToken: !!settings.session?.access_token,
+              })
+            : {
+                allowed: !!settings.session?.access_token,
+                error: "Please sign in to use TermsDigest!",
+              };
+
+        if (!authGate.allowed) {
           sendResponse({
             ok: false,
-            error: "Please sign in to use TermsDigest!"
+            error: authGate.error || "Please sign in to use TermsDigest!",
           });
           return;
         }
 
         // User is logged in - determine API access
         const hasOwnApiKey = !!settings.openaiApiKey;
-        const isPro = settings.subscription === "active" && settings.subscriptionPlan === "pro";
+        const isPro =
+          typeof isProForApiAccess === "function"
+            ? isProForApiAccess(settings.subscription, settings.subscriptionPlan)
+            : settings.subscription === "active" && settings.subscriptionPlan === "pro";
         const hasBackendAccess = !!settings.supabaseAnonKey;
         
         // Priority: Pro users should use backend first (to consume their 50/month quota)
@@ -387,9 +402,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           return;
         }
 
-        const rawText = typeof message.text === "string" ? message.text : "";
-        const text = rawText.length > MAX_TEXT_CHARS ? rawText.slice(0, MAX_TEXT_CHARS) : rawText;
-        if (!text.trim()) {
+        const text =
+          typeof clampTextForSummarize === "function"
+            ? clampTextForSummarize(message.text, MAX_TEXT_CHARS)
+            : (() => {
+                const rawText = typeof message.text === "string" ? message.text : "";
+                const clipped =
+                  rawText.length > MAX_TEXT_CHARS ? rawText.slice(0, MAX_TEXT_CHARS) : rawText;
+                return clipped.trim() ? clipped : "";
+              })();
+        if (!text) {
           sendResponse({ ok: false, error: "No text extracted from page." });
           return;
         }

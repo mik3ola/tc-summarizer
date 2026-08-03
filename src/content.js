@@ -505,6 +505,14 @@ function getUrlFromElement(el) {
   // Check if this is a JavaScript-triggered modal or button
   if (href.startsWith("javascript:") || !href || href === "#") {
     const modalContent = findModalContent(el);
+    const flow = globalThis.TermsDigestSummaryFlowUtils;
+    if (flow?.resolveDynamicNavigationOutcome) {
+      const outcome = flow.resolveDynamicNavigationOutcome(modalContent);
+      if (outcome.type === "modal-element") {
+        return { type: "modal-element", value: modalContent };
+      }
+      return { type: "click-to-load", value: el };
+    }
     if (modalContent) {
       return { type: "modal-element", value: modalContent };
     }
@@ -1266,6 +1274,8 @@ async function renderLoading(url) {
 }
 
 function truncateUrl(url, maxLen = 50) {
+  const flow = globalThis.TermsDigestSummaryFlowUtils;
+  if (flow?.truncateDisplayUrl) return flow.truncateDisplayUrl(url, maxLen);
   if (url.length <= maxLen) return url;
   return url.slice(0, maxLen - 3) + "…";
 }
@@ -1389,7 +1399,11 @@ async function renderError(errMsg, url) {
   if (isExtensionContextValid()) {
     try {
       const data = await chrome.storage.local.get(["subscription", "subscriptionPlan", "openaiApiKey"]);
-      isProUser = (data.subscription === "active" && data.subscriptionPlan === "pro") || data.subscriptionPlan === "pro";
+      const entitlement = globalThis.TermsDigestPlanEntitlementUtils;
+      isProUser = entitlement?.isProForUi
+        ? entitlement.isProForUi(data.subscription, data.subscriptionPlan)
+        : (data.subscription === "active" && data.subscriptionPlan === "pro") ||
+          data.subscriptionPlan === "pro";
       hasOpenAIKey = !!data.openaiApiKey && data.openaiApiKey.trim().length > 0;
     } catch (e) {
       if (!isContextInvalidatedError(e)) {
@@ -1543,12 +1557,20 @@ async function renderClickToLoad(element) {
 }
 
 function getConfidenceTooltip(confidence) {
+  const flow = globalThis.TermsDigestSummaryFlowUtils;
+  if (flow?.getConfidenceTooltip) return flow.getConfidenceTooltip(confidence);
   const tips = {
     high: "High confidence: Clear, well-structured legal text found",
     medium: "Medium confidence: Reasonable summary but some parts may be unclear",
     low: "Low confidence: AI struggled with this page — verify manually"
   };
   return tips[confidence] || tips.medium;
+}
+
+function getConfidenceBadgeClass(confidence) {
+  const flow = globalThis.TermsDigestSummaryFlowUtils;
+  if (flow?.getConfidenceBadgeClass) return flow.getConfidenceBadgeClass(confidence);
+  return confidence === "high" ? "badge-high" : confidence === "low" ? "badge-low" : "badge-medium";
 }
 
 async function renderSummary(summary, url, fromCache) {
@@ -1560,7 +1582,7 @@ async function renderSummary(summary, url, fromCache) {
   const confidence = summary?.confidence || "medium";
   const badgeText = fromCache ? `${confidence} • cached` : confidence;
   const badgeTooltip = getConfidenceTooltip(confidence);
-  const badgeColorClass = confidence === "high" ? "badge-high" : confidence === "low" ? "badge-low" : "badge-medium";
+  const badgeColorClass = getConfidenceBadgeClass(confidence);
   const footer = await getStatsFooter(url, true);
 
   UI.popover.innerHTML = `
@@ -1669,7 +1691,11 @@ async function summarizeModal(modalSelector, anchor, requestId) {
     throw new Error("Modal appears to be empty or has very little content.");
   }
 
-  if (current.requestId !== requestId) return;
+  if (
+    globalThis.TermsDigestSummaryFlowUtils?.isCurrentSummaryRequest
+      ? !globalThis.TermsDigestSummaryFlowUtils.isCurrentSummaryRequest(current.requestId, requestId)
+      : current.requestId !== requestId
+  ) return;
 
   // Use anchor text/ID for unique cache key
   const anchorText = (anchor.textContent || "").trim().toLowerCase().replace(/\s+/g, "-").slice(0, 50);
@@ -1682,7 +1708,11 @@ async function summarizeModal(modalSelector, anchor, requestId) {
     text
   });
 
-  if (current.requestId !== requestId) return;
+  if (
+    globalThis.TermsDigestSummaryFlowUtils?.isCurrentSummaryRequest
+      ? !globalThis.TermsDigestSummaryFlowUtils.isCurrentSummaryRequest(current.requestId, requestId)
+      : current.requestId !== requestId
+  ) return;
 
   if (!sumRes?.ok) throw new Error(sumRes?.error || "Summarization failed.");
 
@@ -1714,7 +1744,11 @@ async function summarizeModalElement(modalElement, anchor, requestId) {
     throw new Error("Content appears to be empty or has very little text.");
   }
 
-  if (current.requestId !== requestId) return;
+  if (
+    globalThis.TermsDigestSummaryFlowUtils?.isCurrentSummaryRequest
+      ? !globalThis.TermsDigestSummaryFlowUtils.isCurrentSummaryRequest(current.requestId, requestId)
+      : current.requestId !== requestId
+  ) return;
 
   // Use anchor text/ID for unique cache key (not modal container which might be shared)
   const anchorText = (anchor.textContent || "").trim().toLowerCase().replace(/\s+/g, "-").slice(0, 50);
@@ -1727,7 +1761,11 @@ async function summarizeModalElement(modalElement, anchor, requestId) {
     text
   });
 
-  if (current.requestId !== requestId) return;
+  if (
+    globalThis.TermsDigestSummaryFlowUtils?.isCurrentSummaryRequest
+      ? !globalThis.TermsDigestSummaryFlowUtils.isCurrentSummaryRequest(current.requestId, requestId)
+      : current.requestId !== requestId
+  ) return;
 
   if (!sumRes?.ok) throw new Error(sumRes?.error || "Summarization failed.");
 
@@ -1749,7 +1787,11 @@ async function summarizeLink(url, anchor, requestId) {
     throw new Error(`Fetch failed (${result?.status || "?"}). This site may block automated access.`);
   }
 
-  if (current.requestId !== requestId) return; // cancelled/replaced
+  if (
+    globalThis.TermsDigestSummaryFlowUtils?.isCurrentSummaryRequest
+      ? !globalThis.TermsDigestSummaryFlowUtils.isCurrentSummaryRequest(current.requestId, requestId)
+      : current.requestId !== requestId
+  ) return; // cancelled/replaced
 
   const text = extractTextFromHtml(result.html, result.finalUrl);
   if (!text.trim()) {
@@ -1765,7 +1807,11 @@ async function summarizeLink(url, anchor, requestId) {
     text
   });
 
-  if (current.requestId !== requestId) return; // cancelled/replaced
+  if (
+    globalThis.TermsDigestSummaryFlowUtils?.isCurrentSummaryRequest
+      ? !globalThis.TermsDigestSummaryFlowUtils.isCurrentSummaryRequest(current.requestId, requestId)
+      : current.requestId !== requestId
+  ) return; // cancelled/replaced
 
   if (!sumRes?.ok) throw new Error(sumRes?.error || "Summarization failed.");
 
@@ -1782,7 +1828,21 @@ function clearHoverTimer() {
 function startHover(element) {
   clearHoverTimer();
   const linkInfo = getUrlFromElement(element);
-  if (!linkInfo) return;
+  const flow = globalThis.TermsDigestSummaryFlowUtils;
+  const hoverAction = flow?.resolveHoverLinkAction
+    ? flow.resolveHoverLinkAction(linkInfo)
+    : !linkInfo
+      ? { action: "ignore" }
+      : linkInfo.type === "modal"
+        ? { action: "summarize_modal" }
+        : linkInfo.type === "modal-element"
+          ? { action: "summarize_modal_element" }
+          : linkInfo.type === "click-to-load"
+            ? { action: "click_to_load" }
+            : linkInfo.type === "url"
+              ? { action: "summarize_url" }
+              : { action: "ignore" };
+  if (hoverAction.action === "ignore") return;
 
   current.anchor = element;
   current.requestId += 1;
@@ -1792,27 +1852,32 @@ function startHover(element) {
   const originalHref = element.getAttribute("href") || element.getAttribute("data-href") || "";
   current.originalHref = originalHref ? toAbsoluteUrl(originalHref) : null;
 
-  if (linkInfo.type === "modal") {
+  const isCurrent = (id) =>
+    flow?.isCurrentSummaryRequest
+      ? flow.isCurrentSummaryRequest(current.requestId, id)
+      : current.requestId === id;
+
+  if (hoverAction.action === "summarize_modal") {
     // Handle in-page modal content (Bootstrap-style with selector)
     current.url = window.location.href + linkInfo.value;
     current.hoverTimer = window.setTimeout(() => {
       summarizeModal(linkInfo.value, element, requestId).catch((e) => {
-        if (current.requestId !== requestId) return;
+        if (!isCurrent(requestId)) return;
         renderError(e?.message || String(e), current.url);
         showPopover(element);
       });
     }, HOVER_DELAY_MS);
-  } else if (linkInfo.type === "modal-element") {
+  } else if (hoverAction.action === "summarize_modal_element") {
     // Handle JavaScript-triggered modal (found DOM element directly)
     current.url = window.location.href;
     current.hoverTimer = window.setTimeout(() => {
       summarizeModalElement(linkInfo.value, element, requestId).catch((e) => {
-        if (current.requestId !== requestId) return;
+        if (!isCurrent(requestId)) return;
         renderError(e?.message || String(e), current.url);
         showPopover(element);
       });
     }, HOVER_DELAY_MS);
-  } else if (linkInfo.type === "click-to-load") {
+  } else if (hoverAction.action === "click_to_load") {
     // Content needs to be loaded by clicking first
     current.url = window.location.href;
     current.isModalContent = true;
@@ -1820,14 +1885,14 @@ function startHover(element) {
       renderClickToLoad(element);
       showPopover(element);
     }, HOVER_DELAY_MS);
-  } else if (linkInfo.type === "url") {
+  } else if (hoverAction.action === "summarize_url") {
     // Handle external URL
     const abs = toAbsoluteUrl(linkInfo.value);
     if (!abs) return;
     current.url = abs;
     current.hoverTimer = window.setTimeout(() => {
       summarizeLink(abs, element, requestId).catch((e) => {
-        if (current.requestId !== requestId) return;
+        if (!isCurrent(requestId)) return;
         renderError(e?.message || String(e), abs);
         showPopover(element);
       });
