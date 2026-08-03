@@ -1,23 +1,12 @@
 import { describe, it, expect } from "vitest";
+import { createRequire } from "node:module";
 
-function formatSubStatusLine(currentPeriodEnd) {
-  if (!currentPeriodEnd) return "Subscription: Pro";
-  const d = new Date(currentPeriodEnd);
-  const fmt = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-  return `Subscription: Pro (expires ${fmt})`;
-}
-
-function formatSubAutoRenewLine(autoRenew, downgradeScheduledFor) {
-  if (!autoRenew) {
-    if (downgradeScheduledFor) {
-      const d = new Date(downgradeScheduledFor);
-      const fmt = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-      return `Auto-renewal: Disabled. Access until ${fmt}.`;
-    }
-    return "Auto-renewal: Disabled";
-  }
-  return "Auto-renewal: Enabled";
-}
+const require = createRequire(import.meta.url);
+const {
+  formatSubStatusLine,
+  formatSubAutoRenewLine,
+  resolveProManagementButtons,
+} = require("../src/subscription-status-utils.js");
 
 describe("formatSubStatusLine", () => {
   it("returns 'Subscription: Pro' when no period end", () => {
@@ -36,7 +25,9 @@ describe("formatSubStatusLine", () => {
 describe("formatSubAutoRenewLine", () => {
   it("returns enabled when autoRenew is true", () => {
     expect(formatSubAutoRenewLine(true, null)).toBe("Auto-renewal: Enabled");
-    expect(formatSubAutoRenewLine(true, "2026-02-27T00:00:00Z")).toBe("Auto-renewal: Enabled");
+    expect(formatSubAutoRenewLine(true, "2026-02-27T00:00:00Z")).toBe(
+      "Auto-renewal: Enabled"
+    );
   });
 
   it("returns disabled with date when autoRenew is false and date is set", () => {
@@ -47,5 +38,23 @@ describe("formatSubAutoRenewLine", () => {
 
   it("returns disabled without date when autoRenew is false and no date", () => {
     expect(formatSubAutoRenewLine(false, null)).toBe("Auto-renewal: Disabled");
+  });
+});
+
+describe("resolveProManagementButtons", () => {
+  it("shows cancel when auto-renew is on", () => {
+    expect(resolveProManagementButtons({ autoRenew: true })).toEqual({
+      showCancelAutoRenew: true,
+      showReEnableAutoRenew: false,
+      showDowngradeNow: true,
+    });
+  });
+
+  it("shows re-enable when auto-renew is off", () => {
+    expect(resolveProManagementButtons({ autoRenew: false })).toEqual({
+      showCancelAutoRenew: false,
+      showReEnableAutoRenew: true,
+      showDowngradeNow: true,
+    });
   });
 });
