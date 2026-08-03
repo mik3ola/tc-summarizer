@@ -158,12 +158,18 @@ async function loadSettings() {
 }
 
 function formatSubStatusLine(currentPeriodEnd) {
+  const utils = globalThis.TermsDigestSubscriptionStatusUtils;
+  if (utils?.formatSubStatusLine) return utils.formatSubStatusLine(currentPeriodEnd);
   if (!currentPeriodEnd) return "Subscription: Pro";
   const d = new Date(currentPeriodEnd);
   const fmt = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
   return `Subscription: Pro (expires ${fmt})`;
 }
 function formatSubAutoRenewLine(autoRenew, downgradeScheduledFor) {
+  const utils = globalThis.TermsDigestSubscriptionStatusUtils;
+  if (utils?.formatSubAutoRenewLine) {
+    return utils.formatSubAutoRenewLine(autoRenew, downgradeScheduledFor);
+  }
   if (!autoRenew) {
     if (downgradeScheduledFor) {
       const d = new Date(downgradeScheduledFor);
@@ -176,9 +182,17 @@ function formatSubAutoRenewLine(autoRenew, downgradeScheduledFor) {
 }
 
 function updateSubscriptionUI(subscription, email, plan, extra = {}) {
-  const isLoggedIn = !!email;
-  // Pro if: (1) subscription is active AND plan is pro, OR (2) plan is pro (fallback for edge cases)
-  const isPro = (subscription === "active" && plan === "pro") || plan === "pro";
+  const entitlement = globalThis.TermsDigestPlanEntitlementUtils;
+  const statusUtils = globalThis.TermsDigestSubscriptionStatusUtils;
+  const tier = entitlement?.resolveAccountTier
+    ? entitlement.resolveAccountTier({ email, subscription, plan })
+    : !email
+      ? "guest"
+      : (subscription === "active" && plan === "pro") || plan === "pro"
+        ? "pro"
+        : "free";
+  const isPro = tier === "pro";
+  const isLoggedIn = tier !== "guest";
   const autoRenew = extra.subscriptionAutoRenew !== false;
   const downgradeScheduledFor = extra.subscriptionDowngradeScheduledFor || null;
   const currentPeriodEnd = extra.currentPeriodEnd || null;
@@ -219,9 +233,22 @@ function updateSubscriptionUI(subscription, email, plan, extra = {}) {
       subManagementEl.classList.remove("hidden");
       if (subStatusLineEl) subStatusLineEl.textContent = formatSubStatusLine(currentPeriodEnd);
       if (autoRenewLineEl) autoRenewLineEl.textContent = formatSubAutoRenewLine(autoRenew, downgradeScheduledFor);
-      if (cancelAutoRenewBtn) cancelAutoRenewBtn.style.display = autoRenew ? "inline-block" : "none";
-      if (reEnableAutoRenewBtn) reEnableAutoRenewBtn.style.display = autoRenew ? "none" : "inline-block";
-      if (downgradeNowBtn) downgradeNowBtn.style.display = "inline-block";
+      const buttons = statusUtils?.resolveProManagementButtons
+        ? statusUtils.resolveProManagementButtons({ autoRenew })
+        : {
+            showCancelAutoRenew: !!autoRenew,
+            showReEnableAutoRenew: !autoRenew,
+            showDowngradeNow: true,
+          };
+      if (cancelAutoRenewBtn) {
+        cancelAutoRenewBtn.style.display = buttons.showCancelAutoRenew ? "inline-block" : "none";
+      }
+      if (reEnableAutoRenewBtn) {
+        reEnableAutoRenewBtn.style.display = buttons.showReEnableAutoRenew ? "inline-block" : "none";
+      }
+      if (downgradeNowBtn) {
+        downgradeNowBtn.style.display = buttons.showDowngradeNow ? "inline-block" : "none";
+      }
     }
   } else if (isLoggedIn) {
     // Logged in but not pro → backend free tier available
@@ -785,7 +812,12 @@ upgradeBtn?.addEventListener("click", async () => {
         ]);
         
         // Check if subscription is now active (be flexible - plan="pro" is enough)
-        if ((updated.subscription === "active" && updated.subscriptionPlan === "pro") || updated.subscriptionPlan === "pro") {
+        if (
+          typeof isProForUi === "function"
+            ? isProForUi(updated.subscription, updated.subscriptionPlan)
+            : (updated.subscription === "active" && updated.subscriptionPlan === "pro") ||
+              updated.subscriptionPlan === "pro"
+        ) {
           clearInterval(pollInterval);
           window.removeEventListener("focus", focusHandler);
           
@@ -827,7 +859,12 @@ upgradeBtn?.addEventListener("click", async () => {
         ]);
         
         // Check if subscription is now active (be flexible - plan="pro" is enough)
-        if ((updated.subscription === "active" && updated.subscriptionPlan === "pro") || updated.subscriptionPlan === "pro") {
+        if (
+          typeof isProForUi === "function"
+            ? isProForUi(updated.subscription, updated.subscriptionPlan)
+            : (updated.subscription === "active" && updated.subscriptionPlan === "pro") ||
+              updated.subscriptionPlan === "pro"
+        ) {
           clearInterval(pollInterval);
           window.removeEventListener("focus", focusHandler);
           
@@ -872,7 +909,10 @@ refreshStatusBtn?.addEventListener("click", async () => {
       updated.subscriptionPlan,
       updated.cycleAnchorDate
     );
-    const isPro = updated.subscription === "active" && updated.subscriptionPlan === "pro";
+    const isPro =
+      typeof isProForApiAccess === "function"
+        ? isProForApiAccess(updated.subscription, updated.subscriptionPlan)
+        : updated.subscription === "active" && updated.subscriptionPlan === "pro";
     showModal("success", "Up to date", isPro ? "Your Pro subscription is active!" : "Your account is up to date.");
   } catch (e) {
     console.error("[Options] Refresh error:", e);

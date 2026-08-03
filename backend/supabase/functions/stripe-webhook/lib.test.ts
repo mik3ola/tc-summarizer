@@ -1,6 +1,6 @@
 // Unit tests for stripe-webhook lib
 import { assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
-import { mapStripeStatus, buildSubscriptionUpdateData, shouldSkipCreatedEvent } from "./lib.ts";
+import { mapStripeStatus, buildSubscriptionUpdateData, shouldSkipCreatedEvent, resolveInvoicePaymentFailedAction } from "./lib.ts";
 
 const NOW = "2026-02-01T00:00:00.000Z";
 const PERIOD_END = "2026-03-01T00:00:00.000Z";
@@ -117,4 +117,27 @@ Deno.test("shouldSkipCreatedEvent - does not skip when existing is free", () => 
 
 Deno.test("shouldSkipCreatedEvent - does not skip when no existing record", () => {
   assertEquals(shouldSkipCreatedEvent(null), false);
+});
+
+// ─── resolveInvoicePaymentFailedAction ──────────────────────────────────────
+
+Deno.test("resolveInvoicePaymentFailedAction - marks past_due for string subscription id", () => {
+  assertEquals(
+    resolveInvoicePaymentFailedAction({ subscription: "sub_123" }),
+    { action: "mark_past_due", subscriptionId: "sub_123" },
+  );
+});
+
+Deno.test("resolveInvoicePaymentFailedAction - extracts id from expanded subscription object", () => {
+  assertEquals(
+    resolveInvoicePaymentFailedAction({ subscription: { id: "sub_expanded" } }),
+    { action: "mark_past_due", subscriptionId: "sub_expanded" },
+  );
+});
+
+Deno.test("resolveInvoicePaymentFailedAction - noops when subscription is missing", () => {
+  assertEquals(resolveInvoicePaymentFailedAction({}), { action: "noop" });
+  assertEquals(resolveInvoicePaymentFailedAction({ subscription: null }), { action: "noop" });
+  assertEquals(resolveInvoicePaymentFailedAction({ subscription: "" }), { action: "noop" });
+  assertEquals(resolveInvoicePaymentFailedAction(null), { action: "noop" });
 });
