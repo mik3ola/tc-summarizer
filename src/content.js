@@ -1256,13 +1256,22 @@ async function renderLoading(url) {
   `;
 
   // After 1.7 seconds, animate "Summarizing" up from bottom, pushing "Thinking" out (if still loading)
+  const popoverUtils = globalThis.TermsDigestSummaryPopoverUtils;
+  const advanceMs = popoverUtils?.LOADING_TITLE_ADVANCE_MS ?? 1700;
   setTimeout(() => {
     const stripEl = UI.popover?.querySelector(".loading-title-strip[data-loading-phase='thinking']");
-    if (stripEl) {
+    const currentPhase = stripEl?.getAttribute("data-loading-phase") || null;
+    const shouldAdvance = popoverUtils?.shouldAdvanceLoadingTitle
+      ? popoverUtils.shouldAdvanceLoadingTitle({
+          currentPhase,
+          stillOnLoadingView: !!stripEl,
+        })
+      : !!stripEl;
+    if (shouldAdvance && stripEl) {
       stripEl.classList.add("loading-to-summarizing");
       stripEl.setAttribute("data-loading-phase", "summarizing");
     }
-  }, 1700);
+  }, advanceMs);
 }
 
 function truncateUrl(url, maxLen = 50) {
@@ -1579,8 +1588,12 @@ async function renderSummary(summary, url, fromCache) {
       ${renderListSection("↩️ Cancellation & refunds", summary?.cancellation_and_refunds)}
       ${renderListSection("⚖️ Liability & disputes", summary?.liability_and_disputes)}
       ${renderListSection("🔒 Privacy & data", summary?.privacy_and_data)}
-      ${preferences.showRedFlags ? renderListSection("🚩 Red flags", summary?.red_flags, "red-flags-section") : ""}
-      ${preferences.showQuotes ? renderQuotes(summary?.quotes) : ""}
+      ${(globalThis.TermsDigestSummaryPopoverUtils?.shouldRenderRedFlagsSection
+        ? globalThis.TermsDigestSummaryPopoverUtils.shouldRenderRedFlagsSection(preferences.showRedFlags, summary?.red_flags)
+        : preferences.showRedFlags) ? renderListSection("🚩 Red flags", summary?.red_flags, "red-flags-section") : ""}
+      ${(globalThis.TermsDigestSummaryPopoverUtils?.shouldRenderQuotesSection
+        ? globalThis.TermsDigestSummaryPopoverUtils.shouldRenderQuotesSection(preferences.showQuotes, summary?.quotes)
+        : preferences.showQuotes) ? renderQuotes(summary?.quotes) : ""}
       <div class="reveal-line"><div class="divider"></div></div>
       <div class="reveal-line"><div class="section muted" style="padding-bottom: 4px; margin-top: 0;">
         Note: This is an automated summary. <a class="link" data-action="view-source" href="${escapeAttr(url)}" target="_blank" rel="noreferrer">View full content</a>.
@@ -1591,25 +1604,31 @@ async function renderSummary(summary, url, fromCache) {
 }
 
 function renderListSection(title, items, sectionClass) {
-  const arr = Array.isArray(items) ? items.filter((x) => typeof x === "string" && x.trim()) : [];
+  const popoverUtils = globalThis.TermsDigestSummaryPopoverUtils;
+  const arr = popoverUtils?.normalizeSummaryListItems
+    ? popoverUtils.normalizeSummaryListItems(items)
+    : (Array.isArray(items) ? items.filter((x) => typeof x === "string" && x.trim()) : []).slice(0, 6);
   if (!arr.length) return "";
   const inner = `
     <div class="reveal-line"><div class="section"><div class="h">${escapeHtml(title)}</div></div></div>
-    ${arr.slice(0, 6).map((x) => `<div class="reveal-line"><div class="section"><ul><li>${escapeHtml(x)}</li></ul></div></div>`).join("")}
+    ${arr.map((x) => `<div class="reveal-line"><div class="section"><ul><li>${escapeHtml(x)}</li></ul></div></div>`).join("")}
   `;
   return sectionClass ? `<div class="${sectionClass}">${inner}</div>` : inner;
 }
 
 function renderQuotes(quotes) {
-  const arr = Array.isArray(quotes) ? quotes : [];
-  const cleaned = arr
-    .map((q) => ({
-      quote: typeof q?.quote === "string" ? q.quote.trim() : "",
-      why: typeof q?.why_it_matters === "string" ? q.why_it_matters.trim() : ""
-    }))
-    .filter((q) => q.quote);
+  const popoverUtils = globalThis.TermsDigestSummaryPopoverUtils;
+  const cleaned = popoverUtils?.normalizeSummaryQuotes
+    ? popoverUtils.normalizeSummaryQuotes(quotes)
+    : (Array.isArray(quotes) ? quotes : [])
+        .map((q) => ({
+          quote: typeof q?.quote === "string" ? q.quote.trim() : "",
+          why: typeof q?.why_it_matters === "string" ? q.why_it_matters.trim() : ""
+        }))
+        .filter((q) => q.quote)
+        .slice(0, 3);
   if (!cleaned.length) return "";
-  const items = cleaned.slice(0, 3).map((q) =>
+  const items = cleaned.map((q) =>
     `<li><span class="muted">"${escapeHtml(q.quote)}"</span>${q.why ? ` — ${escapeHtml(q.why)}` : ""}</li>`
   );
   return `
@@ -1935,19 +1954,25 @@ UI.popover.addEventListener("click", (e) => {
   const btn = e.target && e.target.closest ? e.target.closest("button") : null;
   if (btn) {
     const action = btn.getAttribute("data-action");
-    if (action === "close-popover") {
+    const popoverUtils = globalThis.TermsDigestSummaryPopoverUtils;
+    const resolved = popoverUtils?.resolvePopoverAction
+      ? popoverUtils.resolvePopoverAction(action)
+      : { handled: !!action, intent: action };
+    const intent = resolved?.intent;
+
+    if (intent === "close_popover" || action === "close-popover") {
       e.preventDefault();
       e.stopPropagation();
       closePopover();
       return;
     }
-    if (action === "refresh-page") {
+    if (intent === "refresh_page" || action === "refresh-page") {
       e.preventDefault();
       e.stopPropagation();
       window.location.reload();
       return;
     }
-    if (action === "open-options") {
+    if (intent === "open_options" || action === "open-options") {
       e.preventDefault();
       e.stopPropagation();
       try {
@@ -1957,7 +1982,7 @@ UI.popover.addEventListener("click", (e) => {
       }
       return;
     }
-    if (action === "upgrade-to-pro") {
+    if (intent === "open_options_upgrade" || action === "upgrade-to-pro") {
       e.preventDefault();
       e.stopPropagation();
       try {
@@ -1967,13 +1992,13 @@ UI.popover.addEventListener("click", (e) => {
       }
       return;
     }
-    if (action === "open-support") {
+    if (intent === "open_support" || action === "open-support") {
       e.preventDefault();
       e.stopPropagation();
       window.open("https://termsdigest.com/support", "_blank", "noopener,noreferrer");
       return;
     }
-    if (action === "open-link") {
+    if (intent === "open_original_link" || action === "open-link") {
       // Click the original link directly (most reliable)
       if (current.anchor) {
         current.anchor.click();
@@ -1981,7 +2006,7 @@ UI.popover.addEventListener("click", (e) => {
         window.open(current.originalHref, "_blank", "noopener,noreferrer");
       }
     }
-    if (action === "copy-summary") {
+    if (intent === "copy_summary" || action === "copy-summary") {
       e.preventDefault();
       e.stopPropagation();
       if (current.lastSummary) {
@@ -2014,21 +2039,35 @@ UI.popover.addEventListener("click", (e) => {
       }
       return;
     }
-    if (action === "toggle-pref") {
+    if (intent === "toggle_pref" || action === "toggle-pref") {
       e.preventDefault();
       e.stopPropagation();
       const key = btn.getAttribute("data-pref");
-      if (key === "showRedFlags" || key === "showQuotes") {
-        preferences[key] = !preferences[key];
+      const toggle = popoverUtils?.resolveFooterPrefToggle
+        ? popoverUtils.resolveFooterPrefToggle({ key, preferences })
+        : (key === "showRedFlags" || key === "showQuotes"
+            ? {
+                handled: true,
+                nextPreferences: { ...preferences, [key]: !preferences[key] },
+                persist: true,
+                rerender: true,
+                toggledKey: key,
+                nextValue: !preferences[key],
+              }
+            : { handled: false });
+      if (toggle.handled) {
+        preferences = { ...preferences, ...toggle.nextPreferences };
         // Persist to storage (same format options.js uses)
-        if (isExtensionContextValid()) {
+        if (toggle.persist && isExtensionContextValid()) {
           chrome.storage.local.get("preferences").then(d => {
-            const saved = { ...(d.preferences || {}), [key]: preferences[key] };
+            const saved = popoverUtils?.mergePersistedPreferences
+              ? popoverUtils.mergePersistedPreferences(d.preferences, toggle.toggledKey, toggle.nextValue)
+              : { ...(d.preferences || {}), [toggle.toggledKey]: toggle.nextValue };
             return chrome.storage.local.set({ preferences: saved });
           }).catch(() => {});
         }
         // Re-render summary immediately
-        if (current.lastSummary) {
+        if (toggle.rerender && current.lastSummary) {
           renderSummary(current.lastSummary, current.lastSummaryUrl, current.lastSummaryFromCache)
             .then(() => { if (current.anchor) showPopover(current.anchor); })
             .catch(() => {});
@@ -2036,7 +2075,7 @@ UI.popover.addEventListener("click", (e) => {
       }
       return;
     }
-    if (action === "click-and-retry" && current.anchor) {
+    if ((intent === "click_and_retry" || action === "click-and-retry") && current.anchor) {
       // Click the original button to load content
       current.anchor.click();
       // Wait for content to load, then try to find and summarize it
