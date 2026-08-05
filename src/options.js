@@ -275,21 +275,32 @@ function computePeriodStart(anchorDate) {
 }
 
 function updateStats(cache, stats, monthlyUsage, plan, cycleAnchorDate) {
-  const cacheCount = cache ? Object.keys(cache).length : 0;
+  const statsUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestOptionsStatsUtils) ||
+    null;
   const totalSummaries = stats?.totalSummaries || 0;
-  
+  const cacheCount = statsUtils?.countCacheEntries
+    ? statsUtils.countCacheEntries(cache)
+    : cache
+      ? Object.keys(cache).length
+      : 0;
+
   // Calculate minutes saved based on actual word count from cached summaries
   // Average reading speed: ~200 words per minute
-  let totalWords = 0;
-  if (cache) {
-    Object.values(cache).forEach(entry => {
-      if (entry?.originalTextLength) {
-        // Estimate words from character count (average 5 chars per word)
-        totalWords += Math.floor(entry.originalTextLength / 5);
-      }
-    });
-  }
-  const minutesSaved = Math.floor(totalWords / 200); // 200 words per minute reading speed
+  const minutesSaved = statsUtils?.estimateTotalMinutesSavedFromCache
+    ? statsUtils.estimateTotalMinutesSavedFromCache(cache)
+    : (() => {
+        let totalWords = 0;
+        if (cache) {
+          Object.values(cache).forEach((entry) => {
+            if (entry?.originalTextLength) {
+              // Estimate words from character count (average 5 chars per word)
+              totalWords += Math.floor(entry.originalTextLength / 5);
+            }
+          });
+        }
+        return Math.floor(totalWords / 200);
+      })();
   
   // Determine quota based on plan
   let quota = 5; // Free tier default
@@ -297,7 +308,9 @@ function updateStats(cache, stats, monthlyUsage, plan, cycleAnchorDate) {
   else if (plan === "enterprise") quota = 5000;
   
   // Use monthly usage if available, otherwise use local stats
-  const used = monthlyUsage ?? totalSummaries;
+  const used = statsUtils?.resolveDisplayedUsage
+    ? statsUtils.resolveDisplayedUsage(monthlyUsage, totalSummaries)
+    : monthlyUsage ?? totalSummaries;
   const remaining = Math.max(0, quota - used);
   
   statSummariesEl.textContent = `${used}/${quota}`;
