@@ -19,6 +19,14 @@ const TOUCH_SUMMARIZE = prefersTouchSummarize();
 
 // Check if extension context is still valid (false after extension reload)
 function isExtensionContextValid() {
+  const utils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestExtensionContextUtils) ||
+    null;
+  if (utils?.isExtensionContextValid) {
+    return utils.isExtensionContextValid(
+      typeof chrome !== "undefined" ? chrome : undefined
+    );
+  }
   try {
     return typeof chrome !== "undefined" && !!chrome?.runtime?.id;
   } catch {
