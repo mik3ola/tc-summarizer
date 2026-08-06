@@ -176,14 +176,58 @@ function formatSubAutoRenewLine(autoRenew, downgradeScheduledFor) {
 }
 
 function updateSubscriptionUI(subscription, email, plan, extra = {}) {
-  const isLoggedIn = !!email;
   // Pro if: (1) subscription is active AND plan is pro, OR (2) plan is pro (fallback for edge cases)
   const isPro = (subscription === "active" && plan === "pro") || plan === "pro";
+  const tier = !email ? "guest" : isPro ? "pro" : "free";
+  const accountUi = globalThis.TermsDigestOptionsAccountUiUtils;
+  const visibility = accountUi?.resolveAccountCardVisibility
+    ? accountUi.resolveAccountCardVisibility(tier)
+    : tier === "pro"
+      ? {
+          showStats: true,
+          showApiCard: true,
+          showSubManagement: true,
+          showDangerZone: true,
+          showDataCache: true,
+          showUpgrade: false,
+          showRefreshStatus: true,
+          showActivePanel: true,
+          showGuestStatus: false,
+          badgeText: "Pro",
+          badgeClass: "badge badge-success",
+        }
+      : tier === "free"
+        ? {
+            showStats: true,
+            showApiCard: false,
+            showSubManagement: false,
+            showDangerZone: true,
+            showDataCache: true,
+            showUpgrade: true,
+            showRefreshStatus: true,
+            showActivePanel: true,
+            showGuestStatus: false,
+            badgeText: "Free",
+            badgeClass: "badge badge-warning",
+          }
+        : {
+            showStats: false,
+            showApiCard: false,
+            showSubManagement: false,
+            showDangerZone: false,
+            showDataCache: false,
+            showUpgrade: false,
+            showRefreshStatus: false,
+            showActivePanel: false,
+            showGuestStatus: true,
+            badgeText: "Guest",
+            badgeClass: "badge badge-info",
+          };
+
   const autoRenew = extra.subscriptionAutoRenew !== false;
   const downgradeScheduledFor = extra.subscriptionDowngradeScheduledFor || null;
   const currentPeriodEnd = extra.currentPeriodEnd || null;
 
-  // API key hint element
   const apiKeyHint = document.getElementById("apiKeyHint");
   const apiKeyBadge = document.getElementById("apiKeyBadge");
   const subManagementEl = document.getElementById("subManagement");
@@ -193,66 +237,33 @@ function updateSubscriptionUI(subscription, email, plan, extra = {}) {
   const reEnableAutoRenewBtn = document.getElementById("reEnableAutoRenewBtn");
   const downgradeNowBtn = document.getElementById("downgradeNowBtn");
 
-  if (isPro) {
-    // Pro user - logged in with active subscription
-    subBadgeEl.textContent = "Pro";
-    subBadgeEl.className = "badge badge-success";
-    subStatusEl.classList.add("hidden");
-    subActiveEl.classList.remove("hidden");
+  subBadgeEl.textContent = visibility.badgeText;
+  subBadgeEl.className = visibility.badgeClass;
+  subStatusEl.classList.toggle("hidden", !visibility.showGuestStatus);
+  subActiveEl.classList.toggle("hidden", !visibility.showActivePanel);
+  statsCardEl?.classList.toggle("hidden", !visibility.showStats);
+  apiCardEl?.classList.toggle("hidden", !visibility.showApiCard);
+  subManagementEl?.classList.toggle("hidden", !visibility.showSubManagement);
+  document.getElementById("dangerZone")?.classList.toggle("hidden", !visibility.showDangerZone);
+  document.getElementById("dataCacheCard")?.classList.toggle("hidden", !visibility.showDataCache);
+  upgradeBtn.classList.toggle("hidden", !visibility.showUpgrade);
+  refreshStatusBtn.classList.toggle("hidden", !visibility.showRefreshStatus);
+
+  if (tier === "pro") {
     userEmailEl.textContent = email || "Subscriber";
     planHintEl.textContent = "Pro: 50 summaries/month included. Add your own API key below for unlimited.";
-    upgradeBtn.classList.add("hidden");
-    refreshStatusBtn.classList.remove("hidden");
-    
-    // Show stats and API card for Pro users
-    statsCardEl?.classList.remove("hidden");
-    apiCardEl?.classList.remove("hidden");
-    
-    // Update API hint for Pro users
     if (apiKeyHint) apiKeyHint.innerHTML = "Your Pro plan is active. Add your own key for <strong>unlimited</strong> usage.";
     if (apiKeyBadge) { apiKeyBadge.textContent = "Optional"; apiKeyBadge.className = "badge badge-info"; }
-
-    document.getElementById("dangerZone")?.classList.remove("hidden");
-    document.getElementById("dataCacheCard")?.classList.remove("hidden");
-    // Subscription management section (Pro only)
     if (subManagementEl) {
-      subManagementEl.classList.remove("hidden");
       if (subStatusLineEl) subStatusLineEl.textContent = formatSubStatusLine(currentPeriodEnd);
       if (autoRenewLineEl) autoRenewLineEl.textContent = formatSubAutoRenewLine(autoRenew, downgradeScheduledFor);
       if (cancelAutoRenewBtn) cancelAutoRenewBtn.style.display = autoRenew ? "inline-block" : "none";
       if (reEnableAutoRenewBtn) reEnableAutoRenewBtn.style.display = autoRenew ? "none" : "inline-block";
       if (downgradeNowBtn) downgradeNowBtn.style.display = "inline-block";
     }
-  } else if (isLoggedIn) {
-    // Logged in but not pro → backend free tier available
-    subBadgeEl.textContent = "Free";
-    subBadgeEl.className = "badge badge-warning";
-    subStatusEl.classList.add("hidden");
-    subActiveEl.classList.remove("hidden");
+  } else if (tier === "free") {
     userEmailEl.textContent = email || "User";
     planHintEl.textContent = "Free: 5 summaries/month. Upgrade to Pro for 50/month and API key access.";
-    upgradeBtn.classList.remove("hidden");
-    refreshStatusBtn.classList.remove("hidden");
-    
-    // Show stats, HIDE API card and subscription management for free tier
-    statsCardEl?.classList.remove("hidden");
-    apiCardEl?.classList.add("hidden"); // API key is Pro-only
-    subManagementEl?.classList.add("hidden");
-    document.getElementById("dangerZone")?.classList.remove("hidden");
-    document.getElementById("dataCacheCard")?.classList.remove("hidden");
-  } else {
-    // Not logged in → prompt to sign in/up
-    subBadgeEl.textContent = "Guest";
-    subBadgeEl.className = "badge badge-info";
-    subStatusEl.classList.remove("hidden");
-    subActiveEl.classList.add("hidden");
-    
-    // Hide stats, API card for guests - they need to sign in first
-    statsCardEl?.classList.add("hidden");
-    apiCardEl?.classList.add("hidden"); // Must sign in to use API key
-    subManagementEl?.classList.add("hidden");
-    document.getElementById("dangerZone")?.classList.add("hidden");
-    document.getElementById("dataCacheCard")?.classList.add("hidden");
   }
 }
 
@@ -1145,11 +1156,20 @@ try {
     window.matchMedia?.("(pointer: coarse)")?.matches ||
     /iPhone|iPad|iPod/i.test(ua) ||
     (/Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1);
-  if (touchFirst) {
+  const accountUi = globalThis.TermsDigestOptionsAccountUiUtils;
+  const touchCopy = accountUi?.resolveOptionsTouchSummarizeCopy
+    ? accountUi.resolveOptionsTouchSummarizeCopy({ touchSummarize: touchFirst })
+    : touchFirst
+      ? {
+          label: "Auto-summarise on tap",
+          hint: "Automatically show summary when tapping legal links",
+        }
+      : null;
+  if (touchCopy) {
     const label = document.getElementById("autoHoverLabel");
     const hint = document.getElementById("autoHoverHint");
-    if (label) label.textContent = "Auto-summarise on tap";
-    if (hint) hint.textContent = "Automatically show summary when tapping legal links";
+    if (label) label.textContent = touchCopy.label;
+    if (hint) hint.textContent = touchCopy.hint;
   }
 } catch {
   // ignore
