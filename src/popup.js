@@ -9,9 +9,14 @@
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzeHZ4ZXp1Y2djemVzcGxtaml3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjcwNjYsImV4cCI6MjA4MzU0MzA2Nn0.1umoIH60gsytGtmfbgfxr1OZJs_L-62wT_BWVaMt5lw";
 
+  const popupUtils = globalThis.TermsDigestPopupOpenSettingsUtils;
+
   function isSafariExtension() {
     try {
       const url = chrome?.runtime?.getURL?.("");
+      if (popupUtils?.shouldShowSafariPermissionTip) {
+        return popupUtils.shouldShowSafariPermissionTip(url);
+      }
       return typeof url === "string" && url.startsWith("safari-web-extension://");
     } catch {
       return false;
@@ -42,24 +47,48 @@
   }
 
   // Touch / iOS: clarify auto-summarize uses tap, not hover
-  if (prefersTouchSummarize()) {
+  const touchCopy = popupUtils?.resolvePopupTouchSummarizeCopy
+    ? popupUtils.resolvePopupTouchSummarizeCopy({
+        touchSummarize: prefersTouchSummarize(),
+      })
+    : prefersTouchSummarize()
+      ? {
+          label: "Auto-summarize on tap",
+          hint: "Show summary when tapping legal links",
+        }
+      : null;
+  if (touchCopy) {
     const label = document.getElementById("autoHoverLabel");
     const hint = document.getElementById("autoHoverHint");
-    if (label) label.textContent = "Auto-summarize on tap";
-    if (hint) hint.textContent = "Show summary when tapping legal links";
+    if (label) label.textContent = touchCopy.label;
+    if (hint) hint.textContent = touchCopy.hint;
   }
 
   // Open full settings via extension API (works better than target=_blank on Safari)
   async function openFullSettings(e) {
     e?.preventDefault?.();
+    const hasOpenOptionsPageApi = typeof chrome?.runtime?.openOptionsPage === "function";
+    const primary = popupUtils?.resolvePopupOpenSettingsAction
+      ? popupUtils.resolvePopupOpenSettingsAction({ hasOpenOptionsPageApi })
+      : hasOpenOptionsPageApi
+        ? { action: "open_options_page" }
+        : { action: "send_message", messageType: "open_options" };
+
     try {
-      if (chrome?.runtime?.openOptionsPage) {
+      if (primary.action === "open_options_page") {
         chrome.runtime.openOptionsPage();
         return;
       }
-      await chrome.runtime.sendMessage({ type: "open_options" });
+      await chrome.runtime.sendMessage({ type: primary.messageType || "open_options" });
     } catch {
-      window.open(chrome.runtime.getURL("src/options.html"), "_blank", "noopener,noreferrer");
+      const fallback = popupUtils?.resolvePopupOpenSettingsFailureFallback
+        ? popupUtils.resolvePopupOpenSettingsFailureFallback()
+        : { action: "window_open", path: "src/options.html" };
+      window.open(
+        chrome.runtime.getURL(fallback.path || "src/options.html"),
+        "_blank",
+        "noopener,noreferrer"
+      );
     }
   }
   document.getElementById("openOptionsBtn")?.addEventListener("click", openFullSettings);
