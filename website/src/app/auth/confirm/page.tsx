@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import {
+  resolveConfirmBootstrap,
+  resolveConfirmVerifyResult,
+} from "@/lib/auth-flow-utils";
 
 const SUPABASE_URL = "https://rsxvxezucgczesplmjiw.supabase.co";
 const SUPABASE_ANON_KEY =
@@ -19,17 +23,17 @@ export default function ConfirmPage() {
   const [errorMessage, setErrorMessage] = useState("The confirmation link is invalid or has expired.");
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tokenHash = params.get("token_hash");
-    const type = params.get("type") ?? "signup";
+    const bootstrap = resolveConfirmBootstrap({
+      search: window.location.search,
+      hash: window.location.hash,
+    });
 
-    if (!tokenHash) {
-      const hash = window.location.hash;
-      if (hash.includes("access_token")) {
-        setStatus("success");
-      } else {
+    if (bootstrap.action !== "verify") {
+      if (bootstrap.action === "error") {
         setStatus("error");
-        setErrorMessage("No confirmation token found. Please use the link from your email.");
+        setErrorMessage(bootstrap.errorMessage);
+      } else {
+        setStatus("success");
       }
       return;
     }
@@ -40,19 +44,19 @@ export default function ConfirmPage() {
         "Content-Type": "application/json",
         apikey: SUPABASE_ANON_KEY,
       },
-      body: JSON.stringify({ token_hash: tokenHash, type }),
+      body: JSON.stringify({
+        token_hash: bootstrap.tokenHash,
+        type: bootstrap.type,
+      }),
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data.error) {
-          if (data.error === "Email link is invalid or has expired") {
-            setStatus("already_confirmed");
-          } else {
-            setStatus("error");
-            setErrorMessage(data.error_description ?? data.error ?? "Verification failed.");
-          }
+        const result = resolveConfirmVerifyResult(data);
+        if (result.status === "error") {
+          setStatus("error");
+          setErrorMessage(result.errorMessage);
         } else {
-          setStatus("success");
+          setStatus(result.status);
         }
       })
       .catch(() => {
