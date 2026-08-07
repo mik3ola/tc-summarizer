@@ -407,24 +407,43 @@ async function signInOrUp(mode) {
     
     // Check for various error formats Supabase might return
     if (!res.ok) {
-      const errorMsg = data?.msg || data?.error_description || data?.message || data?.error?.message || "Signup failed. Please try again.";
+      const authUtils = globalThis.TermsDigestOptionsAuthUtils;
+      const errorMsg = authUtils?.extractAuthApiErrorMessage
+        ? authUtils.extractAuthApiErrorMessage(data, "Signup failed. Please try again.", {
+            checkMsg: true,
+          })
+        : data?.msg || data?.error_description || data?.message || data?.error?.message || "Signup failed. Please try again.";
       throw new Error(errorMsg);
     }
-    
-    // Check if user was created (Supabase returns user object on success)
-    if (data?.user?.id || data?.id) {
-      // Check if email confirmation is required
-      if (data?.user?.confirmation_sent_at || data?.confirmation_sent_at) {
-        showModal("success", "Account created!", "Please check your email to verify your account, then come back and sign in.");
-      } else {
-        showModal("success", "Account created!", "You can now sign in with your email and password.");
-      }
-    } else if (data?.error) {
-      throw new Error(data.error.message || data.error);
-    } else {
-      // Some Supabase configs auto-confirm, so this might still be success
-      showModal("success", "Account created!", "Please check your email or try signing in.");
+
+    const authUtils = globalThis.TermsDigestOptionsAuthUtils;
+    const outcome = authUtils?.resolveSignupUiOutcome
+      ? authUtils.resolveSignupUiOutcome(data)
+      : (data?.user?.id || data?.id)
+        ? (data?.user?.confirmation_sent_at || data?.confirmation_sent_at)
+          ? {
+              kind: "needs_email_confirm",
+              title: "Account created!",
+              message:
+                "Please check your email to verify your account, then come back and sign in.",
+            }
+          : {
+              kind: "ready_to_sign_in",
+              title: "Account created!",
+              message: "You can now sign in with your email and password.",
+            }
+        : data?.error
+          ? { kind: "error", message: String(data.error.message || data.error) }
+          : {
+              kind: "ambiguous_success",
+              title: "Account created!",
+              message: "Please check your email or try signing in.",
+            };
+
+    if (outcome.kind === "error") {
+      throw new Error(outcome.message);
     }
+    showModal("success", outcome.title, outcome.message);
     return;
   }
 
@@ -439,17 +458,25 @@ async function signInOrUp(mode) {
   const data = await res.json().catch(() => ({}));
   
   if (!res.ok) {
-    const errorMsg = data?.error_description || data?.message || data?.error?.message || "Sign-in failed. Please check your credentials.";
+    const authUtils = globalThis.TermsDigestOptionsAuthUtils;
+    const errorMsg = authUtils?.extractAuthApiErrorMessage
+      ? authUtils.extractAuthApiErrorMessage(
+          data,
+          "Sign-in failed. Please check your credentials."
+        )
+      : data?.error_description || data?.message || data?.error?.message || "Sign-in failed. Please check your credentials.";
     throw new Error(errorMsg);
   }
 
-  const expiresAt = Date.now() + (Number(data.expires_in || 0) * 1000);
-  const session = {
-    access_token: data.access_token,
-    refresh_token: data.refresh_token,
-    expires_at: expiresAt,
-    user: data.user ? { id: data.user.id, email: data.user.email } : { email }
-  };
+  const authUtils = globalThis.TermsDigestOptionsAuthUtils;
+  const session = authUtils?.buildSessionFromPasswordGrantResponse
+    ? authUtils.buildSessionFromPasswordGrantResponse(data, email)
+    : {
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at: Date.now() + Number(data.expires_in || 0) * 1000,
+        user: data.user ? { id: data.user.id, email: data.user.email } : { email },
+      };
 
   await chrome.storage.local.set({
     supabaseSession: session

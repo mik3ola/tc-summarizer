@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { parseRecoveryHash, validateNewPassword } from "@/lib/auth-flow-utils";
 
 const SUPABASE_URL = "https://rsxvxezucgczesplmjiw.supabase.co";
 const SUPABASE_ANON_KEY =
@@ -18,13 +19,9 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     // Supabase puts the access_token in the URL hash after redirect
-    const hash = window.location.hash;
-    const params = new URLSearchParams(hash.replace("#", "?"));
-    const token = params.get("access_token");
-    const type = params.get("type");
-
-    if (token && type === "recovery") {
-      setAccessToken(token);
+    const recovery = parseRecoveryHash(window.location.hash);
+    if (recovery.valid) {
+      setAccessToken(recovery.accessToken);
       setStage("form");
     } else {
       setStage("invalid");
@@ -35,12 +32,9 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setErrorMsg("");
 
-    if (password.length < 8) {
-      setErrorMsg("Password must be at least 8 characters.");
-      return;
-    }
-    if (password !== confirm) {
-      setErrorMsg("Passwords do not match.");
+    const validation = validateNewPassword({ password, confirm });
+    if (!validation.ok) {
+      setErrorMsg(validation.errorMsg);
       return;
     }
 
