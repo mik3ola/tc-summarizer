@@ -1,3 +1,6 @@
+// Pure helpers — must load before this worker body runs.
+importScripts("status-storage-utils.js");
+
 // Configuration
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -638,7 +641,10 @@ async function refreshSupabaseStatusIfPossible(data) {
           });
           if (retryRes.ok) {
             const subRows = await retryRes.json().catch(() => []);
-            const sub = Array.isArray(subRows) ? subRows[0] : subRows;
+            const pickFirst =
+              globalThis.TermsDigestStatusStorageUtils?.pickFirstRow ||
+              ((rows) => (Array.isArray(rows) ? rows[0] : rows));
+            const sub = pickFirst(subRows);
             if (sub) {
               status = sub?.status || null;
               plan = sub?.plan || null;
@@ -649,7 +655,10 @@ async function refreshSupabaseStatusIfPossible(data) {
       // Even if subscription fetch failed, continue to fetch usage (that's what we really need)
     } else {
       const subRows = await subRes.json().catch(() => []);
-      const sub = Array.isArray(subRows) ? subRows[0] : subRows;
+      const pickFirst =
+        globalThis.TermsDigestStatusStorageUtils?.pickFirstRow ||
+        ((rows) => (Array.isArray(rows) ? rows[0] : rows));
+      const sub = pickFirst(subRows);
       if (sub) {
         status = sub?.status || null;
         plan = sub?.plan || null;
@@ -669,7 +678,10 @@ async function refreshSupabaseStatusIfPossible(data) {
       );
       if (profileRes.ok) {
         const profileRows = await profileRes.json().catch(() => []);
-        const profile = Array.isArray(profileRows) ? profileRows[0] : profileRows;
+        const pickFirst =
+          globalThis.TermsDigestStatusStorageUtils?.pickFirstRow ||
+          ((rows) => (Array.isArray(rows) ? rows[0] : rows));
+        const profile = pickFirst(profileRows);
         cycleAnchorDate = profile?.cycle_anchor_date || null;
       }
     } catch (e) {
@@ -696,6 +708,9 @@ async function refreshSupabaseStatusIfPossible(data) {
     
     // Use the current session (might have been refreshed above)
     const currentAccessToken = session?.access_token;
+    const pickFirst =
+      globalThis.TermsDigestStatusStorageUtils?.pickFirstRow ||
+      ((rows) => (Array.isArray(rows) ? rows[0] : rows));
     if (currentAccessToken) {
       try {
         const usageRes = await fetch(`${supabaseUrl}/rest/v1/usage_counters_monthly${usageQs}`, {
@@ -705,7 +720,7 @@ async function refreshSupabaseStatusIfPossible(data) {
         
         if (usageRes.ok) {
           const usageRows = await usageRes.json().catch(() => []);
-          const usage = Array.isArray(usageRows) ? usageRows[0] : usageRows;
+          const usage = pickFirst(usageRows);
           monthlyUsage = usage?.summaries_count || 0;
         } else if (usageRes.status === 401) {
           // If usage fetch also fails with 401, try refreshing token one more time
@@ -721,7 +736,7 @@ async function refreshSupabaseStatusIfPossible(data) {
             });
             if (retryUsageRes.ok) {
               const usageRows = await retryUsageRes.json().catch(() => []);
-              const usage = Array.isArray(usageRows) ? usageRows[0] : usageRows;
+              const usage = pickFirst(usageRows);
               monthlyUsage = usage?.summaries_count || 0;
               session = refreshed; // Update session for storage
             }
@@ -735,20 +750,32 @@ async function refreshSupabaseStatusIfPossible(data) {
     // Store the updated data (always update monthlyUsage even if subscription fetch failed)
     // Get current values first to preserve what we have
     const currentStorage = await chrome.storage.local.get(["subscription", "subscriptionPlan", "userEmail", "monthlyUsage", "cycleAnchorDate"]);
-    
-    // Only update monthlyUsage if we successfully fetched a new value (> 0 or explicitly 0 from backend)
-    // If fetch failed, preserve existing value to avoid overwriting with 0
-    const finalMonthlyUsage = monthlyUsage > 0 || (monthlyUsage === 0 && currentStorage.monthlyUsage === undefined) 
-      ? monthlyUsage 
-      : (currentStorage.monthlyUsage ?? monthlyUsage);
-    
-    await chrome.storage.local.set({
-      subscription: status !== null ? status : currentStorage.subscription,
-      subscriptionPlan: plan !== null ? plan : currentStorage.subscriptionPlan,
-      userEmail: session?.user?.email || currentStorage.userEmail || null,
-      monthlyUsage: finalMonthlyUsage,
-      cycleAnchorDate: cycleAnchorDate !== null ? cycleAnchorDate : (currentStorage.cycleAnchorDate ?? null)
-    });
+    const statusUtils = globalThis.TermsDigestStatusStorageUtils;
+    const patch = statusUtils?.buildBackgroundStatusStoragePatch
+      ? statusUtils.buildBackgroundStatusStoragePatch({
+          status,
+          plan,
+          monthlyUsage,
+          cycleAnchorDate,
+          sessionEmail: session?.user?.email || null,
+          currentStorage,
+        })
+      : {
+          subscription: status !== null ? status : currentStorage.subscription,
+          subscriptionPlan: plan !== null ? plan : currentStorage.subscriptionPlan,
+          userEmail: session?.user?.email || currentStorage.userEmail || null,
+          monthlyUsage:
+            monthlyUsage > 0 ||
+            (monthlyUsage === 0 && currentStorage.monthlyUsage === undefined)
+              ? monthlyUsage
+              : currentStorage.monthlyUsage ?? monthlyUsage,
+          cycleAnchorDate:
+            cycleAnchorDate !== null
+              ? cycleAnchorDate
+              : currentStorage.cycleAnchorDate ?? null,
+        };
+
+    await chrome.storage.local.set(patch);
   } catch (e) {
     console.error("[Background] Error refreshing subscription status:", e);
   }

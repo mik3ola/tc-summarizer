@@ -1665,16 +1665,22 @@ async function summarizeModal(modalSelector, anchor, requestId) {
     .replace(/\s+/g, " ")
     .trim();
 
-  if (!text || text.length < 50) {
+  const inlineCache = globalThis.TermsDigestInlineCacheUtils;
+  const textOk = inlineCache?.isSummarizableExtractedText
+    ? inlineCache.isSummarizableExtractedText(text)
+    : !!(text && text.length >= 50);
+  if (!textOk) {
     throw new Error("Modal appears to be empty or has very little content.");
   }
 
   if (current.requestId !== requestId) return;
 
   // Use anchor text/ID for unique cache key
-  const anchorText = (anchor.textContent || "").trim().toLowerCase().replace(/\s+/g, "-").slice(0, 50);
+  const anchorText = (anchor.textContent || "").trim();
   const anchorId = anchor.getAttribute("id") || "";
-  const cacheKey = `${displayUrl}#link:${anchorId || anchorText}`;
+  const cacheKey = inlineCache?.buildInlineSummaryCacheKey
+    ? inlineCache.buildInlineSummaryCacheKey({ displayUrl, anchorId, anchorText })
+    : `${displayUrl}#link:${anchorId || anchorText.toLowerCase().replace(/\s+/g, "-").slice(0, 50)}`;
 
   const sumRes = await chrome.runtime.sendMessage({
     type: "summarize_text",
@@ -1710,16 +1716,22 @@ async function summarizeModalElement(modalElement, anchor, requestId) {
     .replace(/\s+/g, " ")
     .trim();
 
-  if (!text || text.length < 50) {
+  const inlineCache = globalThis.TermsDigestInlineCacheUtils;
+  const textOk = inlineCache?.isSummarizableExtractedText
+    ? inlineCache.isSummarizableExtractedText(text)
+    : !!(text && text.length >= 50);
+  if (!textOk) {
     throw new Error("Content appears to be empty or has very little text.");
   }
 
   if (current.requestId !== requestId) return;
 
   // Use anchor text/ID for unique cache key (not modal container which might be shared)
-  const anchorText = (anchor.textContent || "").trim().toLowerCase().replace(/\s+/g, "-").slice(0, 50);
+  const anchorText = (anchor.textContent || "").trim();
   const anchorId = anchor.getAttribute("id") || "";
-  const cacheKey = `${displayUrl}#link:${anchorId || anchorText}`;
+  const cacheKey = inlineCache?.buildInlineSummaryCacheKey
+    ? inlineCache.buildInlineSummaryCacheKey({ displayUrl, anchorId, anchorText })
+    : `${displayUrl}#link:${anchorId || anchorText.toLowerCase().replace(/\s+/g, "-").slice(0, 50)}`;
   
   const sumRes = await chrome.runtime.sendMessage({
     type: "summarize_text",
