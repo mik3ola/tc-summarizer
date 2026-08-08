@@ -595,21 +595,29 @@ async function refreshSupabaseStatusIfPossible(data) {
             session = refreshed;
             // Continue with processing below
             const subRows = await retryRes.json().catch(() => []);
-            const sub = Array.isArray(subRows) ? subRows[0] : subRows;
+            const pickFirstRetry =
+              globalThis.TermsDigestStatusStorageUtils?.pickFirstRow ||
+              ((rows) => (Array.isArray(rows) ? rows[0] : rows));
+            const sub = pickFirstRetry(subRows);
             
             if (!sub) {
-              await chrome.storage.local.set({
-                subscription: null,
-                subscriptionPlan: null
-              });
+              const clearPatch =
+                globalThis.TermsDigestStatusStorageUtils?.buildClearedSubscriptionStoragePatch?.() || {
+                  subscription: null,
+                  subscriptionPlan: null,
+                };
+              await chrome.storage.local.set(clearPatch);
               return;
             }
-            
-            const status = sub?.status || null;
-            const plan = sub?.plan || null;
-            const autoRenew = sub?.auto_renew !== false;
-            const downgradeScheduledFor = sub?.downgrade_scheduled_for || null;
-            const currentPeriodEnd = sub?.current_period_end || null;
+
+            const mapped =
+              globalThis.TermsDigestStatusStorageUtils?.mapSubscriptionRow?.(sub) || {
+                status: sub?.status || null,
+                plan: sub?.plan || null,
+                autoRenew: sub?.auto_renew !== false,
+                downgradeScheduledFor: sub?.downgrade_scheduled_for || null,
+                currentPeriodEnd: sub?.current_period_end || null,
+              };
 
             // Fetch the user's quota cycle anchor date from their profile
             let cycleAnchorDate = null;
@@ -620,7 +628,10 @@ async function refreshSupabaseStatusIfPossible(data) {
               );
               if (profileRes.ok) {
                 const profileRows = await profileRes.json().catch(() => []);
-                const profile = Array.isArray(profileRows) ? profileRows[0] : profileRows;
+                const pickFirst =
+                  globalThis.TermsDigestStatusStorageUtils?.pickFirstRow ||
+                  ((rows) => (Array.isArray(rows) ? rows[0] : rows));
+                const profile = pickFirst(profileRows);
                 cycleAnchorDate = profile?.cycle_anchor_date || null;
               }
             } catch (e) {
@@ -640,23 +651,33 @@ async function refreshSupabaseStatusIfPossible(data) {
               
               if (usageRes.ok) {
                 const usageRows = await usageRes.json().catch(() => []);
-                const usage = Array.isArray(usageRows) ? usageRows[0] : usageRows;
+                const pickFirst =
+                  globalThis.TermsDigestStatusStorageUtils?.pickFirstRow ||
+                  ((rows) => (Array.isArray(rows) ? rows[0] : rows));
+                const usage = pickFirst(usageRows);
                 monthlyUsage = usage?.summaries_count || 0;
               }
             } catch (e) {
               // Silently fail - usage is optional
             }
 
-            await chrome.storage.local.set({
-              subscription: status,
-              subscriptionPlan: plan,
-              userEmail: refreshed.user?.email || null,
-              monthlyUsage: monthlyUsage,
-              cycleAnchorDate: cycleAnchorDate,
-              subscriptionAutoRenew: autoRenew,
-              subscriptionDowngradeScheduledFor: downgradeScheduledFor,
-              currentPeriodEnd: currentPeriodEnd
-            });
+            const patch =
+              globalThis.TermsDigestStatusStorageUtils?.buildOptionsSubscriptionStoragePatch?.({
+                ...mapped,
+                monthlyUsage,
+                cycleAnchorDate,
+                userEmail: refreshed.user?.email || null,
+              }) || {
+                subscription: mapped.status,
+                subscriptionPlan: mapped.plan,
+                userEmail: refreshed.user?.email || null,
+                monthlyUsage,
+                cycleAnchorDate,
+                subscriptionAutoRenew: mapped.autoRenew,
+                subscriptionDowngradeScheduledFor: mapped.downgradeScheduledFor,
+                currentPeriodEnd: mapped.currentPeriodEnd,
+              };
+            await chrome.storage.local.set(patch);
             return;
           }
         }
@@ -666,22 +687,30 @@ async function refreshSupabaseStatusIfPossible(data) {
     }
     
     const subRows = await subRes.json().catch(() => []);
-    const sub = Array.isArray(subRows) ? subRows[0] : subRows;
+    const pickFirst =
+      globalThis.TermsDigestStatusStorageUtils?.pickFirstRow ||
+      ((rows) => (Array.isArray(rows) ? rows[0] : rows));
+    const sub = pickFirst(subRows);
     
     if (!sub) {
       // Clear subscription data if no row exists
-      await chrome.storage.local.set({
-        subscription: null,
-        subscriptionPlan: null
-      });
+      const clearPatch =
+        globalThis.TermsDigestStatusStorageUtils?.buildClearedSubscriptionStoragePatch?.() || {
+          subscription: null,
+          subscriptionPlan: null,
+        };
+      await chrome.storage.local.set(clearPatch);
       return;
     }
-    
-    const status = sub?.status || null;
-    const plan = sub?.plan || null;
-    const autoRenew = sub?.auto_renew !== false;
-    const downgradeScheduledFor = sub?.downgrade_scheduled_for || null;
-    const currentPeriodEnd = sub?.current_period_end || null;
+
+    const mapped =
+      globalThis.TermsDigestStatusStorageUtils?.mapSubscriptionRow?.(sub) || {
+        status: sub?.status || null,
+        plan: sub?.plan || null,
+        autoRenew: sub?.auto_renew !== false,
+        downgradeScheduledFor: sub?.downgrade_scheduled_for || null,
+        currentPeriodEnd: sub?.current_period_end || null,
+      };
 
     // Fetch the user's quota cycle anchor date from their profile
     let cycleAnchorDate = null;
@@ -692,7 +721,7 @@ async function refreshSupabaseStatusIfPossible(data) {
       );
       if (profileRes.ok) {
         const profileRows = await profileRes.json().catch(() => []);
-        const profile = Array.isArray(profileRows) ? profileRows[0] : profileRows;
+        const profile = pickFirst(profileRows);
         cycleAnchorDate = profile?.cycle_anchor_date || null;
       }
     } catch (e) {
@@ -712,7 +741,7 @@ async function refreshSupabaseStatusIfPossible(data) {
       
       if (usageRes.ok) {
         const usageRows = await usageRes.json().catch(() => []);
-        const usage = Array.isArray(usageRows) ? usageRows[0] : usageRows;
+        const usage = pickFirst(usageRows);
         monthlyUsage = usage?.summaries_count || 0;
       }
     } catch (e) {
@@ -720,16 +749,23 @@ async function refreshSupabaseStatusIfPossible(data) {
     }
 
     // Store the updated subscription data
-    await chrome.storage.local.set({
-      subscription: status,
-      subscriptionPlan: plan,
-      userEmail: session.user?.email || null,
-      monthlyUsage: monthlyUsage,
-      cycleAnchorDate: cycleAnchorDate,
-      subscriptionAutoRenew: autoRenew,
-      subscriptionDowngradeScheduledFor: downgradeScheduledFor,
-      currentPeriodEnd: currentPeriodEnd
-    });
+    const patch =
+      globalThis.TermsDigestStatusStorageUtils?.buildOptionsSubscriptionStoragePatch?.({
+        ...mapped,
+        monthlyUsage,
+        cycleAnchorDate,
+        userEmail: session.user?.email || null,
+      }) || {
+        subscription: mapped.status,
+        subscriptionPlan: mapped.plan,
+        userEmail: session.user?.email || null,
+        monthlyUsage,
+        cycleAnchorDate,
+        subscriptionAutoRenew: mapped.autoRenew,
+        subscriptionDowngradeScheduledFor: mapped.downgradeScheduledFor,
+        currentPeriodEnd: mapped.currentPeriodEnd,
+      };
+    await chrome.storage.local.set(patch);
   } catch (e) {
     console.error("[Options] Error refreshing subscription status:", e);
     throw e; // Re-throw so caller can handle it
@@ -957,11 +993,16 @@ document.getElementById("cancelAutoRenewBtn")?.addEventListener("click", async (
   try {
     showModal("loading", "Updating...", "Canceling auto-renewal.");
     const result = await callDowngradeSubscription("cancel_auto_renew");
-    await chrome.storage.local.set({
-      subscriptionAutoRenew: false,
-      subscriptionDowngradeScheduledFor: result.subscription.downgrade_scheduled_for || null,
-      currentPeriodEnd: result.subscription.current_period_end || null
-    });
+    const cancelPatch =
+      globalThis.TermsDigestDowngradeStorageUtils?.buildDowngradeLocalStoragePatch?.(
+        "cancel_auto_renew",
+        result.subscription
+      ) || {
+        subscriptionAutoRenew: false,
+        subscriptionDowngradeScheduledFor: result.subscription.downgrade_scheduled_for || null,
+        currentPeriodEnd: result.subscription.current_period_end || null,
+      };
+    await chrome.storage.local.set(cancelPatch);
     const updated = await chrome.storage.local.get([
       "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
       "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
@@ -986,10 +1027,15 @@ document.getElementById("reEnableAutoRenewBtn")?.addEventListener("click", async
   try {
     showModal("loading", "Updating...", "Re-enabling auto-renewal.");
     await callDowngradeSubscription("re_enable_auto_renew");
-    await chrome.storage.local.set({
-      subscriptionAutoRenew: true,
-      subscriptionDowngradeScheduledFor: null
-    });
+    const reEnablePatch =
+      globalThis.TermsDigestDowngradeStorageUtils?.buildDowngradeLocalStoragePatch?.(
+        "re_enable_auto_renew",
+        null
+      ) || {
+        subscriptionAutoRenew: true,
+        subscriptionDowngradeScheduledFor: null,
+      };
+    await chrome.storage.local.set(reEnablePatch);
     const updated = await chrome.storage.local.get([
       "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
       "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
@@ -1015,13 +1061,18 @@ document.getElementById("downgradeNowBtn")?.addEventListener("click", async () =
     showModal("loading", "Downgrading...", "Please wait.");
     const result = await callDowngradeSubscription("downgrade_now");
     // Apply the API response to storage so the UI reflects the confirmed state
-    await chrome.storage.local.set({
-      subscription: result.subscription.status,
-      subscriptionPlan: result.subscription.plan,
-      subscriptionAutoRenew: false,
-      subscriptionDowngradeScheduledFor: null,
-      currentPeriodEnd: null
-    });
+    const downgradePatch =
+      globalThis.TermsDigestDowngradeStorageUtils?.buildDowngradeLocalStoragePatch?.(
+        "downgrade_now",
+        result.subscription
+      ) || {
+        subscription: result.subscription.status,
+        subscriptionPlan: result.subscription.plan,
+        subscriptionAutoRenew: false,
+        subscriptionDowngradeScheduledFor: null,
+        currentPeriodEnd: null,
+      };
+    await chrome.storage.local.set(downgradePatch);
     const updated = await chrome.storage.local.get([
       "subscription", "subscriptionPlan", "userEmail", "monthlyUsage",
       "subscriptionAutoRenew", "subscriptionDowngradeScheduledFor", "currentPeriodEnd"
