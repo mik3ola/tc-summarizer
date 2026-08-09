@@ -784,8 +784,22 @@ upgradeBtn?.addEventListener("click", async () => {
           "cycleAnchorDate"
         ]);
         
+        const pollOutcome =
+          globalThis.TermsDigestCheckoutPollUtils?.resolveCheckoutPollOutcome?.({
+            subscription: updated.subscription,
+            subscriptionPlan: updated.subscriptionPlan,
+            pollCount,
+            maxPolls,
+          }) ||
+          (((updated.subscription === "active" && updated.subscriptionPlan === "pro") ||
+            updated.subscriptionPlan === "pro")
+            ? "activated"
+            : pollCount >= maxPolls
+              ? "exhausted"
+              : "continue");
+
         // Check if subscription is now active (be flexible - plan="pro" is enough)
-        if ((updated.subscription === "active" && updated.subscriptionPlan === "pro") || updated.subscriptionPlan === "pro") {
+        if (pollOutcome === "activated") {
           clearInterval(pollInterval);
           window.removeEventListener("focus", focusHandler);
           
@@ -805,7 +819,7 @@ upgradeBtn?.addEventListener("click", async () => {
         }
         
         // Stop polling after max attempts
-        if (pollCount >= maxPolls) {
+        if (pollOutcome === "exhausted") {
           clearInterval(pollInterval);
           window.removeEventListener("focus", focusHandler);
           // Don't show error - user might have completed payment, just remind them to refresh
@@ -826,8 +840,20 @@ upgradeBtn?.addEventListener("click", async () => {
           "cycleAnchorDate"
         ]);
         
+        const focusOutcome =
+          globalThis.TermsDigestCheckoutPollUtils?.resolveCheckoutPollOutcome?.({
+            subscription: updated.subscription,
+            subscriptionPlan: updated.subscriptionPlan,
+            pollCount: 0,
+            maxPolls,
+          }) ||
+          (((updated.subscription === "active" && updated.subscriptionPlan === "pro") ||
+            updated.subscriptionPlan === "pro")
+            ? "activated"
+            : "continue");
+
         // Check if subscription is now active (be flexible - plan="pro" is enough)
-        if ((updated.subscription === "active" && updated.subscriptionPlan === "pro") || updated.subscriptionPlan === "pro") {
+        if (focusOutcome === "activated") {
           clearInterval(pollInterval);
           window.removeEventListener("focus", focusHandler);
           
@@ -882,15 +908,17 @@ refreshStatusBtn?.addEventListener("click", async () => {
 
 // Logout button
 logoutBtn.addEventListener("click", async () => {
-  await chrome.storage.local.set({ 
-    subscription: null, 
-    subscriptionPlan: null,
-    userEmail: null,
-    supabaseSession: null,
-    subscriptionAutoRenew: null,
-    subscriptionDowngradeScheduledFor: null,
-    currentPeriodEnd: null
-  });
+  const logoutPatch =
+    globalThis.TermsDigestLogoutStorageUtils?.buildLogoutLocalStoragePatch?.() || {
+      subscription: null,
+      subscriptionPlan: null,
+      userEmail: null,
+      supabaseSession: null,
+      subscriptionAutoRenew: null,
+      subscriptionDowngradeScheduledFor: null,
+      currentPeriodEnd: null,
+    };
+  await chrome.storage.local.set(logoutPatch);
   updateSubscriptionUI(null, null, null);
   showModal("success", "Logged out", "You have been logged out successfully.");
 });
@@ -1119,7 +1147,13 @@ async function handleQueryParams() {
   setTimeout(async () => {
     const { supabaseSession } = await chrome.storage.local.get(["supabaseSession"]);
 
-    if (supabaseSession?.access_token) {
+    const followUp =
+      globalThis.TermsDigestCheckoutPollUtils?.resolveUpgradeDeepLinkFollowUp?.(
+        supabaseSession
+      ) ||
+      (supabaseSession?.access_token ? "click_upgrade" : "show_signin_modal");
+
+    if (followUp === "click_upgrade") {
       upgradeBtn?.click();
     } else {
       authFormEl?.classList.remove("hidden");
