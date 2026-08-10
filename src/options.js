@@ -131,13 +131,24 @@ async function loadSettings() {
   if (apiKeyEl) apiKeyEl.value = data.openaiApiKey || "";
   if (modelEl) modelEl.value = data.openaiModel || "gpt-4o-mini";
 
-  // Preferences
-  const prefs = data.preferences || {};
-  if (autoHoverEl) autoHoverEl.checked = prefs.autoHover !== false;
-  if (showRedFlagsEl) showRedFlagsEl.checked = prefs.showRedFlags !== false;
-  if (showQuotesEl) showQuotesEl.checked = prefs.showQuotes !== false;
-  if (enableCachingEl) enableCachingEl.checked = prefs.enableCaching !== false; // Default to true
-  if (hoverDelayEl) hoverDelayEl.value = prefs.hoverDelay || "750";
+  // Preferences (missing keys default ON; hover delay defaults to 750)
+  const formPrefs =
+    globalThis.TermsDigestPrefsUtils?.resolveFormPreferenceValues?.(data.preferences) ||
+    (() => {
+      const prefs = data.preferences || {};
+      return {
+        autoHover: prefs.autoHover !== false,
+        showRedFlags: prefs.showRedFlags !== false,
+        showQuotes: prefs.showQuotes !== false,
+        enableCaching: prefs.enableCaching !== false,
+        hoverDelay: prefs.hoverDelay || "750",
+      };
+    })();
+  if (autoHoverEl) autoHoverEl.checked = formPrefs.autoHover;
+  if (showRedFlagsEl) showRedFlagsEl.checked = formPrefs.showRedFlags;
+  if (showQuotesEl) showQuotesEl.checked = formPrefs.showQuotes;
+  if (enableCachingEl) enableCachingEl.checked = formPrefs.enableCaching;
+  if (hoverDelayEl) hoverDelayEl.value = formPrefs.hoverDelay;
 
   // Subscription status
   // Prefer real session if present
@@ -365,13 +376,20 @@ exportDataBtn?.addEventListener("click", async () => {
 
 // Save preferences on change
 async function savePreferences() {
-  const preferences = {
-    autoHover: autoHoverEl.checked,
-    showRedFlags: showRedFlagsEl.checked,
-    showQuotes: showQuotesEl.checked,
-    enableCaching: enableCachingEl.checked,
-    hoverDelay: hoverDelayEl.value
-  };
+  const preferences =
+    globalThis.TermsDigestPrefsUtils?.buildPreferencesFromForm?.({
+      autoHover: autoHoverEl?.checked,
+      showRedFlags: showRedFlagsEl?.checked,
+      showQuotes: showQuotesEl?.checked,
+      enableCaching: enableCachingEl?.checked,
+      hoverDelay: hoverDelayEl?.value,
+    }) || {
+      autoHover: autoHoverEl.checked,
+      showRedFlags: showRedFlagsEl.checked,
+      showQuotes: showQuotesEl.checked,
+      enableCaching: enableCachingEl.checked,
+      hoverDelay: hoverDelayEl.value,
+    };
   await chrome.storage.local.set({ preferences });
 }
 

@@ -43,6 +43,8 @@ let preferences = {
 
 /** Coerce checkbox prefs if storage ever has strings */
 function normalizePrefsPatch(patch) {
+  const prefsUtils = globalThis.TermsDigestPrefsUtils;
+  if (prefsUtils?.normalizePrefsPatch) return prefsUtils.normalizePrefsPatch(patch);
   if (!patch || typeof patch !== "object") return {};
   const out = { ...patch };
   for (const key of ["autoHover", "showRedFlags", "showQuotes", "enableCaching"]) {
@@ -61,7 +63,10 @@ async function loadPreferences() {
   try {
     const response = await chrome.runtime.sendMessage({ type: "get_preferences" });
     if (response?.ok && response.preferences) {
-      preferences = { ...preferences, ...normalizePrefsPatch(response.preferences) };
+      const prefsUtils = globalThis.TermsDigestPrefsUtils;
+      preferences = prefsUtils?.mergeNormalizedPreferences
+        ? prefsUtils.mergeNormalizedPreferences(preferences, response.preferences)
+        : { ...preferences, ...normalizePrefsPatch(response.preferences) };
       HOVER_DELAY_MS = parseInt(String(preferences.hoverDelay), 10) || 750;
     }
   } catch (e) {
@@ -595,7 +600,12 @@ function createUi() {
   // where injecting a UI element would fail or be meaningless.
   // Return a harmless stub so downstream event listeners can still attach
   // without crashing — we just gate any real work with `UI.host` checks.
-  if (!document.body || !(document.documentElement instanceof HTMLElement)) {
+  const uiHostUtils = globalThis.TermsDigestUiHostUtils;
+  const canInject = uiHostUtils?.canInjectUiHost
+    ? uiHostUtils.canInjectUiHost(document)
+    : !!(document.body && document.documentElement instanceof HTMLElement);
+  if (!canInject) {
+    if (uiHostUtils?.buildUiHostStub) return uiHostUtils.buildUiHostStub();
     const noop = () => {};
     const stubTarget = { addEventListener: noop, removeEventListener: noop };
     return { host: null, shadow: null, popover: stubTarget };
@@ -2437,7 +2447,10 @@ try {
       if (changes.preferences) {
         const next = changes.preferences.newValue;
         if (next && typeof next === "object") {
-          preferences = { ...preferences, ...normalizePrefsPatch(next) };
+          const prefsUtils = globalThis.TermsDigestPrefsUtils;
+          preferences = prefsUtils?.mergeNormalizedPreferences
+            ? prefsUtils.mergeNormalizedPreferences(preferences, next)
+            : { ...preferences, ...normalizePrefsPatch(next) };
           HOVER_DELAY_MS = parseInt(String(preferences.hoverDelay), 10) || 750;
           refreshSummaryIfVisible().catch(() => {});
         } else {
