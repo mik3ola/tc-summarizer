@@ -1,3 +1,6 @@
+// Pure helpers — must load before this worker body runs.
+importScripts("auth-callback-utils.js");
+
 // Configuration
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -756,11 +759,19 @@ async function refreshSupabaseStatusIfPossible(data) {
 
 // Listen for auth callback from your backend (when implementing OAuth)
 chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
-  if (message.type === "auth_callback" && message.token) {
-    chrome.storage.local.set({
-      subscription: "active",
-      userEmail: message.email || "Subscriber"
-    }).then(() => {
+  const resolved =
+    globalThis.TermsDigestAuthCallbackUtils?.resolveExternalAuthCallback?.(message) ||
+    (message?.type === "auth_callback" && message?.token
+      ? {
+          handled: true,
+          storagePatch: {
+            subscription: "active",
+            userEmail: message.email || "Subscriber",
+          },
+        }
+      : { handled: false, storagePatch: null });
+  if (resolved.handled && resolved.storagePatch) {
+    chrome.storage.local.set(resolved.storagePatch).then(() => {
       sendResponse({ ok: true });
     });
     return true;
