@@ -1,12 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { createRequire } from "node:module";
 
-/**
- * Validation logic for delete account confirmation.
- * Must match the backend expectation: confirmation === "DELETE"
- */
-function isValidDeleteConfirmation(value) {
-  return (value || "").trim() === "DELETE";
-}
+const require = createRequire(import.meta.url);
+const { isValidDeleteConfirmation } = require("../src/delete-confirmation-utils.js");
 
 describe("isValidDeleteConfirmation", () => {
   it("returns true for exact 'DELETE'", () => {

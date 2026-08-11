@@ -1,8 +1,12 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-
-type Theme = "light" | "dark";
+import {
+  nextTheme,
+  resolveInitialTheme,
+  shouldFollowSystemTheme,
+  type Theme,
+} from "@/lib/theme-utils";
 
 interface ThemeContextType {
   theme: Theme;
@@ -33,20 +37,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     // Check localStorage first; if the user hasn't made an explicit choice,
     // fall back to the operating system's preference.
-    const stored = localStorage.getItem("theme") as Theme | null;
-    if (stored === "light" || stored === "dark") {
-      setThemeState(stored);
-      applyThemeToDocument(stored);
-    } else {
-      const defaultTheme: Theme = mql.matches ? "dark" : "light";
-      setThemeState(defaultTheme);
-      applyThemeToDocument(defaultTheme);
-    }
+    const stored = localStorage.getItem("theme");
+    const initial = resolveInitialTheme(stored, mql.matches);
+    setThemeState(initial);
+    applyThemeToDocument(initial);
 
     // Live-follow OS preference changes — only if the user hasn't explicitly
     // overridden via the toggle (i.e. nothing stored in localStorage).
     const handleChange = (e: MediaQueryListEvent) => {
-      if (localStorage.getItem("theme")) return;
+      if (!shouldFollowSystemTheme(localStorage.getItem("theme"))) return;
       const next: Theme = e.matches ? "dark" : "light";
       setThemeState(next);
       applyThemeToDocument(next);
@@ -62,8 +61,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleTheme = () => {
-    const newTheme = theme === "dark" ? "light" : "dark";
-    setTheme(newTheme);
+    setTheme(nextTheme(theme));
   };
 
   // Prevent flash of wrong theme

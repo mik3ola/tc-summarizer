@@ -128,8 +128,18 @@ async function loadSettings() {
   ]);
 
   // API settings (options page only; popup has no API card)
-  if (apiKeyEl) apiKeyEl.value = data.openaiApiKey || "";
-  if (modelEl) modelEl.value = data.openaiModel || "gpt-4o-mini";
+  const settingsUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSettingsUtils) || null;
+  if (apiKeyEl) {
+    apiKeyEl.value = settingsUtils?.resolveOptionsOpenaiApiKeyField
+      ? settingsUtils.resolveOptionsOpenaiApiKeyField(data.openaiApiKey)
+      : data.openaiApiKey || "";
+  }
+  if (modelEl) {
+    modelEl.value = settingsUtils?.resolveOptionsOpenaiModelField
+      ? settingsUtils.resolveOptionsOpenaiModelField(data.openaiModel)
+      : data.openaiModel || "gpt-4o-mini";
+  }
 
   // Preferences
   const prefs = data.preferences || {};
@@ -1053,7 +1063,13 @@ function hideDeleteAccountModal() {
 }
 
 deleteConfirmInput?.addEventListener("input", () => {
-  deleteAccountModalConfirm.disabled = deleteConfirmInput.value.trim() !== "DELETE";
+  const deleteUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestDeleteConfirmationUtils) ||
+    null;
+  const valid = deleteUtils?.isValidDeleteConfirmation
+    ? deleteUtils.isValidDeleteConfirmation(deleteConfirmInput.value)
+    : deleteConfirmInput.value.trim() === "DELETE";
+  deleteAccountModalConfirm.disabled = !valid;
 });
 
 deleteAccountModalCancel?.addEventListener("click", hideDeleteAccountModal);
