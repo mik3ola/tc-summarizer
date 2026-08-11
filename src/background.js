@@ -1,5 +1,8 @@
 // Configuration
-const DEFAULT_MODEL = "gpt-4o-mini";
+importScripts("settings-utils.js");
+const DEFAULT_MODEL =
+  (typeof globalThis !== "undefined" && globalThis.DEFAULT_OPENAI_MODEL) ||
+  "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const MAX_TEXT_CHARS = 45_000; // keep request size reasonable
 const DEFAULT_SUPABASE_URL = "https://rsxvxezucgczesplmjiw.supabase.co";
@@ -70,9 +73,22 @@ async function getSettings() {
   // Check if session is expired (with 5 minute buffer)
   const isSessionExpired = session?.expires_at && (session.expires_at - 300000) < Date.now();
   
+  const settingsUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSettingsUtils) || null;
+  const openaiApiKey = settingsUtils?.normalizeOpenaiApiKey
+    ? settingsUtils.normalizeOpenaiApiKey(data.openaiApiKey)
+    : typeof data.openaiApiKey === "string"
+      ? data.openaiApiKey.trim()
+      : "";
+  const openaiModel = settingsUtils?.normalizeOpenaiModel
+    ? settingsUtils.normalizeOpenaiModel(data.openaiModel, DEFAULT_MODEL)
+    : typeof data.openaiModel === "string" && data.openaiModel.trim()
+      ? data.openaiModel.trim()
+      : DEFAULT_MODEL;
+
   return {
-    openaiApiKey: typeof data.openaiApiKey === "string" ? data.openaiApiKey.trim() : "",
-    openaiModel: typeof data.openaiModel === "string" && data.openaiModel.trim() ? data.openaiModel.trim() : DEFAULT_MODEL,
+    openaiApiKey,
+    openaiModel,
     supabaseUrl: DEFAULT_SUPABASE_URL.trim(), // Always use default
     supabaseAnonKey: DEFAULT_SUPABASE_ANON_KEY.trim(), // Always use default
     session: session,
