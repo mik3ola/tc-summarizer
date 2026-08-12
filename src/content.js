@@ -1129,9 +1129,31 @@ let current = {
 };
 
 function clearSummarySnapshot() {
-  current.lastSummary = null;
-  current.lastSummaryUrl = null;
-  current.lastSummaryFromCache = false;
+  const snapshotUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSummarySnapshotUtils) ||
+    null;
+  const empty = snapshotUtils?.emptySummarySnapshot
+    ? snapshotUtils.emptySummarySnapshot()
+    : { lastSummary: null, lastSummaryUrl: null, lastSummaryFromCache: false };
+  current.lastSummary = empty.lastSummary;
+  current.lastSummaryUrl = empty.lastSummaryUrl;
+  current.lastSummaryFromCache = empty.lastSummaryFromCache;
+}
+
+function applySummarySnapshot(summary, url, fromCache) {
+  const snapshotUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSummarySnapshotUtils) ||
+    null;
+  const next = snapshotUtils?.buildSummarySnapshot
+    ? snapshotUtils.buildSummarySnapshot(summary, url, fromCache)
+    : {
+        lastSummary: summary ?? null,
+        lastSummaryUrl: url == null ? null : url,
+        lastSummaryFromCache: !!fromCache,
+      };
+  current.lastSummary = next.lastSummary;
+  current.lastSummaryUrl = next.lastSummaryUrl;
+  current.lastSummaryFromCache = next.lastSummaryFromCache;
 }
 
 function setPopoverPositionNearAnchor(anchor) {
@@ -1552,9 +1574,7 @@ function getConfidenceTooltip(confidence) {
 }
 
 async function renderSummary(summary, url, fromCache) {
-  current.lastSummary = summary;
-  current.lastSummaryUrl = url;
-  current.lastSummaryFromCache = !!fromCache;
+  applySummarySnapshot(summary, url, fromCache);
 
   const title = typeof summary?.title === "string" && summary.title.trim() ? summary.title.trim() : "Summary";
   const confidence = summary?.confidence || "medium";
@@ -2427,22 +2447,36 @@ if (document.readyState === "loading") {
 // Listen for storage changes to refresh footer when usage updates
 try {
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    try {
-      if (areaName !== "local" || !isExtensionContextValid()) return;
+  try {
+      const snapshotUtils =
+        (typeof globalThis !== "undefined" && globalThis.TermsDigestSummarySnapshotUtils) ||
+        null;
+      const handleLocal = snapshotUtils?.shouldHandleLocalStorageChange
+        ? snapshotUtils.shouldHandleLocalStorageChange(areaName)
+        : areaName === "local";
+      if (!handleLocal || !isExtensionContextValid()) return;
 
-      if (changes.monthlyUsage) {
+      const refreshFooter = snapshotUtils?.shouldRefreshFooterOnUsageChange
+        ? snapshotUtils.shouldRefreshFooterOnUsageChange(changes)
+        : !!changes.monthlyUsage;
+      if (refreshFooter) {
         refreshFooterIfVisible();
       }
 
-      if (changes.preferences) {
-        const next = changes.preferences.newValue;
-        if (next && typeof next === "object") {
-          preferences = { ...preferences, ...normalizePrefsPatch(next) };
-          HOVER_DELAY_MS = parseInt(String(preferences.hoverDelay), 10) || 750;
-          refreshSummaryIfVisible().catch(() => {});
-        } else {
-          loadPreferences().then(() => refreshSummaryIfVisible()).catch(() => {});
-        }
+      const prefChange = snapshotUtils?.resolvePreferencesStorageChange
+        ? snapshotUtils.resolvePreferencesStorageChange(changes)
+        : changes.preferences
+          ? changes.preferences.newValue && typeof changes.preferences.newValue === "object"
+            ? { action: "apply_patch", patch: changes.preferences.newValue }
+            : { action: "reload" }
+          : { action: "ignore" };
+
+      if (prefChange.action === "apply_patch") {
+        preferences = { ...preferences, ...normalizePrefsPatch(prefChange.patch) };
+        HOVER_DELAY_MS = parseInt(String(preferences.hoverDelay), 10) || 750;
+        refreshSummaryIfVisible().catch(() => {});
+      } else if (prefChange.action === "reload") {
+        loadPreferences().then(() => refreshSummaryIfVisible()).catch(() => {});
       }
     } catch {
       // Context invalidated - listener will stop working; no need to log
@@ -2455,9 +2489,25 @@ try {
 // Re-render visible summary when prefs change (e.g. red flags / quotes toggles in popup)
 async function refreshSummaryIfVisible() {
   try {
-    if (!isExtensionContextValid()) return;
-    if (!UI.popover || UI.popover.style.display !== "block") return;
-    if (!current.lastSummary || current.lastSummaryUrl == null) return;
+    const snapshotUtils =
+      (typeof globalThis !== "undefined" && globalThis.TermsDigestSummarySnapshotUtils) ||
+      null;
+    const popoverVisible = !!(UI.popover && UI.popover.style.display === "block");
+    const snapshot = {
+      lastSummary: current.lastSummary,
+      lastSummaryUrl: current.lastSummaryUrl,
+      lastSummaryFromCache: current.lastSummaryFromCache,
+    };
+    const shouldRefresh = snapshotUtils?.shouldRefreshSummaryIfVisible
+      ? snapshotUtils.shouldRefreshSummaryIfVisible({
+          contextValid: isExtensionContextValid(),
+          popoverVisible,
+          snapshot,
+        })
+      : isExtensionContextValid() &&
+        popoverVisible &&
+        !!(current.lastSummary && current.lastSummaryUrl != null);
+    if (!shouldRefresh) return;
     await renderSummary(current.lastSummary, current.lastSummaryUrl, current.lastSummaryFromCache);
     if (current.anchor) showPopover(current.anchor);
   } catch {
