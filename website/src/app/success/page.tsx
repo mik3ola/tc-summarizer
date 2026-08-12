@@ -4,47 +4,66 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import {
+  PAYMENT_SUCCESS_AUTOCLOSE_DELAY_MS,
+  buildPaymentSuccessPostMessage,
+  resolvePaymentSuccessBootstrap,
+  shouldNotifyOpenerAndAutoClose,
+} from "@/lib/payment-success-utils";
 
 function SuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
-  const [message, setMessage] = useState("Verifying your payment...");
+  const bootstrap = resolvePaymentSuccessBootstrap(sessionId);
+  const [status, setStatus] = useState<"loading" | "success" | "error">(
+    bootstrap.initialStatus
+  );
+  const [message, setMessage] = useState(bootstrap.initialMessage);
 
   useEffect(() => {
-    // If no session_id, assume success (user might have navigated directly)
-    if (!sessionId) {
-      setStatus("success");
-      setMessage("Payment successful!");
+    const next = resolvePaymentSuccessBootstrap(sessionId);
+    setStatus(next.initialStatus);
+    setMessage(next.initialMessage);
+
+    // Verify the session with Stripe (optional - webhook handles the actual upgrade)
+    // For now, we'll just show success after a brief delay when session_id is present
+    if (next.deferMs == null || !next.deferredSuccessMessage) {
       return;
     }
 
-    // Verify the session with Stripe (optional - webhook handles the actual upgrade)
-    // For now, we'll just show success after a brief delay
     const timer = setTimeout(() => {
       setStatus("success");
-      setMessage("Payment verified! Your subscription is now active.");
-    }, 1500);
+      setMessage(next.deferredSuccessMessage);
+    }, next.deferMs);
 
     return () => clearTimeout(timer);
   }, [sessionId]);
 
   // Auto-close if opened in a popup (optional)
   useEffect(() => {
-    if (status === "success" && typeof window !== "undefined") {
-      // Check if this is a popup window
-      if (window.opener && !window.opener.closed) {
-        // Notify parent window (if extension is listening)
-        window.opener.postMessage({ type: "payment_success", sessionId }, "*");
-        
-        // Optionally close after a delay
-        const closeTimer = setTimeout(() => {
-          window.close();
-        }, 5000);
-        
-        return () => clearTimeout(closeTimer);
-      }
+    if (typeof window === "undefined") return;
+
+    const hasOpener = !!window.opener;
+    const openerClosed = !window.opener || window.opener.closed;
+    if (
+      !shouldNotifyOpenerAndAutoClose({
+        status,
+        hasOpener,
+        openerClosed,
+      })
+    ) {
+      return;
     }
+
+    // Notify parent window (if extension is listening)
+    window.opener.postMessage(buildPaymentSuccessPostMessage(sessionId), "*");
+
+    // Optionally close after a delay
+    const closeTimer = setTimeout(() => {
+      window.close();
+    }, PAYMENT_SUCCESS_AUTOCLOSE_DELAY_MS);
+
+    return () => clearTimeout(closeTimer);
   }, [status, sessionId]);
 
   const Logo = () => (
