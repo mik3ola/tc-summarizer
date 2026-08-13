@@ -16,7 +16,11 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["src/content.js"],
+      "js": [
+        "src/source-navigation-utils.js",
+        "src/summarize-extract-utils.js",
+        "src/content.js"
+      ],
       "run_at": "document_idle"
     }
   ],

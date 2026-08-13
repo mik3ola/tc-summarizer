@@ -1661,13 +1661,26 @@ async function summarizeModal(modalSelector, anchor, requestId) {
   }
 
   // Extract text from the modal
-  const text = (modal.innerText || modal.textContent || "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!text || text.length < 50) {
-    throw new Error("Modal appears to be empty or has very little content.");
+  const rawModalText = modal.innerText || modal.textContent || "";
+  const extractUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSummarizeExtractUtils) ||
+    null;
+  const modalExtract = extractUtils?.resolveModalExtractOutcome
+    ? extractUtils.resolveModalExtractOutcome(rawModalText, "modal")
+    : (() => {
+        const text = rawModalText.replace(/\s+/g, " ").trim();
+        if (!text || text.length < 50) {
+          return {
+            ok: false,
+            errorMessage: "Modal appears to be empty or has very little content.",
+          };
+        }
+        return { ok: true, text };
+      })();
+  if (!modalExtract.ok) {
+    throw new Error(modalExtract.errorMessage);
   }
+  const text = modalExtract.text;
 
   if (current.requestId !== requestId) return;
 
@@ -1706,13 +1719,26 @@ async function summarizeModalElement(modalElement, anchor, requestId) {
   const clone = modalElement.cloneNode(true);
   clone.querySelectorAll("script, style, noscript").forEach((el) => el.remove());
   
-  const text = (clone.innerText || clone.textContent || "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!text || text.length < 50) {
-    throw new Error("Content appears to be empty or has very little text.");
+  const rawElementText = clone.innerText || clone.textContent || "";
+  const extractUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSummarizeExtractUtils) ||
+    null;
+  const elementExtract = extractUtils?.resolveModalExtractOutcome
+    ? extractUtils.resolveModalExtractOutcome(rawElementText, "modal_element")
+    : (() => {
+        const text = rawElementText.replace(/\s+/g, " ").trim();
+        if (!text || text.length < 50) {
+          return {
+            ok: false,
+            errorMessage: "Content appears to be empty or has very little text.",
+          };
+        }
+        return { ok: true, text };
+      })();
+  if (!elementExtract.ok) {
+    throw new Error(elementExtract.errorMessage);
   }
+  const text = elementExtract.text;
 
   if (current.requestId !== requestId) return;
 
@@ -1742,26 +1768,56 @@ async function summarizeLink(url, anchor, requestId) {
   showPopover(anchor);
 
   const fetchRes = await chrome.runtime.sendMessage({ type: "fetch_html", url });
-  if (!fetchRes?.ok) throw new Error(fetchRes?.error || "Failed to fetch page HTML.");
-
-  const { result } = fetchRes;
-  if (!result?.ok) {
-    throw new Error(`Fetch failed (${result?.status || "?"}). This site may block automated access.`);
+  const extractUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSummarizeExtractUtils) ||
+    null;
+  const fetchOutcome = extractUtils?.resolveFetchHtmlOutcome
+    ? extractUtils.resolveFetchHtmlOutcome(fetchRes)
+    : (() => {
+        if (!fetchRes?.ok) {
+          return {
+            action: "throw",
+            errorMessage: fetchRes?.error || "Failed to fetch page HTML.",
+          };
+        }
+        const { result } = fetchRes;
+        if (!result?.ok) {
+          return {
+            action: "throw",
+            errorMessage: `Fetch failed (${result?.status || "?"}). This site may block automated access.`,
+          };
+        }
+        return { action: "continue", result };
+      })();
+  if (fetchOutcome.action === "throw") {
+    throw new Error(fetchOutcome.errorMessage);
   }
 
   if (current.requestId !== requestId) return; // cancelled/replaced
 
-  const text = extractTextFromHtml(result.html, result.finalUrl);
-  if (!text.trim()) {
-    // Tagged so renderError can show this as a friendly info message rather than
-    // a scary technical error. Don't include byte counts or "JavaScript / blocked"
-    // wording in the user-facing string.
-    throw new Error("UNREADABLE_PAGE");
+  const textRaw = extractTextFromHtml(
+    fetchOutcome.result.html,
+    fetchOutcome.result.finalUrl
+  );
+  const textOutcome = extractUtils?.resolveExtractedTextOutcome
+    ? extractUtils.resolveExtractedTextOutcome(textRaw)
+    : !String(textRaw || "").trim()
+      ? {
+          // Tagged so renderError can show this as a friendly info message rather than
+          // a scary technical error. Don't include byte counts or "JavaScript / blocked"
+          // wording in the user-facing string.
+          action: "throw",
+          errorMessage: "UNREADABLE_PAGE",
+        }
+      : { action: "continue", text: textRaw };
+  if (textOutcome.action === "throw") {
+    throw new Error(textOutcome.errorMessage);
   }
+  const text = textOutcome.text;
 
   const sumRes = await chrome.runtime.sendMessage({
     type: "summarize_text",
-    url: result.finalUrl || url,
+    url: fetchOutcome.result.finalUrl || url,
     text
   });
 
@@ -1770,7 +1826,7 @@ async function summarizeLink(url, anchor, requestId) {
   if (!sumRes?.ok) throw new Error(sumRes?.error || "Summarization failed.");
 
   current.isModalContent = false;  // This is URL-based content, not modal
-  renderSummary(sumRes.summary, result.finalUrl || url, !!sumRes.fromCache);
+  renderSummary(sumRes.summary, fetchOutcome.result.finalUrl || url, !!sumRes.fromCache);
   showPopover(anchor);
 }
 
@@ -1789,8 +1845,16 @@ function startHover(element) {
   const requestId = current.requestId;
   
   // Store original href for "View source" link
-  const originalHref = element.getAttribute("href") || element.getAttribute("data-href") || "";
-  current.originalHref = originalHref ? toAbsoluteUrl(originalHref) : null;
+  const navUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSourceNavigationUtils) ||
+    null;
+  current.originalHref = navUtils?.resolveOriginalHrefFromElement
+    ? navUtils.resolveOriginalHrefFromElement(element, toAbsoluteUrl)
+    : (() => {
+        const originalHref =
+          element.getAttribute("href") || element.getAttribute("data-href") || "";
+        return originalHref ? toAbsoluteUrl(originalHref) : null;
+      })();
 
   if (linkInfo.type === "modal") {
     // Handle in-page modal content (Bootstrap-style with selector)
@@ -1975,10 +2039,23 @@ UI.popover.addEventListener("click", (e) => {
     }
     if (action === "open-link") {
       // Click the original link directly (most reliable)
-      if (current.anchor) {
+      const navUtils =
+        (typeof globalThis !== "undefined" && globalThis.TermsDigestSourceNavigationUtils) ||
+        null;
+      const openAction = navUtils?.resolveOpenOriginalLinkAction
+        ? navUtils.resolveOpenOriginalLinkAction({
+            hasAnchor: !!current.anchor,
+            originalHref: current.originalHref,
+          })
+        : current.anchor
+          ? { method: "click_anchor" }
+          : current.originalHref
+            ? { method: "open_href", href: current.originalHref }
+            : { method: "noop" };
+      if (openAction.method === "click_anchor" && current.anchor) {
         current.anchor.click();
-      } else if (current.originalHref) {
-        window.open(current.originalHref, "_blank", "noopener,noreferrer");
+      } else if (openAction.method === "open_href" && openAction.href) {
+        window.open(openAction.href, "_blank", "noopener,noreferrer");
       }
     }
     if (action === "copy-summary") {
@@ -2062,15 +2139,28 @@ UI.popover.addEventListener("click", (e) => {
     const action = link.getAttribute("data-action");
     if (action === "view-source") {
       e.preventDefault();
-      // For modal content, click the original anchor to open the modal
-      if (current.isModalContent && current.anchor) {
+      const navUtils =
+        (typeof globalThis !== "undefined" && globalThis.TermsDigestSourceNavigationUtils) ||
+        null;
+      const viewAction = navUtils?.resolveViewSourceAction
+        ? navUtils.resolveViewSourceAction({
+            isModalContent: !!current.isModalContent,
+            hasAnchor: !!current.anchor,
+            originalHref: current.originalHref,
+          })
+        : current.isModalContent && current.anchor
+          ? { method: "click_anchor" }
+          : current.originalHref
+            ? { method: "open_href", href: current.originalHref }
+            : current.anchor
+              ? { method: "click_anchor" }
+              : { method: "noop" };
+      // For modal content, click the original anchor to open the modal;
+      // otherwise use the original href (not the internal cache URL).
+      if (viewAction.method === "click_anchor" && current.anchor) {
         current.anchor.click();
-      } else if (current.originalHref) {
-        // Use the original href (not the internal cache URL)
-        window.open(current.originalHref, "_blank", "noopener,noreferrer");
-      } else if (current.anchor) {
-        // Fallback: click the anchor directly
-        current.anchor.click();
+      } else if (viewAction.method === "open_href" && viewAction.href) {
+        window.open(viewAction.href, "_blank", "noopener,noreferrer");
       }
     } else if (action === "open-options") {
       e.preventDefault();
