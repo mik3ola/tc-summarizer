@@ -27,7 +27,8 @@ describe("isSessionExpired", () => {
     expect(isSessionExpired(now + 60 * 60 * 1000, now)).toBe(false);
   });
 
-  it("returns true at/inside the buffer window and after absolute expiry", () => {
+  it("treats exact buffer edge as fresh; expires strictly inside the window", () => {
+    // expires_at - buffer < now  ⇒  expires_at < now + buffer
     expect(isSessionExpired(now + SESSION_EXPIRY_BUFFER_MS, now)).toBe(false);
     expect(isSessionExpired(now + SESSION_EXPIRY_BUFFER_MS - 1, now)).toBe(true);
     expect(isSessionExpired(now, now)).toBe(true);

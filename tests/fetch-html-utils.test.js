@@ -32,7 +32,7 @@ describe("mapFetchHtmlResponse", () => {
       finalUrl: "https://example.com/terms",
       contentType: "text/html; charset=utf-8",
       html: "<html>hi</html>",
-      htmlLength: 14,
+      htmlLength: 15,
     });
   });
 
