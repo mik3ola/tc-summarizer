@@ -1874,12 +1874,20 @@ document.addEventListener(
 document.addEventListener(
   "mouseout",
   (e) => {
-    if (!UI.host || TOUCH_SUMMARIZE) return;
+    if (!UI.host) return;
     const el = findLegalAnchorFromEventTarget(e.target);
-    // Only cancel a pending (not-yet-shown) timer; if the popover is already visible, do nothing.
-    if (el && el === current.anchor && UI.popover.style.display !== "block") {
-      clearHoverTimer();
-    }
+    const dismissUtils =
+      (typeof globalThis !== "undefined" && globalThis.TermsDigestPopoverDismissUtils) ||
+      null;
+    const shouldCancel = dismissUtils?.shouldCancelPendingHoverOnMouseOut
+      ? dismissUtils.shouldCancelPendingHoverOnMouseOut({
+          touchSummarize: TOUCH_SUMMARIZE,
+          isCurrentAnchor: !!(el && el === current.anchor),
+          popoverVisible: UI.popover.style.display === "block",
+        })
+      : !TOUCH_SUMMARIZE &&
+        !!(el && el === current.anchor && UI.popover.style.display !== "block");
+    if (shouldCancel) clearHoverTimer();
   },
   true
 );
@@ -1896,8 +1904,18 @@ document.addEventListener(
     const el = findLegalAnchorFromEventTarget(e.target);
     if (!el) return;
 
+    const dismissUtils =
+      (typeof globalThis !== "undefined" && globalThis.TermsDigestPopoverDismissUtils) ||
+      null;
     // Already open for this anchor — let outside-click handler / popover handle it
-    if (current.anchor === el && UI.popover.style.display === "block") {
+    const ignoreRetap = dismissUtils?.shouldIgnoreTouchRetapOfOpenAnchor
+      ? dismissUtils.shouldIgnoreTouchRetapOfOpenAnchor({
+          touchSummarize: TOUCH_SUMMARIZE,
+          isCurrentAnchor: current.anchor === el,
+          popoverVisible: UI.popover.style.display === "block",
+        })
+      : current.anchor === el && UI.popover.style.display === "block";
+    if (ignoreRetap) {
       e.preventDefault();
       e.stopPropagation();
       return;
@@ -1919,12 +1937,28 @@ document.addEventListener(
 document.addEventListener(
   "click",
   (e) => {
-    if (!UI.host) return;
-    if (UI.popover.style.display !== "block") return;
-    if (UI.host === e.target || UI.host.contains(e.target)) return;
-    // Touch path already handled legal-link taps above; don't immediately close
-    if (TOUCH_SUMMARIZE && findLegalAnchorFromEventTarget(e.target)) return;
-    closePopover();
+    const dismissUtils =
+      (typeof globalThis !== "undefined" && globalThis.TermsDigestPopoverDismissUtils) ||
+      null;
+    const clickInsideHost = !!(
+      UI.host &&
+      (UI.host === e.target || UI.host.contains(e.target))
+    );
+    const shouldClose = dismissUtils?.shouldClosePopoverOnDocumentClick
+      ? dismissUtils.shouldClosePopoverOnDocumentClick({
+          hasUiHost: !!UI.host,
+          popoverVisible: UI.popover?.style?.display === "block",
+          clickInsideHost,
+          touchSummarize: TOUCH_SUMMARIZE,
+          clickedLegalAnchor: !!findLegalAnchorFromEventTarget(e.target),
+        })
+      : !!(
+          UI.host &&
+          UI.popover.style.display === "block" &&
+          !clickInsideHost &&
+          !(TOUCH_SUMMARIZE && findLegalAnchorFromEventTarget(e.target))
+        );
+    if (shouldClose) closePopover();
   },
   true
 );
