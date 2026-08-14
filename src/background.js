@@ -1,4 +1,5 @@
 // Configuration
+importScripts("fetch-html-utils.js", "session-expiry-utils.js");
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const MAX_TEXT_CHARS = 45_000; // keep request size reasonable
@@ -66,10 +67,15 @@ async function getSettings() {
   ]);
   
   const session = data.supabaseSession || null;
-  
+
   // Check if session is expired (with 5 minute buffer)
-  const isSessionExpired = session?.expires_at && (session.expires_at - 300000) < Date.now();
-  
+  const expiryUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSessionExpiryUtils) ||
+    null;
+  const isSessionExpired = expiryUtils?.isSessionExpired
+    ? expiryUtils.isSessionExpired(session?.expires_at, nowMs())
+    : !!(session?.expires_at && session.expires_at - 300000 < nowMs());
+
   return {
     openaiApiKey: typeof data.openaiApiKey === "string" ? data.openaiApiKey.trim() : "",
     openaiModel: typeof data.openaiModel === "string" && data.openaiModel.trim() ? data.openaiModel.trim() : DEFAULT_MODEL,
@@ -129,14 +135,22 @@ async function incrementStats() {
 }
 
 async function fetchHtml(url) {
+  const fetchUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestFetchHtmlUtils) ||
+    null;
+  if (fetchUtils?.fetchHtml) {
+    return fetchUtils.fetchHtml(url);
+  }
+
+  // Inline fallback if util script failed to load
   const res = await fetch(url, {
     method: "GET",
     redirect: "follow",
     credentials: "include",
     headers: {
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5"
-    }
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.5",
+    },
   });
   const contentType = res.headers.get("content-type") || "";
   const html = await res.text();
@@ -146,7 +160,7 @@ async function fetchHtml(url) {
     finalUrl: res.url || url,
     contentType,
     html,
-    htmlLength: html.length
+    htmlLength: html.length,
   };
 }
 
@@ -592,12 +606,17 @@ async function refreshSupabaseStatusIfPossible(data) {
   }
   
   // Check if token is expired and refresh if needed
-  const isExpired = session.expires_at && (session.expires_at - 300000) < Date.now();
+  const expiryUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSessionExpiryUtils) ||
+    null;
+  const isExpired = expiryUtils?.isSessionExpired
+    ? expiryUtils.isSessionExpired(session.expires_at, nowMs())
+    : !!(session.expires_at && session.expires_at - 300000 < nowMs());
   if (isExpired) {
-    const refreshed = await refreshSessionIfPossible({ 
-      supabaseUrl, 
-      anonKey: anon, 
-      session 
+    const refreshed = await refreshSessionIfPossible({
+      supabaseUrl,
+      anonKey: anon,
+      session,
     });
     if (refreshed?.access_token) {
       session = refreshed;

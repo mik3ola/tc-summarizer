@@ -559,7 +559,12 @@ async function refreshSupabaseStatusIfPossible(data) {
   }
   
   // Check if token is expired and refresh if needed
-  const isExpired = session.expires_at && (session.expires_at - 300000) < Date.now();
+  const expiryUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSessionExpiryUtils) ||
+    null;
+  const isExpired = expiryUtils?.isSessionExpired
+    ? expiryUtils.isSessionExpired(session.expires_at, Date.now())
+    : !!(session.expires_at && session.expires_at - 300000 < Date.now());
   if (isExpired) {
     const refreshed = await refreshSessionToken(supabaseUrl, anon, session);
     if (refreshed?.access_token) {
