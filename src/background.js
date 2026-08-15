@@ -1,4 +1,5 @@
 // Configuration
+importScripts("summarize-request-utils.js");
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const MAX_TEXT_CHARS = 45_000; // keep request size reasonable
@@ -329,7 +330,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       // Summarize text
       if (message.type === "summarize_text") {
         const url = normalizeUrl(message.url);
-        const cacheKey = `summary:${url}`;
+        const requestUtils =
+          (typeof globalThis !== "undefined" && globalThis.TermsDigestSummarizeRequestUtils) ||
+          null;
+        const cacheKey = requestUtils?.buildSummaryCacheKey
+          ? requestUtils.buildSummaryCacheKey(url)
+          : `summary:${url}`;
 
         // Check cache first
         const cached = await getCache(cacheKey);
@@ -388,11 +394,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         const rawText = typeof message.text === "string" ? message.text : "";
-        const text = rawText.length > MAX_TEXT_CHARS ? rawText.slice(0, MAX_TEXT_CHARS) : rawText;
-        if (!text.trim()) {
-          sendResponse({ ok: false, error: "No text extracted from page." });
+        const textGate = requestUtils?.resolveSummarizeTextInput
+          ? requestUtils.resolveSummarizeTextInput(rawText, MAX_TEXT_CHARS)
+          : (() => {
+              const text =
+                rawText.length > MAX_TEXT_CHARS
+                  ? rawText.slice(0, MAX_TEXT_CHARS)
+                  : rawText;
+              if (!text.trim()) {
+                return { ok: false, error: "No text extracted from page." };
+              }
+              return { ok: true, text };
+            })();
+        if (!textGate.ok) {
+          sendResponse({ ok: false, error: textGate.error });
           return;
         }
+        const text = textGate.text;
 
         let summary;
         let usedBackend = false;
