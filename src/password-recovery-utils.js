@@ -37,10 +37,13 @@
     return "failure";
   }
 
-  /** Build recover URL with fixed production redirect_to. */
+  /**
+   * Build recover URL with fixed production redirect_to.
+   * Keep redirect_to unencoded to match historical popup/options request URLs.
+   */
   function buildRecoverUrl(supabaseUrl) {
     const base = String(supabaseUrl || "").replace(/\/$/, "");
-    return `${base}/auth/v1/recover?redirect_to=${encodeURIComponent(RECOVERY_REDIRECT_TO)}`;
+    return `${base}/auth/v1/recover?redirect_to=${RECOVERY_REDIRECT_TO}`;
   }
 
   return {

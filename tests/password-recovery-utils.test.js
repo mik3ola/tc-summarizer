@@ -59,10 +59,8 @@ describe("buildRecoverUrl", () => {
     expect(RECOVERY_REDIRECT_TO).not.toContain("localhost");
 
     const url = buildRecoverUrl("https://rsxvxezucgczesplmjiw.supabase.co/");
-    expect(url).toContain("/auth/v1/recover?redirect_to=");
-    expect(url).toContain(encodeURIComponent(RECOVERY_REDIRECT_TO));
-    expect(url.startsWith("https://rsxvxezucgczesplmjiw.supabase.co/auth/v1/recover")).toBe(
-      true
+    expect(url).toBe(
+      `https://rsxvxezucgczesplmjiw.supabase.co/auth/v1/recover?redirect_to=${RECOVERY_REDIRECT_TO}`
     );
   });
 });
