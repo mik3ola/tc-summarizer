@@ -471,20 +471,36 @@ cancelAuthBtn?.addEventListener("click", () => {
 
 document.getElementById("forgotPasswordLink")?.addEventListener("click", async (e) => {
   e.preventDefault();
-  const email = (authEmailEl?.value || "").trim();
-  if (!email) {
+  const recoveryUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestPasswordRecoveryUtils) ||
+    null;
+  const gate = recoveryUtils?.resolveForgotPasswordGate
+    ? recoveryUtils.resolveForgotPasswordGate(authEmailEl?.value)
+    : (() => {
+        const email = (authEmailEl?.value || "").trim();
+        return email
+          ? { ok: true, email }
+          : { ok: false, reason: "missing_email" };
+      })();
+  if (!gate.ok) {
     showModal("info", "Enter your email", "Please enter your email address in the field above, then click \"Forgot password?\".");
     return;
   }
   try {
     showModal("loading", "Sending reset email…", "Please wait.");
     const { url, anon } = await requireBackendConfigOrThrow();
-    const res = await fetch(`${url}/auth/v1/recover?redirect_to=https://termsdigest.com/auth/reset-password`, {
+    const recoverUrl = recoveryUtils?.buildRecoverUrl
+      ? recoveryUtils.buildRecoverUrl(url)
+      : `${url}/auth/v1/recover?redirect_to=https://termsdigest.com/auth/reset-password`;
+    const res = await fetch(recoverUrl, {
       method: "POST",
       headers: { "content-type": "application/json", apikey: anon },
-      body: JSON.stringify({ email })
+      body: JSON.stringify({ email: gate.email })
     });
-    if (res.ok) {
+    const outcome = recoveryUtils?.resolveForgotPasswordHttpOutcome
+      ? recoveryUtils.resolveForgotPasswordHttpOutcome({ ok: res.ok, status: res.status })
+      : (res.ok ? "success" : "failure");
+    if (outcome === "success") {
       showModal("success", "Reset email sent!", "Check your inbox for a link to reset your password. The link expires in 1 hour.");
     } else {
       showModal("error", "Could not send email", "Please try again or contact <a href=\"https://termsdigest.com/support\" target=\"_blank\">support</a>.");

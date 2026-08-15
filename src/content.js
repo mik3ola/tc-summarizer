@@ -1556,9 +1556,16 @@ async function renderSummary(summary, url, fromCache) {
   current.lastSummaryUrl = url;
   current.lastSummaryFromCache = !!fromCache;
 
-  const title = typeof summary?.title === "string" && summary.title.trim() ? summary.title.trim() : "Summary";
+  const headerUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSummaryHeaderUtils) ||
+    null;
+  const title = headerUtils?.resolveSummaryTitle
+    ? headerUtils.resolveSummaryTitle(summary)
+    : (typeof summary?.title === "string" && summary.title.trim() ? summary.title.trim() : "Summary");
   const confidence = summary?.confidence || "medium";
-  const badgeText = fromCache ? `${confidence} • cached` : confidence;
+  const badgeText = headerUtils?.resolveConfidenceBadgeText
+    ? headerUtils.resolveConfidenceBadgeText(confidence, !!fromCache)
+    : (fromCache ? `${confidence} • cached` : confidence);
   const badgeTooltip = getConfidenceTooltip(confidence);
   const badgeColorClass = confidence === "high" ? "badge-high" : confidence === "low" ? "badge-low" : "badge-medium";
   const footer = await getStatsFooter(url, true);

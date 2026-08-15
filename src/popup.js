@@ -67,24 +67,44 @@
 
   document.getElementById("forgotPasswordLink")?.addEventListener("click", async (e) => {
     e.preventDefault();
-    const email = document.getElementById("authEmail")?.value?.trim();
-    if (!email) {
+    const recoveryUtils =
+      (typeof globalThis !== "undefined" && globalThis.TermsDigestPasswordRecoveryUtils) ||
+      null;
+    const gate = recoveryUtils?.resolveForgotPasswordGate
+      ? recoveryUtils.resolveForgotPasswordGate(
+          document.getElementById("authEmail")?.value
+        )
+      : (() => {
+          const email = document.getElementById("authEmail")?.value?.trim();
+          return email
+            ? { ok: true, email }
+            : { ok: false, reason: "missing_email" };
+        })();
+    if (!gate.ok) {
       alert('Please enter your email address first, then click "Forgot password?".');
       return;
     }
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/auth/v1/recover?redirect_to=https://termsdigest.com/auth/reset-password`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            apikey: SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({ email }),
-        }
-      );
-      if (res.ok || res.status === 200) {
+      const recoverUrl = recoveryUtils?.buildRecoverUrl
+        ? recoveryUtils.buildRecoverUrl(SUPABASE_URL)
+        : `${SUPABASE_URL}/auth/v1/recover?redirect_to=https://termsdigest.com/auth/reset-password`;
+      const res = await fetch(recoverUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ email: gate.email }),
+      });
+      const outcome = recoveryUtils?.resolveForgotPasswordHttpOutcome
+        ? recoveryUtils.resolveForgotPasswordHttpOutcome({
+            ok: res.ok,
+            status: res.status,
+          })
+        : res.ok || res.status === 200
+          ? "success"
+          : "failure";
+      if (outcome === "success") {
         alert("Password reset email sent! Check your inbox.");
       } else {
         alert("Could not send reset email. Please try again.");
