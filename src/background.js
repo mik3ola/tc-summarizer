@@ -1,3 +1,5 @@
+importScripts("background-message-utils.js");
+
 // Configuration
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -6,6 +8,10 @@ const DEFAULT_SUPABASE_URL = "https://rsxvxezucgczesplmjiw.supabase.co";
 // Anon key is safe to expose - it's a public key meant for client-side use
 // Must match the key in options.js for refresh to work
 const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzeHZ4ZXp1Y2djemVzcGxtaml3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjcwNjYsImV4cCI6MjA4MzU0MzA2Nn0.1umoIH60gsytGtmfbgfxr1OZJs_L-62wT_BWVaMt5lw";
+
+const BackgroundMessageUtils =
+  (typeof globalThis !== "undefined" && globalThis.TermsDigestBackgroundMessageUtils) ||
+  null;
 
 function nowMs() {
   return Date.now();
@@ -295,40 +301,56 @@ function safeJsonParse(maybeJson) {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   (async () => {
     try {
-      if (!message || typeof message !== "object") return;
+      const routed = BackgroundMessageUtils?.resolveBackgroundMessageIntent
+        ? BackgroundMessageUtils.resolveBackgroundMessageIntent(message)
+        : (!message || typeof message !== "object"
+            ? { intent: "ignore" }
+            : message.type === "open_options"
+              ? { intent: "open_options" }
+              : message.type === "open_options_upgrade"
+                ? { intent: "open_options_upgrade" }
+                : message.type === "fetch_html"
+                  ? { intent: "fetch_html", url: message.url }
+                  : message.type === "get_preferences"
+                    ? { intent: "get_preferences" }
+                    : message.type === "summarize_text"
+                      ? { intent: "summarize_text", url: message.url, text: message.text }
+                      : { intent: "unknown", type: message.type });
+
+      if (routed.intent === "ignore" || routed.intent === "unknown") return;
 
       // Open options page (prefer openOptionsPage — more reliable on Safari)
-      if (message.type === "open_options") {
+      if (routed.intent === "open_options") {
         await openOptionsPage();
         sendResponse({ ok: true });
         return;
       }
 
       // Open options page with upgrade intent
-      if (message.type === "open_options_upgrade") {
+      if (routed.intent === "open_options_upgrade") {
         await openOptionsPage({ upgrade: true });
         sendResponse({ ok: true });
         return;
       }
 
       // Fetch HTML for a URL
-      if (message.type === "fetch_html") {
-        const url = normalizeUrl(message.url);
+      if (routed.intent === "fetch_html") {
+        const url = normalizeUrl(routed.url);
         const result = await fetchHtml(url);
         sendResponse({ ok: true, result });
         return;
       }
 
       // Get preferences
-      if (message.type === "get_preferences") {
+      if (routed.intent === "get_preferences") {
         const settings = await getSettings();
         sendResponse({ ok: true, preferences: settings.preferences });
         return;
       }
 
       // Summarize text
-      if (message.type === "summarize_text") {
-        const url = normalizeUrl(message.url);
+      if (routed.intent === "summarize_text") {
+        const url = normalizeUrl(routed.url);
         const cacheKey = `summary:${url}`;
 
         // Check cache first
@@ -358,12 +380,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         // AUTHENTICATION REQUIRED - guests cannot use the service
-        const isLoggedIn = !!settings.session?.access_token;
-        
-        if (!isLoggedIn) {
+        const loginGate = BackgroundMessageUtils?.resolveSummarizeLoginGate
+          ? BackgroundMessageUtils.resolveSummarizeLoginGate({
+              accessToken: settings.session?.access_token,
+            })
+          : settings.session?.access_token
+            ? { ok: true }
+            : { ok: false, error: "Please sign in to use TermsDigest!" };
+
+        if (!loginGate.ok) {
           sendResponse({
             ok: false,
-            error: "Please sign in to use TermsDigest!"
+            error: loginGate.error
           });
           return;
         }
@@ -387,7 +415,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           return;
         }
 
-        const rawText = typeof message.text === "string" ? message.text : "";
+        const rawText = typeof routed.text === "string" ? routed.text : "";
         const text = rawText.length > MAX_TEXT_CHARS ? rawText.slice(0, MAX_TEXT_CHARS) : rawText;
         if (!text.trim()) {
           sendResponse({ ok: false, error: "No text extracted from page." });

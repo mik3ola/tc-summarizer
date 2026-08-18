@@ -391,9 +391,24 @@ async function requireBackendConfigOrThrow() {
 
 async function signInOrUp(mode) {
   const { url, anon } = await requireBackendConfigOrThrow();
-  const email = (authEmailEl.value || "").trim();
-  const password = (authPasswordEl.value || "").trim();
-  if (!email || !password) throw new Error("Please enter both email and password.");
+  const credentialsUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestOptionsCredentialsUtils) ||
+    null;
+  const credentials = credentialsUtils?.resolvePasswordAuthCredentials
+    ? credentialsUtils.resolvePasswordAuthCredentials(
+        authEmailEl.value,
+        authPasswordEl.value
+      )
+    : (() => {
+        const email = (authEmailEl.value || "").trim();
+        const password = (authPasswordEl.value || "").trim();
+        if (!email || !password) {
+          return { ok: false, error: "Please enter both email and password." };
+        }
+        return { ok: true, email, password };
+      })();
+  if (!credentials.ok) throw new Error(credentials.error);
+  const { email, password } = credentials;
 
   if (mode === "signup") {
     showModal("loading", "Creating account...", "Please wait while we create your account.");
