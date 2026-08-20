@@ -1,3 +1,5 @@
+importScripts("openai-chat-utils.js");
+
 // Configuration
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -6,6 +8,10 @@ const DEFAULT_SUPABASE_URL = "https://rsxvxezucgczesplmjiw.supabase.co";
 // Anon key is safe to expose - it's a public key meant for client-side use
 // Must match the key in options.js for refresh to work
 const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzeHZ4ZXp1Y2djemVzcGxtaml3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjcwNjYsImV4cCI6MjA4MzU0MzA2Nn0.1umoIH60gsytGtmfbgfxr1OZJs_L-62wT_BWVaMt5lw";
+
+const OpenAiChatUtils =
+  (typeof globalThis !== "undefined" && globalThis.TermsDigestOpenAiChatUtils) ||
+  null;
 
 function nowMs() {
   return Date.now();
@@ -151,6 +157,9 @@ async function fetchHtml(url) {
 }
 
 function buildPrompt() {
+  if (OpenAiChatUtils?.buildOwnKeyPrompt) {
+    return OpenAiChatUtils.buildOwnKeyPrompt();
+  }
   return {
     system:
       "You summarize website legal pages (terms, privacy, refund, billing). Be concise, cautious, and highlight potentially costly clauses. If unsure, say so.",
@@ -243,15 +252,19 @@ async function refreshSessionIfPossible({ supabaseUrl, anonKey, session }) {
 
 // Call OpenAI directly (for free tier with own API key)
 async function callOpenAI({ apiKey, model, input }) {
-  const prompt = buildPrompt();
-  const body = {
-    model,
-    messages: [
-      { role: "system", content: prompt.system },
-      { role: "user", content: prompt.user(input) }
-    ],
-    temperature: 0.2
-  };
+  const body = OpenAiChatUtils?.buildOpenAiChatCompletionBody
+    ? OpenAiChatUtils.buildOpenAiChatCompletionBody({ model, input })
+    : (() => {
+        const prompt = buildPrompt();
+        return {
+          model,
+          messages: [
+            { role: "system", content: prompt.system },
+            { role: "user", content: prompt.user(input) }
+          ],
+          temperature: 0.2
+        };
+      })();
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -268,10 +281,16 @@ async function callOpenAI({ apiKey, model, input }) {
   }
 
   const data = await res.json();
-  const outputText = data?.choices?.[0]?.message?.content || "";
-
-  if (!outputText) throw new Error("Empty model response.");
-  return outputText;
+  const extracted = OpenAiChatUtils?.resolveOpenAiChatContent
+    ? OpenAiChatUtils.resolveOpenAiChatContent(data)
+    : (() => {
+        const outputText = data?.choices?.[0]?.message?.content || "";
+        return outputText
+          ? { ok: true, content: outputText }
+          : { ok: false, error: "Empty model response." };
+      })();
+  if (!extracted.ok) throw new Error(extracted.error);
+  return extracted.content;
 }
 
 function safeJsonParse(maybeJson) {

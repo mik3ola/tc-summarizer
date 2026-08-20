@@ -183,6 +183,10 @@ function updateSubscriptionUI(subscription, email, plan, extra = {}) {
   const downgradeScheduledFor = extra.subscriptionDowngradeScheduledFor || null;
   const currentPeriodEnd = extra.currentPeriodEnd || null;
 
+  const subMgmtUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSubscriptionManagementUtils) ||
+    null;
+
   // API key hint element
   const apiKeyHint = document.getElementById("apiKeyHint");
   const apiKeyBadge = document.getElementById("apiKeyBadge");
@@ -200,7 +204,9 @@ function updateSubscriptionUI(subscription, email, plan, extra = {}) {
     subStatusEl.classList.add("hidden");
     subActiveEl.classList.remove("hidden");
     userEmailEl.textContent = email || "Subscriber";
-    planHintEl.textContent = "Pro: 50 summaries/month included. Add your own API key below for unlimited.";
+    planHintEl.textContent = subMgmtUtils?.resolvePlanHintText
+      ? subMgmtUtils.resolvePlanHintText("pro")
+      : "Pro: 50 summaries/month included. Add your own API key below for unlimited.";
     upgradeBtn.classList.add("hidden");
     refreshStatusBtn.classList.remove("hidden");
     
@@ -209,8 +215,19 @@ function updateSubscriptionUI(subscription, email, plan, extra = {}) {
     apiCardEl?.classList.remove("hidden");
     
     // Update API hint for Pro users
-    if (apiKeyHint) apiKeyHint.innerHTML = "Your Pro plan is active. Add your own key for <strong>unlimited</strong> usage.";
-    if (apiKeyBadge) { apiKeyBadge.textContent = "Optional"; apiKeyBadge.className = "badge badge-info"; }
+    const proApiChrome = subMgmtUtils?.resolveProApiKeyChrome
+      ? subMgmtUtils.resolveProApiKeyChrome()
+      : {
+          hintHtml:
+            "Your Pro plan is active. Add your own key for <strong>unlimited</strong> usage.",
+          badgeText: "Optional",
+          badgeClass: "badge badge-info",
+        };
+    if (apiKeyHint) apiKeyHint.innerHTML = proApiChrome.hintHtml;
+    if (apiKeyBadge) {
+      apiKeyBadge.textContent = proApiChrome.badgeText;
+      apiKeyBadge.className = proApiChrome.badgeClass;
+    }
 
     document.getElementById("dangerZone")?.classList.remove("hidden");
     document.getElementById("dataCacheCard")?.classList.remove("hidden");
@@ -219,9 +236,16 @@ function updateSubscriptionUI(subscription, email, plan, extra = {}) {
       subManagementEl.classList.remove("hidden");
       if (subStatusLineEl) subStatusLineEl.textContent = formatSubStatusLine(currentPeriodEnd);
       if (autoRenewLineEl) autoRenewLineEl.textContent = formatSubAutoRenewLine(autoRenew, downgradeScheduledFor);
-      if (cancelAutoRenewBtn) cancelAutoRenewBtn.style.display = autoRenew ? "inline-block" : "none";
-      if (reEnableAutoRenewBtn) reEnableAutoRenewBtn.style.display = autoRenew ? "none" : "inline-block";
-      if (downgradeNowBtn) downgradeNowBtn.style.display = "inline-block";
+      const controls = subMgmtUtils?.resolveSubscriptionManagementControls
+        ? subMgmtUtils.resolveSubscriptionManagementControls({ autoRenew })
+        : {
+            cancelDisplay: autoRenew ? "inline-block" : "none",
+            reEnableDisplay: autoRenew ? "none" : "inline-block",
+            downgradeDisplay: "inline-block",
+          };
+      if (cancelAutoRenewBtn) cancelAutoRenewBtn.style.display = controls.cancelDisplay;
+      if (reEnableAutoRenewBtn) reEnableAutoRenewBtn.style.display = controls.reEnableDisplay;
+      if (downgradeNowBtn) downgradeNowBtn.style.display = controls.downgradeDisplay;
     }
   } else if (isLoggedIn) {
     // Logged in but not pro → backend free tier available
@@ -230,7 +254,9 @@ function updateSubscriptionUI(subscription, email, plan, extra = {}) {
     subStatusEl.classList.add("hidden");
     subActiveEl.classList.remove("hidden");
     userEmailEl.textContent = email || "User";
-    planHintEl.textContent = "Free: 5 summaries/month. Upgrade to Pro for 50/month and API key access.";
+    planHintEl.textContent = subMgmtUtils?.resolvePlanHintText
+      ? subMgmtUtils.resolvePlanHintText("free")
+      : "Free: 5 summaries/month. Upgrade to Pro for 50/month and API key access.";
     upgradeBtn.classList.remove("hidden");
     refreshStatusBtn.classList.remove("hidden");
     
