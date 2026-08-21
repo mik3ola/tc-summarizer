@@ -1,6 +1,6 @@
 // Unit tests for summarize lib
 import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.168.0/testing/asserts.ts";
-import { getMonthlyQuota, periodStart, decodeJwtPayload, buildPrompt, resolvedSiteUrl } from "./lib.ts";
+import { getMonthlyQuota, periodStart, decodeJwtPayload, buildPrompt, resolvedSiteUrl, resolveUsageCounterMutation, buildUsageEventInsert } from "./lib.ts";
 
 // ─── getMonthlyQuota ────────────────────────────────────────────────────────
 
@@ -121,4 +121,70 @@ Deno.test("resolvedSiteUrl - falls back to production when env is localhost", ()
 
 Deno.test("resolvedSiteUrl - falls back to production when env is undefined", () => {
   assertEquals(resolvedSiteUrl(undefined), "https://termsdigest.com");
+});
+
+// ─── resolveUsageCounterMutation ────────────────────────────────────────────
+
+Deno.test("resolveUsageCounterMutation - inserts when no existing row", () => {
+  assertEquals(resolveUsageCounterMutation(null), { kind: "insert", nextCount: 1 });
+  assertEquals(resolveUsageCounterMutation(undefined), { kind: "insert", nextCount: 1 });
+});
+
+Deno.test("resolveUsageCounterMutation - updates by incrementing existing count", () => {
+  assertEquals(resolveUsageCounterMutation({ summaries_count: 0 }), {
+    kind: "update",
+    nextCount: 1,
+  });
+  assertEquals(resolveUsageCounterMutation({ summaries_count: 4 }), {
+    kind: "update",
+    nextCount: 5,
+  });
+});
+
+Deno.test("resolveUsageCounterMutation - treats null/missing summaries_count as 0", () => {
+  assertEquals(resolveUsageCounterMutation({}), { kind: "update", nextCount: 1 });
+  assertEquals(resolveUsageCounterMutation({ summaries_count: null }), {
+    kind: "update",
+    nextCount: 1,
+  });
+});
+
+// ─── buildUsageEventInsert ──────────────────────────────────────────────────
+
+Deno.test("buildUsageEventInsert - records url, char length, model; cached always false", () => {
+  assertEquals(
+    buildUsageEventInsert({
+      userId: "u1",
+      url: "https://example.com/terms",
+      textLength: 1200,
+      model: "gpt-4o",
+    }),
+    {
+      user_id: "u1",
+      url: "https://example.com/terms",
+      input_chars: 1200,
+      model: "gpt-4o",
+      cached: false,
+    },
+  );
+});
+
+Deno.test("buildUsageEventInsert - defaults model to gpt-4o-mini", () => {
+  assertEquals(
+    buildUsageEventInsert({
+      userId: "u1",
+      url: "https://ex.com",
+      textLength: 10,
+      model: null,
+    }).model,
+    "gpt-4o-mini",
+  );
+  assertEquals(
+    buildUsageEventInsert({
+      userId: "u1",
+      url: "https://ex.com",
+      textLength: 10,
+    }).model,
+    "gpt-4o-mini",
+  );
 });

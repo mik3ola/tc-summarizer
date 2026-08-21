@@ -4,7 +4,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getMonthlyQuota, periodStart, decodeJwtPayload, buildPrompt, type Summary } from "./lib.ts";
+import { getMonthlyQuota, periodStart, decodeJwtPayload, buildPrompt, resolveUsageCounterMutation, buildUsageEventInsert, type Summary } from "./lib.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -168,13 +168,14 @@ serve(async (req: Request) => {
         const m = periodStart(anchorForUsage);
         
         // Log usage event
-        const { error: insertError } = await supabase.from("usage_events").insert({
-          user_id: userId,
-          url,
-          input_chars: text.length,
-          model: Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini",
-          cached: false
-        });
+        const { error: insertError } = await supabase.from("usage_events").insert(
+          buildUsageEventInsert({
+            userId,
+            url,
+            textLength: text.length,
+            model: Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini",
+          })
+        );
         if (insertError) console.error("Usage event error:", insertError.message);
         else console.log("Usage event logged");
 
@@ -188,22 +189,25 @@ serve(async (req: Request) => {
         
         if (selectError) {
           console.error("Counter select error:", selectError.message);
-        } else if (existing) {
-          const { error: updateError } = await supabase
-            .from("usage_counters_monthly")
-            .update({ summaries_count: (existing.summaries_count || 0) + 1 })
-            .eq("user_id", userId)
-            .eq("month_start", m);
-          if (updateError) console.error("Counter update error:", updateError.message);
-          else console.log("Counter updated to:", (existing.summaries_count || 0) + 1);
         } else {
-          const { error: createError } = await supabase.from("usage_counters_monthly").insert({
-            user_id: userId,
-            month_start: m,
-            summaries_count: 1
-          });
-          if (createError) console.error("Counter create error:", createError.message);
-          else console.log("Counter created");
+          const mutation = resolveUsageCounterMutation(existing);
+          if (mutation.kind === "update") {
+            const { error: updateError } = await supabase
+              .from("usage_counters_monthly")
+              .update({ summaries_count: mutation.nextCount })
+              .eq("user_id", userId)
+              .eq("month_start", m);
+            if (updateError) console.error("Counter update error:", updateError.message);
+            else console.log("Counter updated to:", mutation.nextCount);
+          } else {
+            const { error: createError } = await supabase.from("usage_counters_monthly").insert({
+              user_id: userId,
+              month_start: m,
+              summaries_count: mutation.nextCount,
+            });
+            if (createError) console.error("Counter create error:", createError.message);
+            else console.log("Counter created");
+          }
         }
       } catch (e) {
         console.error("Usage tracking error:", e);

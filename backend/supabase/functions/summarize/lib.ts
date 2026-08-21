@@ -85,3 +85,53 @@ export function resolvedSiteUrl(envSiteUrl: string | undefined): string {
     ? envSiteUrl
     : "https://termsdigest.com";
 }
+
+export type UsageCounterMutation =
+  | { kind: "update"; nextCount: number }
+  | { kind: "insert"; nextCount: 1 };
+
+/**
+ * Decide how to bump usage_counters_monthly after a successful summarize.
+ * Wrong insert-vs-update choice either fails the write or resets the counter —
+ * both break Free/Pro quota enforcement.
+ * Distinct from evaluateQuota / buildQuotaExceededPayload (gate before OpenAI)
+ * claimed in parallel coverage PR #23.
+ */
+export function resolveUsageCounterMutation(
+  existing: { summaries_count?: number | null } | null | undefined,
+): UsageCounterMutation {
+  if (existing) {
+    return {
+      kind: "update",
+      nextCount: (existing.summaries_count || 0) + 1,
+    };
+  }
+  return { kind: "insert", nextCount: 1 };
+}
+
+export type UsageEventInsert = {
+  user_id: string;
+  url: string;
+  input_chars: number;
+  model: string;
+  cached: false;
+};
+
+/**
+ * Shape of the usage_events row written after a successful summarize.
+ * `cached` is always false here (cache hits never reach the edge function).
+ */
+export function buildUsageEventInsert(args: {
+  userId: string;
+  url: string;
+  textLength: number;
+  model?: string | null;
+}): UsageEventInsert {
+  return {
+    user_id: args.userId,
+    url: args.url,
+    input_chars: args.textLength,
+    model: args.model || "gpt-4o-mini",
+    cached: false,
+  };
+}
