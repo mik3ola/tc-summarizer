@@ -76,3 +76,25 @@ export function buildSubscriptionUpdateData(
 export function shouldSkipCreatedEvent(existing: ExistingSubscription): boolean {
   return !!(existing && existing.plan === "pro" && existing.status === "active");
 }
+
+export type SubscriptionStatusOnlyUpdate = {
+  status: DbStatus;
+  updated_at: string;
+};
+
+/**
+ * DB patch for invoice.payment_failed → past_due (and similar status-only writes).
+ * Intentionally omits plan / Stripe ids / period / downgrade fields so a failed
+ * payment does not silently wipe Pro entitlement or linkage.
+ * Distinct from buildSubscriptionUpdateData (subscription.updated) and
+ * buildSubscriptionDeletedUpdate (subscription.deleted) claimed in parallel PRs.
+ */
+export function buildSubscriptionStatusOnlyUpdate(
+  status: DbStatus,
+  nowIso: string,
+): SubscriptionStatusOnlyUpdate {
+  return {
+    status,
+    updated_at: nowIso,
+  };
+}
