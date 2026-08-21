@@ -1,6 +1,11 @@
 // Unit tests for stripe-webhook lib
 import { assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
-import { mapStripeStatus, buildSubscriptionUpdateData, shouldSkipCreatedEvent } from "./lib.ts";
+import {
+  mapStripeStatus,
+  buildSubscriptionUpdateData,
+  shouldSkipCreatedEvent,
+  buildSubscriptionStatusOnlyUpdate,
+} from "./lib.ts";
 
 const NOW = "2026-02-01T00:00:00.000Z";
 const PERIOD_END = "2026-03-01T00:00:00.000Z";
@@ -117,4 +122,26 @@ Deno.test("shouldSkipCreatedEvent - does not skip when existing is free", () => 
 
 Deno.test("shouldSkipCreatedEvent - does not skip when no existing record", () => {
   assertEquals(shouldSkipCreatedEvent(null), false);
+});
+
+// ─── buildSubscriptionStatusOnlyUpdate ──────────────────────────────────────
+
+Deno.test("buildSubscriptionStatusOnlyUpdate - past_due only patches status + updated_at", () => {
+  const result = buildSubscriptionStatusOnlyUpdate("past_due", NOW);
+  assertEquals(result, { status: "past_due", updated_at: NOW });
+  assertEquals(Object.keys(result).sort(), ["status", "updated_at"]);
+});
+
+Deno.test("buildSubscriptionStatusOnlyUpdate - does not include plan or Stripe linkage fields", () => {
+  const result = buildSubscriptionStatusOnlyUpdate("past_due", NOW) as Record<string, unknown>;
+  assertEquals("plan" in result, false);
+  assertEquals("stripe_subscription_id" in result, false);
+  assertEquals("stripe_customer_id" in result, false);
+  assertEquals("current_period_end" in result, false);
+  assertEquals("auto_renew" in result, false);
+  assertEquals("downgrade_scheduled_for" in result, false);
+});
+
+Deno.test("buildSubscriptionStatusOnlyUpdate - supports canceled status-only writes", () => {
+  assertEquals(buildSubscriptionStatusOnlyUpdate("canceled", NOW).status, "canceled");
 });

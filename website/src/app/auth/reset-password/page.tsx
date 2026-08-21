@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import {
+  resolvePasswordUpdateHttpResult,
+  resolvePasswordUpdateNetworkError,
+} from "@/lib/password-update-utils";
 
 const SUPABASE_URL = "https://rsxvxezucgczesplmjiw.supabase.co";
 const SUPABASE_ANON_KEY =
@@ -57,15 +61,17 @@ export default function ResetPasswordPage() {
         body: JSON.stringify({ password }),
       });
 
-      if (res.ok) {
+      const data = res.ok ? null : await res.json().catch(() => ({}));
+      const outcome = resolvePasswordUpdateHttpResult(res, data);
+      if (outcome.status === "success") {
         setStage("success");
       } else {
-        const data = await res.json().catch(() => ({}));
-        setErrorMsg(data?.message ?? data?.error_description ?? "Password update failed.");
+        setErrorMsg(outcome.message);
         setStage("form");
       }
     } catch {
-      setErrorMsg("Something went wrong. Please try again.");
+      const outcome = resolvePasswordUpdateNetworkError();
+      setErrorMsg(outcome.message);
       setStage("form");
     }
   }
