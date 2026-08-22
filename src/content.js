@@ -2041,17 +2041,30 @@ UI.popover.addEventListener("click", (e) => {
       current.anchor.click();
       // Wait for content to load, then try to find and summarize it
       renderLoading(window.location.href + " (loading content...)");
+      const clickRetryUtils =
+        (typeof globalThis !== "undefined" && globalThis.TermsDigestClickRetryUtils) ||
+        null;
+      const waitMs = clickRetryUtils?.CLICK_RETRY_WAIT_MS ?? 1500;
       setTimeout(() => {
         const modalContent = findModalContent(current.anchor);
-        if (modalContent) {
+        const outcome = clickRetryUtils?.resolveClickAndRetryAfterWait
+          ? clickRetryUtils.resolveClickAndRetryAfterWait(modalContent)
+          : modalContent
+            ? { action: "summarize_modal_element", modalContent }
+            : {
+                action: "error",
+                errorMessage:
+                  "Content still not found after clicking. The page may use a different loading mechanism.",
+              };
+        if (outcome.action === "summarize_modal_element") {
           const requestId = ++current.requestId;
-          summarizeModalElement(modalContent, current.anchor, requestId).catch((err) => {
+          summarizeModalElement(outcome.modalContent, current.anchor, requestId).catch((err) => {
             renderError(err?.message || String(err), current.url);
           });
         } else {
-          renderError("Content still not found after clicking. The page may use a different loading mechanism.", current.url);
+          renderError(outcome.errorMessage, current.url);
         }
-      }, 1500); // Wait 1.5 seconds for content to load
+      }, waitMs); // Wait for content to load (default 1.5s)
     }
     return;
   }
