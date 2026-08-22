@@ -4,7 +4,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getMonthlyQuota, periodStart, decodeJwtPayload, buildPrompt, type Summary } from "./lib.ts";
+import { getMonthlyQuota, periodStart, decodeJwtPayload, buildPrompt, type Summary, buildBackendOpenAiChatBody, parseOpenAiSummaryContent } from "./lib.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,6 +25,7 @@ async function callOpenAI(url: string, text: string): Promise<Summary> {
   
   const model = Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini";
   const prompt = buildPrompt(url, text);
+  const body = buildBackendOpenAiChatBody({ model, prompt });
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -32,15 +33,7 @@ async function callOpenAI(url: string, text: string): Promise<Summary> {
       "content-type": "application/json",
       authorization: `Bearer ${apiKey}`
     },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      service_tier: "priority", // Enable Priority Processing for faster, lower-latency responses
-      messages: [
-        { role: "system", content: prompt.system },
-        { role: "user", content: prompt.user }
-      ]
-    })
+    body: JSON.stringify(body)
   });
 
   if (!res.ok) {
@@ -49,13 +42,10 @@ async function callOpenAI(url: string, text: string): Promise<Summary> {
   }
 
   const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
   const serviceTierUsed = data?.service_tier || "unknown";
   console.log(`OpenAI service_tier used: ${serviceTierUsed}`);
   
-  if (!content) throw new Error("Empty OpenAI response");
-  
-  return JSON.parse(content) as Summary;
+  return parseOpenAiSummaryContent(data);
 }
 
 serve(async (req: Request) => {
