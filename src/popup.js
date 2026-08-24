@@ -19,6 +19,10 @@
   }
 
   function prefersTouchSummarize() {
+    const utils = globalThis.TermsDigestTouchDeviceUtils;
+    if (utils?.detectTouchSummarizeFromWindow) {
+      return utils.detectTouchSummarizeFromWindow(window);
+    }
     try {
       if (window.matchMedia?.("(pointer: coarse)")?.matches) return true;
       const ua = navigator.userAgent || "";

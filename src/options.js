@@ -1140,16 +1140,30 @@ if (logoImg) {
 
 // Touch / iOS: clarify auto-summarize uses tap
 try {
-  const ua = navigator.userAgent || "";
-  const touchFirst =
-    window.matchMedia?.("(pointer: coarse)")?.matches ||
-    /iPhone|iPad|iPod/i.test(ua) ||
-    (/Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1);
-  if (touchFirst) {
+  const touchUtils = globalThis.TermsDigestTouchDeviceUtils;
+  const touchFirst = touchUtils?.detectTouchSummarizeFromWindow
+    ? touchUtils.detectTouchSummarizeFromWindow(window)
+    : (() => {
+        const ua = navigator.userAgent || "";
+        return (
+          !!window.matchMedia?.("(pointer: coarse)")?.matches ||
+          /iPhone|iPad|iPod/i.test(ua) ||
+          (/Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1)
+        );
+      })();
+  const touchCopy = touchUtils?.resolveOptionsTouchSummarizeCopy
+    ? touchUtils.resolveOptionsTouchSummarizeCopy({ touchSummarize: touchFirst })
+    : touchFirst
+      ? {
+          label: "Auto-summarise on tap",
+          hint: "Automatically show summary when tapping legal links",
+        }
+      : null;
+  if (touchCopy) {
     const label = document.getElementById("autoHoverLabel");
     const hint = document.getElementById("autoHoverHint");
-    if (label) label.textContent = "Auto-summarise on tap";
-    if (hint) hint.textContent = "Automatically show summary when tapping legal links";
+    if (label) label.textContent = touchCopy.label;
+    if (hint) hint.textContent = touchCopy.hint;
   }
 } catch {
   // ignore
