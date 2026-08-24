@@ -3,6 +3,12 @@ const POPOVER_MAX_WIDTH_PX = 420;
 
 /** Prefer tap-to-summarize on phones/tablets and coarse pointers (iOS Safari). */
 function prefersTouchSummarize() {
+  const utils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestTouchDeviceUtils) ||
+    null;
+  if (utils?.detectTouchSummarizeFromWindow) {
+    return utils.detectTouchSummarizeFromWindow(window);
+  }
   try {
     if (window.matchMedia?.("(pointer: coarse)")?.matches) return true;
     const ua = navigator.userAgent || "";
@@ -2036,22 +2042,44 @@ UI.popover.addEventListener("click", (e) => {
       }
       return;
     }
-    if (action === "click-and-retry" && current.anchor) {
+    const clickRetryUtils =
+      (typeof globalThis !== "undefined" && globalThis.TermsDigestClickAndRetryUtils) ||
+      null;
+    const startClickRetry = clickRetryUtils?.shouldStartClickAndRetry
+      ? clickRetryUtils.shouldStartClickAndRetry({
+          action,
+          hasAnchor: !!current.anchor,
+        })
+      : action === "click-and-retry" && !!current.anchor;
+    if (startClickRetry) {
       // Click the original button to load content
       current.anchor.click();
       // Wait for content to load, then try to find and summarize it
-      renderLoading(window.location.href + " (loading content...)");
+      const loadingUrl = clickRetryUtils?.buildClickAndRetryLoadingUrl
+        ? clickRetryUtils.buildClickAndRetryLoadingUrl(window.location.href)
+        : window.location.href + " (loading content...)";
+      renderLoading(loadingUrl);
+      const waitMs = clickRetryUtils?.CLICK_AND_RETRY_WAIT_MS ?? 1500;
       setTimeout(() => {
         const modalContent = findModalContent(current.anchor);
-        if (modalContent) {
+        const outcome = clickRetryUtils?.resolveClickAndRetryPostWaitOutcome
+          ? clickRetryUtils.resolveClickAndRetryPostWaitOutcome(modalContent)
+          : modalContent
+            ? { action: "summarize_modal_element", modalContent }
+            : {
+                action: "error",
+                errorMessage:
+                  "Content still not found after clicking. The page may use a different loading mechanism.",
+              };
+        if (outcome.action === "summarize_modal_element") {
           const requestId = ++current.requestId;
-          summarizeModalElement(modalContent, current.anchor, requestId).catch((err) => {
+          summarizeModalElement(outcome.modalContent, current.anchor, requestId).catch((err) => {
             renderError(err?.message || String(err), current.url);
           });
         } else {
-          renderError("Content still not found after clicking. The page may use a different loading mechanism.", current.url);
+          renderError(outcome.errorMessage, current.url);
         }
-      }, 1500); // Wait 1.5 seconds for content to load
+      }, waitMs); // Wait for content to load
     }
     return;
   }
