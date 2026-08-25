@@ -1651,7 +1651,11 @@ function hidePopover() {
 async function summarizeModal(modalSelector, anchor, requestId) {
   await loadPreferences();
   const displayUrl = window.location.href;
-  renderLoading(displayUrl + " (in-page modal)");
+  const hoverSession = globalThis.TermsDigestHoverSessionUtils;
+  const loadingUrl = hoverSession?.buildInPageModalLoadingUrl
+    ? hoverSession.buildInPageModalLoadingUrl(displayUrl)
+    : displayUrl + " (in-page modal)";
+  renderLoading(loadingUrl);
   showPopover(anchor);
 
   // Find the modal element on the page
@@ -1694,7 +1698,11 @@ async function summarizeModal(modalSelector, anchor, requestId) {
 async function summarizeModalElement(modalElement, anchor, requestId) {
   await loadPreferences();
   const displayUrl = window.location.href;
-  renderLoading(displayUrl + " (in-page content)");
+  const hoverSession = globalThis.TermsDigestHoverSessionUtils;
+  const loadingUrl = hoverSession?.buildInPageContentLoadingUrl
+    ? hoverSession.buildInPageContentLoadingUrl(displayUrl)
+    : displayUrl + " (in-page content)";
+  renderLoading(loadingUrl);
   showPopover(anchor);
 
   if (!modalElement) {
@@ -1792,9 +1800,20 @@ function startHover(element) {
   const originalHref = element.getAttribute("href") || element.getAttribute("data-href") || "";
   current.originalHref = originalHref ? toAbsoluteUrl(originalHref) : null;
 
+  const hoverSession = globalThis.TermsDigestHoverSessionUtils;
+  const sessionFields = hoverSession?.resolveHoverSessionFields
+    ? hoverSession.resolveHoverSessionFields(linkInfo, {
+        pageHref: window.location.href,
+        resolveAbsoluteUrl: toAbsoluteUrl,
+      })
+    : null;
+
   if (linkInfo.type === "modal") {
     // Handle in-page modal content (Bootstrap-style with selector)
-    current.url = window.location.href + linkInfo.value;
+    current.url =
+      sessionFields?.ok
+        ? sessionFields.url
+        : window.location.href + linkInfo.value;
     current.hoverTimer = window.setTimeout(() => {
       summarizeModal(linkInfo.value, element, requestId).catch((e) => {
         if (current.requestId !== requestId) return;
@@ -1804,7 +1823,8 @@ function startHover(element) {
     }, HOVER_DELAY_MS);
   } else if (linkInfo.type === "modal-element") {
     // Handle JavaScript-triggered modal (found DOM element directly)
-    current.url = window.location.href;
+    current.url =
+      sessionFields?.ok ? sessionFields.url : window.location.href;
     current.hoverTimer = window.setTimeout(() => {
       summarizeModalElement(linkInfo.value, element, requestId).catch((e) => {
         if (current.requestId !== requestId) return;
@@ -1814,15 +1834,23 @@ function startHover(element) {
     }, HOVER_DELAY_MS);
   } else if (linkInfo.type === "click-to-load") {
     // Content needs to be loaded by clicking first
-    current.url = window.location.href;
-    current.isModalContent = true;
+    current.url =
+      sessionFields?.ok ? sessionFields.url : window.location.href;
+    if (sessionFields?.ok && "setIsModalContent" in sessionFields) {
+      current.isModalContent = !!sessionFields.setIsModalContent;
+    } else {
+      current.isModalContent = true;
+    }
     current.hoverTimer = window.setTimeout(() => {
       renderClickToLoad(element);
       showPopover(element);
     }, HOVER_DELAY_MS);
   } else if (linkInfo.type === "url") {
     // Handle external URL
-    const abs = toAbsoluteUrl(linkInfo.value);
+    if (sessionFields && !sessionFields.ok) return;
+    const abs = sessionFields?.ok
+      ? sessionFields.url
+      : toAbsoluteUrl(linkInfo.value);
     if (!abs) return;
     current.url = abs;
     current.hoverTimer = window.setTimeout(() => {
