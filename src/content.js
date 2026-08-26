@@ -1686,7 +1686,10 @@ async function summarizeModal(modalSelector, anchor, requestId) {
 
   if (!sumRes?.ok) throw new Error(sumRes?.error || "Summarization failed.");
 
-  current.isModalContent = true;  // Mark as modal content
+  const hoverControl = globalThis.TermsDigestHoverControlUtils;
+  current.isModalContent = hoverControl?.resolvePostSummarizeIsModalContent
+    ? hoverControl.resolvePostSummarizeIsModalContent("modal")
+    : true; // Mark as modal content
   renderSummary(sumRes.summary, displayUrl, !!sumRes.fromCache);
   showPopover(anchor);
 }
@@ -1731,7 +1734,10 @@ async function summarizeModalElement(modalElement, anchor, requestId) {
 
   if (!sumRes?.ok) throw new Error(sumRes?.error || "Summarization failed.");
 
-  current.isModalContent = true;  // Mark as modal content
+  const hoverControl = globalThis.TermsDigestHoverControlUtils;
+  current.isModalContent = hoverControl?.resolvePostSummarizeIsModalContent
+    ? hoverControl.resolvePostSummarizeIsModalContent("modal_element")
+    : true; // Mark as modal content
   renderSummary(sumRes.summary, displayUrl, !!sumRes.fromCache);
   showPopover(anchor);
 }
@@ -1769,7 +1775,10 @@ async function summarizeLink(url, anchor, requestId) {
 
   if (!sumRes?.ok) throw new Error(sumRes?.error || "Summarization failed.");
 
-  current.isModalContent = false;  // This is URL-based content, not modal
+  const hoverControl = globalThis.TermsDigestHoverControlUtils;
+  current.isModalContent = hoverControl?.resolvePostSummarizeIsModalContent
+    ? hoverControl.resolvePostSummarizeIsModalContent("url")
+    : false; // This is URL-based content, not modal
   renderSummary(sumRes.summary, result.finalUrl || url, !!sumRes.fromCache);
   showPopover(anchor);
 }
@@ -1836,11 +1845,22 @@ function startHover(element) {
 }
 
 function closePopover() {
-  clearHoverTimer();
-  current.requestId += 1; // cancel inflight
-  current.anchor = null;
-  current.url = null;
-  hidePopover();
+  const hoverControl = globalThis.TermsDigestHoverControlUtils;
+  const patch = hoverControl?.buildClosePopoverSessionPatch
+    ? hoverControl.buildClosePopoverSessionPatch(current.requestId)
+    : {
+        requestId: current.requestId + 1,
+        anchor: null,
+        url: null,
+        clearHoverTimer: true,
+        hidePopover: true,
+      };
+  if (patch.clearHoverTimer) clearHoverTimer();
+  current.requestId = patch.requestId; // cancel inflight
+  current.anchor = patch.anchor;
+  current.url = patch.url;
+  // originalHref / isModalContent intentionally preserved (see util)
+  if (patch.hidePopover) hidePopover();
 }
 
 function findLegalAnchorFromEventTarget(target) {
@@ -1906,7 +1926,10 @@ document.addEventListener(
     e.preventDefault();
     e.stopPropagation();
     const prevDelay = HOVER_DELAY_MS;
-    HOVER_DELAY_MS = 0;
+    const hoverControl = globalThis.TermsDigestHoverControlUtils;
+    HOVER_DELAY_MS = hoverControl?.resolveTouchStartHoverDelayMs
+      ? hoverControl.resolveTouchStartHoverDelayMs()
+      : 0;
     startHover(el);
     HOVER_DELAY_MS = prevDelay;
   },
