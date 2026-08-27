@@ -1,6 +1,22 @@
 let HOVER_DELAY_MS = 750;
 const POPOVER_MAX_WIDTH_PX = 420;
 
+/** Prefer tap-to-summarize on phones/tablets and coarse pointers (iOS Safari). */
+function prefersTouchSummarize() {
+  try {
+    if (window.matchMedia?.("(pointer: coarse)")?.matches) return true;
+    const ua = navigator.userAgent || "";
+    if (/iPhone|iPad|iPod/i.test(ua)) return true;
+    // iPadOS 13+ may report as Macintosh but still be touch-first
+    if (/Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+const TOUCH_SUMMARIZE = prefersTouchSummarize();
+
 // Check if extension context is still valid (false after extension reload)
 function isExtensionContextValid() {
   try {
@@ -25,14 +41,28 @@ let preferences = {
   hoverDelay: 750
 };
 
+/** Coerce checkbox prefs if storage ever has strings */
+function normalizePrefsPatch(patch) {
+  if (!patch || typeof patch !== "object") return {};
+  const out = { ...patch };
+  for (const key of ["autoHover", "showRedFlags", "showQuotes", "enableCaching"]) {
+    if (Object.prototype.hasOwnProperty.call(out, key)) {
+      const v = out[key];
+      if (v === true || v === "true") out[key] = true;
+      else if (v === false || v === "false") out[key] = false;
+    }
+  }
+  return out;
+}
+
 // Load preferences from storage
 async function loadPreferences() {
   if (!isExtensionContextValid()) return;
   try {
     const response = await chrome.runtime.sendMessage({ type: "get_preferences" });
     if (response?.ok && response.preferences) {
-      preferences = { ...preferences, ...response.preferences };
-      HOVER_DELAY_MS = parseInt(preferences.hoverDelay) || 750;
+      preferences = { ...preferences, ...normalizePrefsPatch(response.preferences) };
+      HOVER_DELAY_MS = parseInt(String(preferences.hoverDelay), 10) || 750;
     }
   } catch (e) {
     if (!isContextInvalidatedError(e)) {
@@ -245,10 +275,22 @@ function getLegalContentType(element) {
 
 function findModalContent(element) {
   const contentType = getLegalContentType(element);
+  const walkUtils = globalThis.TermsDigestModalWalkUtils;
   
   // Strategy 1: Look for data-target or data-bs-target (Bootstrap)
-  const modalTarget = element.getAttribute("data-target") || element.getAttribute("data-bs-target") || "";
-  if (modalTarget && modalTarget.startsWith("#")) {
+  const modalTarget = walkUtils?.resolveBootstrapModalSelector
+    ? walkUtils.resolveBootstrapModalSelector(
+        element.getAttribute("data-target"),
+        element.getAttribute("data-bs-target")
+      )
+    : (() => {
+        const t =
+          element.getAttribute("data-target") ||
+          element.getAttribute("data-bs-target") ||
+          "";
+        return t && t.startsWith("#") ? t : null;
+      })();
+  if (modalTarget) {
     const modal = document.querySelector(modalTarget);
     if (modal) return modal;
   }
@@ -327,14 +369,28 @@ function findModalContent(element) {
   }
   
   // Strategy 4: Look for aria-controls or aria-describedby
-  const ariaControls = element.getAttribute("aria-controls") || element.getAttribute("aria-describedby") || "";
-  if (ariaControls) {
-    const modal = document.querySelector(`#${ariaControls}`);
+  const ariaSelector = walkUtils?.resolveAriaControlsSelector
+    ? walkUtils.resolveAriaControlsSelector(
+        element.getAttribute("aria-controls"),
+        element.getAttribute("aria-describedby")
+      )
+    : (() => {
+        const id =
+          element.getAttribute("aria-controls") ||
+          element.getAttribute("aria-describedby") ||
+          "";
+        return id ? `#${id}` : null;
+      })();
+  if (ariaSelector) {
+    const modal = document.querySelector(ariaSelector);
     if (modal) return modal;
   }
   
   // Strategy 5: Look for visible modals that match our content type
-  const visibleModals = document.querySelectorAll('.modal.show, .overlay.show, [role="dialog"], .modal:not([style*="display: none"])');
+  const visibleModalSelector =
+    walkUtils?.VISIBLE_MODAL_SELECTOR ||
+    '.modal.show, .overlay.show, [role="dialog"], .modal:not([style*="display: none"])';
+  const visibleModals = document.querySelectorAll(visibleModalSelector);
   for (const modal of visibleModals) {
     const modalText = (modal.textContent || "").toLowerCase();
     const modalClass = (modal.className || "").toLowerCase();
@@ -350,7 +406,9 @@ function findModalContent(element) {
   }
   
   // Strategy 6: Search ALL elements for content matching our type (last resort)
-  const allElements = document.querySelectorAll('section, div, article, main');
+  const contentWalkSelector =
+    walkUtils?.CONTENT_WALK_SELECTOR || "section, div, article, main";
+  const allElements = document.querySelectorAll(contentWalkSelector);
   let bestMatch = null;
   let bestMatchScore = 0;
   
@@ -403,7 +461,10 @@ function findModalContent(element) {
   
   // Strategy 7: Look for hidden modals that might contain the content
   // Some frameworks keep modals in DOM but hidden
-  const allModals = document.querySelectorAll('.modal, .overlay, [role="dialog"], [class*="modal"], [class*="overlay"]');
+  const hiddenModalSelector =
+    walkUtils?.HIDDEN_MODAL_SELECTOR ||
+    '.modal, .overlay, [role="dialog"], [class*="modal"], [class*="overlay"]';
+  const allModals = document.querySelectorAll(hiddenModalSelector);
   for (const modal of allModals) {
     const text = (modal.textContent || "").toLowerCase();
     // Check if it contains substantial legal content (even if hidden)
@@ -414,25 +475,59 @@ function findModalContent(element) {
   
   // Strategy 8: If link is inside a modal, look for sibling content or parent modal content
   // (e.g., Terms link inside Welcome modal might load content in same modal)
-  let checkParent = element.parentElement;
-  let checkDepth = 0;
-  while (checkParent && checkDepth < 10) {
-    // Check if parent is a modal/overlay
-    const isModal = checkParent.matches && (
-      checkParent.matches('.modal, .overlay, [role="dialog"]') ||
-      checkParent.className?.toLowerCase().includes('modal') ||
-      checkParent.className?.toLowerCase().includes('overlay')
-    );
-    if (isModal) {
-      // This link is inside a modal - the content might be in this same modal
-      // or a nested modal/iframe
-      const text = (checkParent.textContent || "").toLowerCase();
-      if (KEYWORDS.some(k => text.includes(k)) && text.length > 200) {
-        return checkParent;
-      }
+  const parentMatchSelector =
+    walkUtils?.PARENT_MODAL_MATCHES_SELECTOR ||
+    '.modal, .overlay, [role="dialog"]';
+  const parentWalkMaxDepth =
+    walkUtils?.PARENT_MODAL_WALK_MAX_DEPTH ?? 10;
+  if (walkUtils?.resolveParentModalFromAncestorSignals) {
+    const ancestors = [];
+    let walkEl = element.parentElement;
+    let walkDepth = 0;
+    while (walkEl && walkDepth < parentWalkMaxDepth) {
+      const rawClass =
+        typeof walkEl.className === "string"
+          ? walkEl.className
+          : walkEl.className?.baseVal || "";
+      ancestors.push({
+        className: rawClass,
+        hasMatchesMethod: typeof walkEl.matches === "function",
+        matchesModalSelector: !!(
+          walkEl.matches && walkEl.matches(parentMatchSelector)
+        ),
+        text: walkEl.textContent || "",
+        el: walkEl,
+      });
+      walkEl = walkEl.parentElement;
+      walkDepth++;
     }
-    checkParent = checkParent.parentElement;
-    checkDepth++;
+    const hit = walkUtils.resolveParentModalFromAncestorSignals(
+      ancestors,
+      KEYWORDS,
+      200
+    );
+    if (hit?.el) return hit.el;
+  } else {
+    let checkParent = element.parentElement;
+    let checkDepth = 0;
+    while (checkParent && checkDepth < parentWalkMaxDepth) {
+      // Check if parent is a modal/overlay
+      const isModal =
+        checkParent.matches &&
+        (checkParent.matches(parentMatchSelector) ||
+          checkParent.className?.toLowerCase().includes("modal") ||
+          checkParent.className?.toLowerCase().includes("overlay"));
+      if (isModal) {
+        // This link is inside a modal - the content might be in this same modal
+        // or a nested modal/iframe
+        const text = (checkParent.textContent || "").toLowerCase();
+        if (KEYWORDS.some((k) => text.includes(k)) && text.length > 200) {
+          return checkParent;
+        }
+      }
+      checkParent = checkParent.parentElement;
+      checkDepth++;
+    }
   }
   
   // Strategy 9: Look for iframes that might contain the content
@@ -623,6 +718,7 @@ function createUi() {
       z-index: 1;
       border-radius: 18px 18px 0 0;
     }
+    /* Close control — styled after generic button rules (see button.popover-close below) */
     .header::after {
       content: "";
       position: absolute;
@@ -683,12 +779,71 @@ function createUi() {
     }
     .muted { color: rgba(226,232,240,0.72); }
     .red-flags-section li { color: #f87171; }
-    .section { margin-top: 20px; padding: 0 14px; }
+    .section { margin-top: 0; padding: 0 14px; }
     .popover > .section:first-of-type { margin-top: 0; }
-    .h { font-weight: 700; color: rgba(226,232,240,0.95); margin-bottom: 8px; }
+    .h { font-weight: 700; color: rgba(226,232,240,0.95); margin-bottom: 4px; }
     ul { margin: 0; padding-left: 18px; }
-    li { margin: 6px 0; line-height: 1.6; }
-    .divider { height: 1px; background: rgba(0,0,0,0.4); box-shadow: 0 1px 0 rgba(255,255,255,0.04); margin: 18px 14px 14px; }
+    li { margin: 3px 0; line-height: 1.55; }
+    .divider { height: 1px; background: rgba(0,0,0,0.4); box-shadow: 0 1px 0 rgba(255,255,255,0.04); margin: 20px 14px 14px; }
+    /* Footer quick-pref row — flat; only checkbox toggle is clickable */
+    .footer-quick-prefs {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding: 8px 14px 0;
+    }
+    .footer-pref-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .footer-pref-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: rgba(226,232,240,0.72);
+      user-select: none;
+      pointer-events: none;
+    }
+    .footer-pref-toggle {
+      all: unset;
+      box-sizing: border-box;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .footer-pref-toggle:focus-visible .chip-icon {
+      outline: 1px solid rgba(96,165,250,0.45);
+      outline-offset: 2px;
+    }
+    .footer-pref-toggle .chip-icon {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #2a2d35, #1d2027);
+      box-shadow: inset 2px 2px 4px rgba(0,0,0,0.5), inset -1px -1px 3px rgba(255,255,255,0.04);
+      flex-shrink: 0;
+      transition: box-shadow 0.18s ease;
+    }
+    .footer-pref-toggle:hover .chip-icon {
+      box-shadow:
+        inset 2px 2px 4px rgba(0,0,0,0.45),
+        inset -1px -1px 3px rgba(255,255,255,0.07),
+        0 0 0 1px rgba(255,255,255,0.06);
+    }
+    .footer-pref-toggle.active .chip-icon {
+      background: linear-gradient(135deg, #2a2d35, #1d2027);
+      box-shadow: inset 2px 2px 4px rgba(0,0,0,0.5), inset -1px -1px 3px rgba(255,255,255,0.04);
+    }
+    .chip-tick { display: none; }
+    .footer-pref-toggle.active .chip-tick { display: block; }
+    .chip-empty { display: block; }
+    .footer-pref-toggle.active .chip-empty { display: none; }
     .buttons { display:flex; gap: 8px; margin-top: 14px; padding: 0 14px 14px; }
     .buttons button { flex: 1; }
     .footer-stats {
@@ -721,7 +876,7 @@ function createUi() {
       margin-left: auto;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 6px;
       flex-shrink: 0;
     }
     .footer-brand {
@@ -729,6 +884,7 @@ function createUi() {
       align-items: center;
       gap: 4px;
       opacity: 0.45;
+      margin-right: 2px;
     }
     .footer-brand img {
       width: 12px;
@@ -740,32 +896,6 @@ function createUi() {
       font-weight: 600;
       color: rgba(226,232,240,0.9);
       letter-spacing: 0.02em;
-    }
-    .footer-settings {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 28px;
-      height: 28px;
-      color: rgba(148,163,184,0.75);
-      cursor: pointer;
-      border-radius: 50%;
-      transition: transform 0.15s, color 0.15s, box-shadow 0.15s;
-      flex-shrink: 0;
-      background: linear-gradient(135deg, #1d2027 0%, #131519 100%);
-      border: 1px solid rgba(255,255,255,0.05);
-      box-shadow:
-        4px 5px 10px rgba(0,0,0,0.6),
-        inset 1px 1px 0 rgba(255,255,255,0.04),
-        inset -1px -1px 0 rgba(0,0,0,0.4);
-    }
-    .footer-settings:hover {
-      color: rgba(148,163,184,0.95);
-      transform: translateY(-1px);
-    }
-    .footer-settings svg {
-      width: 15px;
-      height: 15px;
     }
     button {
       all: unset;
@@ -792,6 +922,93 @@ function createUi() {
     }
     button.primary:hover {
       background: linear-gradient(135deg, #2563eb, #7c3aed);
+    }
+    /* Header close — plain letter x, no chrome (must follow generic button rules) */
+    button.popover-close {
+      all: unset;
+      box-sizing: border-box;
+      position: absolute;
+      top: 1px;
+      right: 1px;
+      z-index: 10;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      color: #000;
+      padding: 2px 3px;
+      margin: 0;
+      background: transparent !important;
+      border: none !important;
+      border-radius: 0;
+      box-shadow: none !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-shadow:
+        0 1px 2px rgba(0,0,0,0.55),
+        0 2px 5px rgba(0,0,0,0.45),
+        0 4px 10px rgba(0,0,0,0.35),
+        0 0 1px rgba(255,255,255,0.12);
+      transition: opacity 0.15s ease, color 0.15s ease, text-shadow 0.15s ease;
+    }
+    button.popover-close:hover {
+      color: #0a0a0a;
+      opacity: 0.92;
+      background: transparent !important;
+      border: none !important;
+      text-shadow:
+        0 2px 4px rgba(0,0,0,0.65),
+        0 4px 12px rgba(0,0,0,0.4),
+        0 0 1px rgba(255,255,255,0.15);
+    }
+    button.popover-close:focus-visible {
+      outline: 1px solid rgba(96,165,250,0.55);
+      outline-offset: 2px;
+    }
+    /* Extension tile + copy — same square neumorphic control (after generic button rules) */
+    a.footer-settings,
+    button.footer-copy-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      color: rgba(148,163,184,0.75);
+      cursor: pointer;
+      border-radius: 5px;
+      transition: box-shadow 0.22s ease, background 0.22s ease, color 0.22s ease;
+      flex-shrink: 0;
+      background: linear-gradient(135deg, #1d2027 0%, #131519 100%);
+      border: 1px solid rgba(255,255,255,0.05);
+      box-shadow:
+        2px 3px 6px rgba(0,0,0,0.55),
+        inset 1px 1px 0 rgba(255,255,255,0.04),
+        inset -1px -1px 0 rgba(0,0,0,0.4);
+      text-decoration: none;
+      padding: 0;
+      margin: 0;
+      box-sizing: border-box;
+    }
+    a.footer-settings:hover,
+    button.footer-copy-btn:hover {
+      background:
+        radial-gradient(ellipse 125% 95% at 28% 16%, rgba(255,255,255,0.14) 0%, transparent 52%),
+        linear-gradient(135deg, #1d2027 0%, #131519 100%);
+      box-shadow:
+        2px 4px 8px rgba(0,0,0,0.48),
+        inset 3px 3px 7px rgba(255,255,255,0.07),
+        inset -2px -2px 5px rgba(0,0,0,0.42);
+    }
+    .footer-settings svg,
+    .footer-copy-btn svg {
+      width: 11px;
+      height: 11px;
+    }
+    button.footer-copy-btn.copied {
+      color: rgba(134,239,172,0.95);
     }
     a.link { color: rgba(96,165,250,0.95); text-decoration: none; }
     a.link:hover { text-decoration: underline; }
@@ -903,9 +1120,15 @@ function createUi() {
     .reveal-line:nth-child(19) { animation-delay: 0.9s; }
     .reveal-line:nth-child(20) { animation-delay: 0.95s; }
     .reveal-line:nth-child(n+21) { animation-delay: 1s; }
-    .reveal-line { margin-top: 6px; }
+    .reveal-line { margin-top: 3px; }
     .reveal-line:first-child { margin-top: 0; }
     .reveal-line .section { margin-top: 0; }
+    /* Section heading rows get extra breathing room above them.
+       Scope the first-child reset to the top-level reveal container only —
+       headings that are first-child of a sectionClass wrapper (e.g. red-flags-section)
+       should still get the gap from the previous section's last bullet. */
+    .reveal-line:has(.h) { margin-top: 22px; }
+    .summary-content-reveal > .reveal-line:first-child { margin-top: 0; }
     @keyframes slide-up-fade {
       0% { transform: translateY(8px); opacity: 0; }
       100% { transform: translateY(0); opacity: 1; }
@@ -964,8 +1187,17 @@ let current = {
   originalHref: null,  // The actual href attribute for "View source" link
   hoverTimer: null,
   requestId: 0,
-  isModalContent: false  // Track if current content is from an in-page modal
+  isModalContent: false,  // Track if current content is from an in-page modal
+  lastSummary: null,
+  lastSummaryUrl: null,
+  lastSummaryFromCache: false
 };
+
+function clearSummarySnapshot() {
+  current.lastSummary = null;
+  current.lastSummaryUrl = null;
+  current.lastSummaryFromCache = false;
+}
 
 function setPopoverPositionNearAnchor(anchor) {
   const rect = anchor.getBoundingClientRect();
@@ -1035,10 +1267,37 @@ function setPopoverPositionNearAnchor(anchor) {
 }
 
 const LOADING_DOTS = '<span class="loading-dots"><span>.</span><span>.</span><span>.</span><span>.</span></span>';
+
+const TICK_SVG = `<svg class="chip-tick" width="8" height="8" viewBox="0 0 8 8" fill="none"><polyline points="1,4 3.2,6.5 7,1.5" stroke="rgba(134,239,172,0.95)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const EMPTY_SVG = `<div class="chip-empty" style="width:8px;height:8px;"></div>`;
+
+function renderFooterQuickPrefs() {
+  const rfActive = preferences.showRedFlags;
+  const sqActive = preferences.showQuotes;
+  return `
+    <div class="footer-quick-prefs">
+      <div class="footer-pref-row">
+        <button type="button" class="footer-pref-toggle${rfActive ? " active" : ""}" data-action="toggle-pref" data-pref="showRedFlags" aria-pressed="${rfActive ? "true" : "false"}" title="Show red flags in summary">
+          <span class="chip-icon">${TICK_SVG}${EMPTY_SVG}</span>
+        </button>
+        <span class="footer-pref-label">🚩 Red flags</span>
+      </div>
+      <div class="footer-pref-row">
+        <button type="button" class="footer-pref-toggle${sqActive ? " active" : ""}" data-action="toggle-pref" data-pref="showQuotes" aria-pressed="${sqActive ? "true" : "false"}" title="Show supporting quotes">
+          <span class="chip-icon">${TICK_SVG}${EMPTY_SVG}</span>
+        </button>
+        <span class="footer-pref-label">💬 Quotes</span>
+      </div>
+    </div>
+  `;
+}
 const EXTENSION_LOGO_URL = (() => { try { return chrome.runtime.getURL("icons/icon48.png"); } catch (e) { return ""; } })();
-const GEAR_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>`;
+/** Square tile grid — reads “settings / menu” without a circular gear */
+const SETTINGS_TILE_ICON = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.75"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.75"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.75"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.75"/></svg>`;
+const COPY_SUMMARY_SVG = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
 
 async function renderLoading(url) {
+  clearSummarySnapshot();
   const footer = await getStatsFooter();
   UI.popover.innerHTML = `
     <div class="header">
@@ -1077,9 +1336,13 @@ function truncateUrl(url, maxLen = 50) {
 }
 
 // Get usage stats and render footer
-async function getStatsFooter(currentSummaryUrl = null) {
+// isSummaryView: true → quick prefs row + copy icon beside settings tile
+async function getStatsFooter(currentSummaryUrl = null, isSummaryView = false) {
+  const quickPrefs = isSummaryView ? renderFooterQuickPrefs() : "";
+
   if (!isExtensionContextValid()) {
     return `
+      ${quickPrefs}
       <div class="footer-stats">
         <div class="footer-brand-settings">
           <div class="footer-brand">
@@ -1087,65 +1350,60 @@ async function getStatsFooter(currentSummaryUrl = null) {
             <span>TermsDigest</span>
           </div>
           <a class="footer-settings" data-action="open-options" title="Open extension options">
-            ${GEAR_ICON}
+            ${SETTINGS_TILE_ICON}
           </a>
+          ${isSummaryView ? `<button type="button" class="footer-copy-btn" data-action="copy-summary" title="Copy summary to clipboard">${COPY_SUMMARY_SVG}</button>` : ""}
         </div>
       </div>
     `;
   }
   try {
     const data = await chrome.storage.local.get([
-      "usageStats", 
-      "summariesCache", 
-      "monthlyUsage", 
+      "usageStats",
+      "summariesCache",
+      "monthlyUsage",
       "subscriptionPlan"
     ]);
-    
+
     const stats = data.usageStats || { totalSummaries: 0 };
     const cache = data.summariesCache || {};
     const monthlyUsage = data.monthlyUsage ?? stats.totalSummaries ?? 0;
     const plan = data.subscriptionPlan || "free";
-    
+
     // Determine quota based on plan
-    let quota = 5; // Free tier default
+    let quota = 5;
     if (plan === "pro") quota = 50;
     else if (plan === "enterprise") quota = 5000;
-    
+
     // Calculate minutes saved for current summary only
     let minutesSaved = 0;
     if (currentSummaryUrl && cache) {
-      // Normalize URL to match cache key format (same as background.js)
       const normalizedUrl = currentSummaryUrl.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();
-      // Try multiple cache key formats
       const possibleKeys = [
         `summary:${normalizedUrl}`,
         `summary:${currentSummaryUrl}`,
         `summary:${currentSummaryUrl.toLowerCase()}`
       ];
-      
-      // Also check for partial matches (for modal content with hash fragments)
-      const matchingKey = possibleKeys.find(key => cache[key]) || 
+      const matchingKey = possibleKeys.find(key => cache[key]) ||
         Object.keys(cache).find(key => {
           if (!key.startsWith("summary:")) return false;
           const keyUrl = key.replace(/^summary:/, "").toLowerCase();
-          return keyUrl === normalizedUrl || 
-                 keyUrl.includes(normalizedUrl) || 
+          return keyUrl === normalizedUrl ||
+                 keyUrl.includes(normalizedUrl) ||
                  normalizedUrl.includes(keyUrl) ||
                  keyUrl.split("#")[0] === normalizedUrl.split("#")[0];
         });
-      
       if (matchingKey && cache[matchingKey]?.originalTextLength) {
-        const words = Math.floor(cache[matchingKey].originalTextLength / 5); // ~5 chars per word
-        minutesSaved = Math.floor(words / 200); // 200 words per minute reading speed
+        const words = Math.floor(cache[matchingKey].originalTextLength / 5);
+        minutesSaved = Math.floor(words / 200);
       }
     }
-    
-    const used = monthlyUsage;
-    
+
     return `
+      ${quickPrefs}
       <div class="footer-stats">
         <div class="footer-stat">
-          <span class="footer-stat-value">${used}/${quota}</span>
+          <span class="footer-stat-value">${monthlyUsage}/${quota}</span>
           <span class="footer-stat-label">Used</span>
         </div>
         <div class="footer-stat">
@@ -1158,8 +1416,9 @@ async function getStatsFooter(currentSummaryUrl = null) {
             <span>TermsDigest</span>
           </div>
           <a class="footer-settings" data-action="open-options" title="Open extension options">
-            ${GEAR_ICON}
+            ${SETTINGS_TILE_ICON}
           </a>
+          ${isSummaryView ? `<button type="button" class="footer-copy-btn" data-action="copy-summary" title="Copy summary to clipboard">${COPY_SUMMARY_SVG}</button>` : ""}
         </div>
       </div>
     `;
@@ -1168,6 +1427,7 @@ async function getStatsFooter(currentSummaryUrl = null) {
       console.warn("[TermsDigest] Could not load stats:", e);
     }
     return `
+      ${quickPrefs}
       <div class="footer-stats">
         <div class="footer-brand-settings">
           <div class="footer-brand">
@@ -1175,8 +1435,9 @@ async function getStatsFooter(currentSummaryUrl = null) {
             <span>TermsDigest</span>
           </div>
           <a class="footer-settings" data-action="open-options" title="Open extension options">
-            ${GEAR_ICON}
+            ${SETTINGS_TILE_ICON}
           </a>
+          ${isSummaryView ? `<button type="button" class="footer-copy-btn" data-action="copy-summary" title="Copy summary to clipboard">${COPY_SUMMARY_SVG}</button>` : ""}
         </div>
       </div>
     `;
@@ -1184,6 +1445,7 @@ async function getStatsFooter(currentSummaryUrl = null) {
 }
 
 async function renderError(errMsg, url) {
+  clearSummarySnapshot();
   const msg = errMsg || "Unknown error";
   
   // Check subscription status for Pro users
@@ -1309,6 +1571,7 @@ async function renderError(errMsg, url) {
   const footer = await getStatsFooter();
   UI.popover.innerHTML = `
     <div class="header">
+      <button type="button" class="popover-close" data-action="close-popover" title="Close" aria-label="Close">x</button>
       <div class="title">${escapeHtml(headerTitle)}</div>
       ${headerExtra}
     </div>
@@ -1325,6 +1588,7 @@ async function renderClickToLoad(element) {
   const footer = await getStatsFooter();
   UI.popover.innerHTML = `
     <div class="header">
+      <button type="button" class="popover-close" data-action="close-popover" title="Close" aria-label="Close">x</button>
       <div class="title">Click to load content</div>
       <div class="header-right">
         <div class="badge">info</div>
@@ -1353,15 +1617,20 @@ function getConfidenceTooltip(confidence) {
 }
 
 async function renderSummary(summary, url, fromCache) {
+  current.lastSummary = summary;
+  current.lastSummaryUrl = url;
+  current.lastSummaryFromCache = !!fromCache;
+
   const title = typeof summary?.title === "string" && summary.title.trim() ? summary.title.trim() : "Summary";
   const confidence = summary?.confidence || "medium";
   const badgeText = fromCache ? `${confidence} • cached` : confidence;
   const badgeTooltip = getConfidenceTooltip(confidence);
   const badgeColorClass = confidence === "high" ? "badge-high" : confidence === "low" ? "badge-low" : "badge-medium";
-  const footer = await getStatsFooter(url);
+  const footer = await getStatsFooter(url, true);
 
   UI.popover.innerHTML = `
     <div class="header">
+      <button type="button" class="popover-close" data-action="close-popover" title="Close" aria-label="Close">x</button>
       <div class="title" title="${escapeAttr(title)}">${escapeHtml(title)}</div>
       <div class="header-right">
         <span class="confidence-label">Confidence:</span>
@@ -1441,9 +1710,11 @@ function showPopover(anchor) {
 function hidePopover() {
   UI.popover.style.display = "none";
   UI.popover.innerHTML = "";
+  clearSummarySnapshot();
 }
 
 async function summarizeModal(modalSelector, anchor, requestId) {
+  await loadPreferences();
   const displayUrl = window.location.href;
   renderLoading(displayUrl + " (in-page modal)");
   showPopover(anchor);
@@ -1486,6 +1757,7 @@ async function summarizeModal(modalSelector, anchor, requestId) {
 }
 
 async function summarizeModalElement(modalElement, anchor, requestId) {
+  await loadPreferences();
   const displayUrl = window.location.href;
   renderLoading(displayUrl + " (in-page content)");
   showPopover(anchor);
@@ -1530,6 +1802,7 @@ async function summarizeModalElement(modalElement, anchor, requestId) {
 }
 
 async function summarizeLink(url, anchor, requestId) {
+  await loadPreferences();
   renderLoading(url);
   showPopover(anchor);
 
@@ -1635,62 +1908,91 @@ function closePopover() {
   hidePopover();
 }
 
-// Global event delegation - hover to trigger, hover out to dismiss
+function findLegalAnchorFromEventTarget(target) {
+  if (!target || !target.closest) return null;
+  const el = target.closest('a, button, [role="link"], [role="button"]');
+  if (!el || !isLikelyLegalLink(el)) return null;
+  return el;
+}
+
+// Desktop: hover to trigger. Touch/iOS uses tap path below instead.
 document.addEventListener(
   "mouseover",
   (e) => {
-    // Skip on non-HTML documents (SVG/XML viewers) where we have no UI
     if (!UI.host) return;
-    // Check if auto-hover is enabled
+    if (TOUCH_SUMMARIZE) return; // avoid hover+tap double-fire on touch laptops/tablets
     if (!preferences.autoHover) return;
-    
-    // Try to find a legal link/button near the hover target
-    const target = e.target;
-    if (!target || !target.closest) return;
-    
-    // Check for <a>, <button>, or elements with link/button role
-    const el = target.closest('a, button, [role="link"], [role="button"]');
+
+    const el = findLegalAnchorFromEventTarget(e.target);
     if (!el) return;
-    if (!isLikelyLegalLink(el)) return;
-    
+
     // Don't restart if already showing for this element
     if (current.anchor === el && UI.popover.style.display === "block") return;
-    
+
     startHover(el);
   },
   true
 );
 
-// Handle mouse leaving the anchor element
+// Once the popover is open it stays open — user must click outside or use the ✕ button.
+// We still cancel the hover timer if the mouse leaves the anchor before it fires.
 document.addEventListener(
   "mouseout",
   (e) => {
-    if (!UI.host) return;
-    const target = e.target;
-    if (!target || !target.closest) return;
-    const el = target.closest('a, button, [role="link"], [role="button"]');
-    if (el && el === current.anchor) {
-      // Give user time to move mouse to popover
-      scheduleHideCheck();
+    if (!UI.host || TOUCH_SUMMARIZE) return;
+    const el = findLegalAnchorFromEventTarget(e.target);
+    // Only cancel a pending (not-yet-shown) timer; if the popover is already visible, do nothing.
+    if (el && el === current.anchor && UI.popover.style.display !== "block") {
+      clearHoverTimer();
     }
   },
   true
 );
 
-function scheduleHideCheck() {
-  window.setTimeout(() => {
-    const overPopover = UI.popover.matches(":hover");
-    const overAnchor = current.anchor && current.anchor.matches && current.anchor.matches(":hover");
-    if (!overPopover && !overAnchor) {
-      closePopover();
-    }
-  }, 150);
-}
+// Touch / iOS Safari: tap a legal link to summarize (hover is unreliable).
+// First tap opens the summary; use "View source" in the popover to open the real page.
+document.addEventListener(
+  "click",
+  (e) => {
+    if (!UI.host || !TOUCH_SUMMARIZE) return;
+    if (!preferences.autoHover) return;
+    if (UI.host === e.target || UI.host.contains(e.target)) return;
 
-// When mouse leaves the popover, check if we should hide
-UI.popover.addEventListener("mouseleave", () => {
-  scheduleHideCheck();
-});
+    const el = findLegalAnchorFromEventTarget(e.target);
+    if (!el) return;
+
+    // Already open for this anchor — let outside-click handler / popover handle it
+    if (current.anchor === el && UI.popover.style.display === "block") {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    const prevDelay = HOVER_DELAY_MS;
+    HOVER_DELAY_MS = 0;
+    startHover(el);
+    HOVER_DELAY_MS = prevDelay;
+  },
+  true
+);
+
+// Click-outside closes the popover.
+// Clicks inside the shadow DOM bubble up with e.target === UI.host (the shadow host),
+// so we explicitly ignore those — they are handled by the popover's own click listener.
+document.addEventListener(
+  "click",
+  (e) => {
+    if (!UI.host) return;
+    if (UI.popover.style.display !== "block") return;
+    if (UI.host === e.target || UI.host.contains(e.target)) return;
+    // Touch path already handled legal-link taps above; don't immediately close
+    if (TOUCH_SUMMARIZE && findLegalAnchorFromEventTarget(e.target)) return;
+    closePopover();
+  },
+  true
+);
 
 // Handle button and link clicks inside the popover
 UI.popover.addEventListener("click", (e) => {
@@ -1698,6 +2000,12 @@ UI.popover.addEventListener("click", (e) => {
   const btn = e.target && e.target.closest ? e.target.closest("button") : null;
   if (btn) {
     const action = btn.getAttribute("data-action");
+    if (action === "close-popover") {
+      e.preventDefault();
+      e.stopPropagation();
+      closePopover();
+      return;
+    }
     if (action === "refresh-page") {
       e.preventDefault();
       e.stopPropagation();
@@ -1737,6 +2045,61 @@ UI.popover.addEventListener("click", (e) => {
       } else if (current.originalHref) {
         window.open(current.originalHref, "_blank", "noopener,noreferrer");
       }
+    }
+    if (action === "copy-summary") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (current.lastSummary) {
+        const s = current.lastSummary;
+        const lines = [];
+        if (s.title) lines.push(s.title);
+        if (s.tldr) lines.push("\nQuick Summary\n" + s.tldr);
+        const addSection = (heading, arr) => {
+          if (!Array.isArray(arr) || !arr.length) return;
+          lines.push("\n" + heading);
+          arr.forEach(x => lines.push("• " + x));
+        };
+        addSection("Costs & renewal", s.costs_and_renewal);
+        addSection("Cancellation & refunds", s.cancellation_and_refunds);
+        addSection("Liability & disputes", s.liability_and_disputes);
+        addSection("Privacy & data", s.privacy_and_data);
+        if (preferences.showRedFlags) addSection("Red flags", s.red_flags);
+        if (preferences.showQuotes && Array.isArray(s.quotes)) {
+          const validQuotes = s.quotes.filter(q => q?.quote);
+          if (validQuotes.length) {
+            lines.push("\nSupporting quotes");
+            validQuotes.slice(0, 3).forEach(q => lines.push(`"${q.quote}"${q.why_it_matters ? " — " + q.why_it_matters : ""}`));
+          }
+        }
+        if (current.lastSummaryUrl) lines.push("\nSource: " + current.lastSummaryUrl);
+        navigator.clipboard.writeText(lines.join("\n")).then(() => {
+          btn.classList.add("copied");
+          setTimeout(() => btn.classList.remove("copied"), 1600);
+        }).catch(() => {});
+      }
+      return;
+    }
+    if (action === "toggle-pref") {
+      e.preventDefault();
+      e.stopPropagation();
+      const key = btn.getAttribute("data-pref");
+      if (key === "showRedFlags" || key === "showQuotes") {
+        preferences[key] = !preferences[key];
+        // Persist to storage (same format options.js uses)
+        if (isExtensionContextValid()) {
+          chrome.storage.local.get("preferences").then(d => {
+            const saved = { ...(d.preferences || {}), [key]: preferences[key] };
+            return chrome.storage.local.set({ preferences: saved });
+          }).catch(() => {});
+        }
+        // Re-render summary immediately
+        if (current.lastSummary) {
+          renderSummary(current.lastSummary, current.lastSummaryUrl, current.lastSummaryFromCache)
+            .then(() => { if (current.anchor) showPopover(current.anchor); })
+            .catch(() => {});
+        }
+      }
+      return;
     }
     if (action === "click-and-retry" && current.anchor) {
       // Click the original button to load content
@@ -2130,8 +2493,21 @@ if (document.readyState === "loading") {
 try {
   chrome.storage.onChanged.addListener((changes, areaName) => {
     try {
-      if (areaName === "local" && changes.monthlyUsage && isExtensionContextValid()) {
+      if (areaName !== "local" || !isExtensionContextValid()) return;
+
+      if (changes.monthlyUsage) {
         refreshFooterIfVisible();
+      }
+
+      if (changes.preferences) {
+        const next = changes.preferences.newValue;
+        if (next && typeof next === "object") {
+          preferences = { ...preferences, ...normalizePrefsPatch(next) };
+          HOVER_DELAY_MS = parseInt(String(preferences.hoverDelay), 10) || 750;
+          refreshSummaryIfVisible().catch(() => {});
+        } else {
+          loadPreferences().then(() => refreshSummaryIfVisible()).catch(() => {});
+        }
       }
     } catch {
       // Context invalidated - listener will stop working; no need to log
@@ -2141,41 +2517,40 @@ try {
   // Extension context invalid at registration time
 }
 
+// Re-render visible summary when prefs change (e.g. red flags / quotes toggles in popup)
+async function refreshSummaryIfVisible() {
+  try {
+    if (!isExtensionContextValid()) return;
+    if (!UI.popover || UI.popover.style.display !== "block") return;
+    if (!current.lastSummary || current.lastSummaryUrl == null) return;
+    await renderSummary(current.lastSummary, current.lastSummaryUrl, current.lastSummaryFromCache);
+    if (current.anchor) showPopover(current.anchor);
+  } catch {
+    // Optional refresh — ignore failures
+  }
+}
+
 // Function to refresh footer if popover is currently visible
 async function refreshFooterIfVisible() {
   try {
     if (!UI.popover || !UI.popover.shadowRoot) {
-      return; // Popover not visible
+      return;
     }
-    
-    const footerElement = UI.popover.shadowRoot.querySelector(".footer-stats");
-    if (!footerElement) {
-      return; // Footer not present
+
+    const footerStats = UI.popover.shadowRoot.querySelector(".footer-stats");
+    if (!footerStats) {
+      return;
     }
-    
-    // Get current URL from the popover's "View source" link or current state
+
     const viewSourceLink = UI.popover.shadowRoot.querySelector('a[data-action="view-source"]');
     const currentUrl = viewSourceLink?.getAttribute("href") || current.url || null;
-    
-    // Get fresh footer HTML with updated usage count
-    const newFooter = await getStatsFooter(currentUrl);
-    
-    // Replace the footer element
-    if (footerElement && footerElement.parentNode) {
-      footerElement.outerHTML = newFooter;
-      
-      // Re-attach event listeners for the settings button
-      const settingsBtn = UI.popover.shadowRoot.querySelector('.footer-settings[data-action="open-options"]');
-      if (settingsBtn) {
-        settingsBtn.addEventListener("click", (e) => {
-          e.preventDefault();
-          try {
-            chrome.runtime.sendMessage({ type: "open_options" }).catch(() => {});
-          } catch (err) {
-            if (!isContextInvalidatedError(err)) throw err;
-          }
-        });
-      }
+    const isSummary = !!UI.popover.shadowRoot.querySelector(".summary-content-reveal");
+    const html = await getStatsFooter(currentUrl, isSummary);
+    const wrap = document.createElement("div");
+    wrap.innerHTML = html.trim();
+    const nextStats = wrap.querySelector(".footer-stats");
+    if (nextStats) {
+      footerStats.innerHTML = nextStats.innerHTML;
     }
   } catch (e) {
     // Silently fail - footer refresh is optional

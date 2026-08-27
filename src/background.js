@@ -1,4 +1,5 @@
 // Configuration
+importScripts("url-normalize-utils.js");
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const MAX_TEXT_CHARS = 45_000; // keep request size reasonable
@@ -11,7 +12,47 @@ function nowMs() {
   return Date.now();
 }
 
+/** Open the options UI without relying on tabs permission (Safari-friendly). */
+async function openOptionsPage({ upgrade = false } = {}) {
+  // Persist upgrade intent so openOptionsPage() (no query string) still works on Safari.
+  if (upgrade) {
+    await chrome.storage.local.set({ openUpgradeIntent: true });
+  }
+
+  if (chrome.runtime.openOptionsPage) {
+    try {
+      await new Promise((resolve, reject) => {
+        try {
+          chrome.runtime.openOptionsPage(() => {
+            const err = chrome.runtime.lastError;
+            if (err) reject(new Error(err.message));
+            else resolve();
+          });
+        } catch (e) {
+          reject(e);
+        }
+      });
+      return;
+    } catch {
+      // Fall through to tabs.create
+    }
+  }
+
+  const optionsUrl = chrome.runtime.getURL(
+    upgrade ? "src/options.html?upgrade=true" : "src/options.html"
+  );
+  if (chrome.tabs?.create) {
+    await chrome.tabs.create({ url: optionsUrl });
+  }
+}
+
 function normalizeUrl(url) {
+  const urlUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestUrlNormalizeUtils) ||
+    null;
+  if (urlUtils?.normalizeUrl) {
+    return urlUtils.normalizeUrl(url);
+  }
   try {
     const u = new URL(url);
     u.hash = "";
@@ -263,16 +304,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     try {
       if (!message || typeof message !== "object") return;
 
-      // Open options page
+      // Open options page (prefer openOptionsPage — more reliable on Safari)
       if (message.type === "open_options") {
-        chrome.tabs.create({ url: chrome.runtime.getURL("src/options.html") });
+        await openOptionsPage();
         sendResponse({ ok: true });
         return;
       }
 
       // Open options page with upgrade intent
       if (message.type === "open_options_upgrade") {
-        chrome.tabs.create({ url: chrome.runtime.getURL("src/options.html?upgrade=true") });
+        await openOptionsPage({ upgrade: true });
         sendResponse({ ok: true });
         return;
       }
