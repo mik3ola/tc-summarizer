@@ -1,4 +1,5 @@
 // Configuration
+importScripts("url-normalize-utils.js");
 const DEFAULT_MODEL = "gpt-4o-mini";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const MAX_TEXT_CHARS = 45_000; // keep request size reasonable
@@ -46,6 +47,12 @@ async function openOptionsPage({ upgrade = false } = {}) {
 }
 
 function normalizeUrl(url) {
+  const urlUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestUrlNormalizeUtils) ||
+    null;
+  if (urlUtils?.normalizeUrl) {
+    return urlUtils.normalizeUrl(url);
+  }
   try {
     const u = new URL(url);
     u.hash = "";

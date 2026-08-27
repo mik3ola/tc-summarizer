@@ -275,10 +275,22 @@ function getLegalContentType(element) {
 
 function findModalContent(element) {
   const contentType = getLegalContentType(element);
+  const walkUtils = globalThis.TermsDigestModalWalkUtils;
   
   // Strategy 1: Look for data-target or data-bs-target (Bootstrap)
-  const modalTarget = element.getAttribute("data-target") || element.getAttribute("data-bs-target") || "";
-  if (modalTarget && modalTarget.startsWith("#")) {
+  const modalTarget = walkUtils?.resolveBootstrapModalSelector
+    ? walkUtils.resolveBootstrapModalSelector(
+        element.getAttribute("data-target"),
+        element.getAttribute("data-bs-target")
+      )
+    : (() => {
+        const t =
+          element.getAttribute("data-target") ||
+          element.getAttribute("data-bs-target") ||
+          "";
+        return t && t.startsWith("#") ? t : null;
+      })();
+  if (modalTarget) {
     const modal = document.querySelector(modalTarget);
     if (modal) return modal;
   }
@@ -357,14 +369,28 @@ function findModalContent(element) {
   }
   
   // Strategy 4: Look for aria-controls or aria-describedby
-  const ariaControls = element.getAttribute("aria-controls") || element.getAttribute("aria-describedby") || "";
-  if (ariaControls) {
-    const modal = document.querySelector(`#${ariaControls}`);
+  const ariaSelector = walkUtils?.resolveAriaControlsSelector
+    ? walkUtils.resolveAriaControlsSelector(
+        element.getAttribute("aria-controls"),
+        element.getAttribute("aria-describedby")
+      )
+    : (() => {
+        const id =
+          element.getAttribute("aria-controls") ||
+          element.getAttribute("aria-describedby") ||
+          "";
+        return id ? `#${id}` : null;
+      })();
+  if (ariaSelector) {
+    const modal = document.querySelector(ariaSelector);
     if (modal) return modal;
   }
   
   // Strategy 5: Look for visible modals that match our content type
-  const visibleModals = document.querySelectorAll('.modal.show, .overlay.show, [role="dialog"], .modal:not([style*="display: none"])');
+  const visibleModalSelector =
+    walkUtils?.VISIBLE_MODAL_SELECTOR ||
+    '.modal.show, .overlay.show, [role="dialog"], .modal:not([style*="display: none"])';
+  const visibleModals = document.querySelectorAll(visibleModalSelector);
   for (const modal of visibleModals) {
     const modalText = (modal.textContent || "").toLowerCase();
     const modalClass = (modal.className || "").toLowerCase();
@@ -380,7 +406,9 @@ function findModalContent(element) {
   }
   
   // Strategy 6: Search ALL elements for content matching our type (last resort)
-  const allElements = document.querySelectorAll('section, div, article, main');
+  const contentWalkSelector =
+    walkUtils?.CONTENT_WALK_SELECTOR || "section, div, article, main";
+  const allElements = document.querySelectorAll(contentWalkSelector);
   let bestMatch = null;
   let bestMatchScore = 0;
   
@@ -433,7 +461,10 @@ function findModalContent(element) {
   
   // Strategy 7: Look for hidden modals that might contain the content
   // Some frameworks keep modals in DOM but hidden
-  const allModals = document.querySelectorAll('.modal, .overlay, [role="dialog"], [class*="modal"], [class*="overlay"]');
+  const hiddenModalSelector =
+    walkUtils?.HIDDEN_MODAL_SELECTOR ||
+    '.modal, .overlay, [role="dialog"], [class*="modal"], [class*="overlay"]';
+  const allModals = document.querySelectorAll(hiddenModalSelector);
   for (const modal of allModals) {
     const text = (modal.textContent || "").toLowerCase();
     // Check if it contains substantial legal content (even if hidden)
@@ -444,25 +475,59 @@ function findModalContent(element) {
   
   // Strategy 8: If link is inside a modal, look for sibling content or parent modal content
   // (e.g., Terms link inside Welcome modal might load content in same modal)
-  let checkParent = element.parentElement;
-  let checkDepth = 0;
-  while (checkParent && checkDepth < 10) {
-    // Check if parent is a modal/overlay
-    const isModal = checkParent.matches && (
-      checkParent.matches('.modal, .overlay, [role="dialog"]') ||
-      checkParent.className?.toLowerCase().includes('modal') ||
-      checkParent.className?.toLowerCase().includes('overlay')
-    );
-    if (isModal) {
-      // This link is inside a modal - the content might be in this same modal
-      // or a nested modal/iframe
-      const text = (checkParent.textContent || "").toLowerCase();
-      if (KEYWORDS.some(k => text.includes(k)) && text.length > 200) {
-        return checkParent;
-      }
+  const parentMatchSelector =
+    walkUtils?.PARENT_MODAL_MATCHES_SELECTOR ||
+    '.modal, .overlay, [role="dialog"]';
+  const parentWalkMaxDepth =
+    walkUtils?.PARENT_MODAL_WALK_MAX_DEPTH ?? 10;
+  if (walkUtils?.resolveParentModalFromAncestorSignals) {
+    const ancestors = [];
+    let walkEl = element.parentElement;
+    let walkDepth = 0;
+    while (walkEl && walkDepth < parentWalkMaxDepth) {
+      const rawClass =
+        typeof walkEl.className === "string"
+          ? walkEl.className
+          : walkEl.className?.baseVal || "";
+      ancestors.push({
+        className: rawClass,
+        hasMatchesMethod: typeof walkEl.matches === "function",
+        matchesModalSelector: !!(
+          walkEl.matches && walkEl.matches(parentMatchSelector)
+        ),
+        text: walkEl.textContent || "",
+        el: walkEl,
+      });
+      walkEl = walkEl.parentElement;
+      walkDepth++;
     }
-    checkParent = checkParent.parentElement;
-    checkDepth++;
+    const hit = walkUtils.resolveParentModalFromAncestorSignals(
+      ancestors,
+      KEYWORDS,
+      200
+    );
+    if (hit?.el) return hit.el;
+  } else {
+    let checkParent = element.parentElement;
+    let checkDepth = 0;
+    while (checkParent && checkDepth < parentWalkMaxDepth) {
+      // Check if parent is a modal/overlay
+      const isModal =
+        checkParent.matches &&
+        (checkParent.matches(parentMatchSelector) ||
+          checkParent.className?.toLowerCase().includes("modal") ||
+          checkParent.className?.toLowerCase().includes("overlay"));
+      if (isModal) {
+        // This link is inside a modal - the content might be in this same modal
+        // or a nested modal/iframe
+        const text = (checkParent.textContent || "").toLowerCase();
+        if (KEYWORDS.some((k) => text.includes(k)) && text.length > 200) {
+          return checkParent;
+        }
+      }
+      checkParent = checkParent.parentElement;
+      checkDepth++;
+    }
   }
   
   // Strategy 9: Look for iframes that might contain the content
