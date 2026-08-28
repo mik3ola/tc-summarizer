@@ -467,22 +467,62 @@ function findModalContent(element) {
   
   // Strategy 9: Look for iframes that might contain the content
   // Some sites load Terms in iframes
-  const iframes = document.querySelectorAll('iframe');
-  for (const iframe of iframes) {
-    try {
-      // Try to access iframe content (only works if same-origin)
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (iframeDoc) {
-        const text = (iframeDoc.body?.textContent || "").toLowerCase();
-        if (KEYWORDS.some(k => text.includes(k)) && text.length > 200) {
-          return iframeDoc.body;
-        }
+  const iframeUtils = globalThis.TermsDigestIframeLegalUtils;
+  const iframes = document.querySelectorAll("iframe");
+  if (iframeUtils?.resolveSameOriginIframeLegalBody) {
+    const signals = [];
+    for (const iframe of iframes) {
+      try {
+        const iframeDoc = iframeUtils.resolveIframeDocument
+          ? iframeUtils.resolveIframeDocument(
+              iframe.contentDocument,
+              iframe.contentWindow?.document
+            )
+          : iframe.contentDocument || iframe.contentWindow?.document || null;
+        signals.push(
+          iframeUtils.buildIframeBodySignal
+            ? iframeUtils.buildIframeBodySignal({ doc: iframeDoc })
+            : iframeDoc
+              ? {
+                  accessible: true,
+                  bodyText: iframeDoc.body?.textContent || "",
+                  body: iframeDoc.body || null,
+                }
+              : { accessible: false, bodyText: "", body: null }
+        );
+      } catch (e) {
+        // Cross-origin iframe, can't access
+        signals.push(
+          iframeUtils.buildIframeBodySignal
+            ? iframeUtils.buildIframeBodySignal({ accessError: true })
+            : { accessible: false, bodyText: "", body: null }
+        );
       }
-    } catch (e) {
-      // Cross-origin iframe, can't access
+    }
+    const hit = iframeUtils.resolveSameOriginIframeLegalBody(
+      signals,
+      KEYWORDS,
+      iframeUtils.IFRAME_LEGAL_MIN_LENGTH ?? 200
+    );
+    if (hit?.body) return hit.body;
+  } else {
+    for (const iframe of iframes) {
+      try {
+        // Try to access iframe content (only works if same-origin)
+        const iframeDoc =
+          iframe.contentDocument || iframe.contentWindow?.document;
+        if (iframeDoc) {
+          const text = (iframeDoc.body?.textContent || "").toLowerCase();
+          if (KEYWORDS.some((k) => text.includes(k)) && text.length > 200) {
+            return iframeDoc.body;
+          }
+        }
+      } catch (e) {
+        // Cross-origin iframe, can't access
+      }
     }
   }
-  
+
   return null;
 }
 
