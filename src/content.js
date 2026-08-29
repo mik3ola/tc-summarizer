@@ -487,33 +487,63 @@ function findModalContent(element) {
 }
 
 function getUrlFromElement(el) {
-  // Try various attributes for the URL
-  const href = el.getAttribute("href") || el.getAttribute("data-href") || "";
+  const navUtils =
+    (typeof globalThis !== "undefined" &&
+      globalThis.TermsDigestElementNavigationUtils) ||
+    null;
+
+  const attrs = {
+    href: el.getAttribute("href") || "",
+    dataHref: el.getAttribute("data-href") || "",
+    dataUrl: el.getAttribute("data-url") || "",
+    dataLink: el.getAttribute("data-link") || "",
+    dataTarget: el.getAttribute("data-target") || "",
+    dataBsTarget: el.getAttribute("data-bs-target") || "",
+  };
+
+  if (navUtils?.classifyElementNavigation) {
+    const classified = navUtils.classifyElementNavigation({
+      ...attrs,
+      modalContentFound: false,
+    });
+    if (classified?.type === "url" || classified?.type === "modal") {
+      return classified;
+    }
+    // Historical: only dig for modal content for javascript: / empty / exact "#".
+    // Fragment hrefs like "#terms-section" return null (classified === null).
+    const linkHref = attrs.href || attrs.dataHref || "";
+    if (
+      linkHref.startsWith("javascript:") ||
+      !linkHref ||
+      linkHref === "#"
+    ) {
+      const modalContent = findModalContent(el);
+      if (modalContent) {
+        return { type: "modal-element", value: modalContent };
+      }
+      return { type: "click-to-load", value: el };
+    }
+    return null;
+  }
+
+  // Inline fallback when utils script is missing
+  const href = attrs.href || attrs.dataHref || "";
   if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
     return { type: "url", value: href };
   }
-  // For buttons/clickable elements, check if there's a data attribute with URL
-  const dataUrl = el.getAttribute("data-url") || el.getAttribute("data-link") || "";
+  const dataUrl = attrs.dataUrl || attrs.dataLink || "";
   if (dataUrl) return { type: "url", value: dataUrl };
-  
-  // Check for Bootstrap modal trigger (common pattern for inline T&C)
-  const modalTarget = el.getAttribute("data-target") || el.getAttribute("data-bs-target") || "";
+  const modalTarget = attrs.dataTarget || attrs.dataBsTarget || "";
   if (modalTarget && modalTarget.startsWith("#")) {
     return { type: "modal", value: modalTarget };
   }
-  
-  // Check if this is a JavaScript-triggered modal or button
   if (href.startsWith("javascript:") || !href || href === "#") {
     const modalContent = findModalContent(el);
     if (modalContent) {
       return { type: "modal-element", value: modalContent };
     }
-    
-    // Content not found in DOM - might need to be loaded first
-    // Return a special type that tells the UI to show a helpful message
     return { type: "click-to-load", value: el };
   }
-  
   return null;
 }
 
@@ -1619,6 +1649,11 @@ function renderQuotes(quotes) {
 }
 
 function escapeHtml(s) {
+  const utils =
+    (typeof globalThis !== "undefined" &&
+      globalThis.TermsDigestHtmlEscapeUtils) ||
+    null;
+  if (utils?.escapeHtml) return utils.escapeHtml(s);
   return String(s)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -1628,6 +1663,11 @@ function escapeHtml(s) {
 }
 
 function escapeAttr(s) {
+  const utils =
+    (typeof globalThis !== "undefined" &&
+      globalThis.TermsDigestHtmlEscapeUtils) ||
+    null;
+  if (utils?.escapeAttr) return utils.escapeAttr(s);
   return escapeHtml(s).replaceAll("\n", " ");
 }
 
@@ -1844,6 +1884,13 @@ function closePopover() {
 }
 
 function findLegalAnchorFromEventTarget(target) {
+  const navUtils =
+    (typeof globalThis !== "undefined" &&
+      globalThis.TermsDigestElementNavigationUtils) ||
+    null;
+  if (navUtils?.findLegalInteractiveFromTarget) {
+    return navUtils.findLegalInteractiveFromTarget(target, isLikelyLegalLink);
+  }
   if (!target || !target.closest) return null;
   const el = target.closest('a, button, [role="link"], [role="button"]');
   if (!el || !isLikelyLegalLink(el)) return null;
