@@ -1450,9 +1450,36 @@ async function renderError(errMsg, url) {
     isSignInIssue = true;
   }
   
-  // Build buttons based on error type
+  // Build buttons based on error type (CTA descriptors lock action/label/primary)
+  const errorCtaUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestSummaryErrorCtaUtils) ||
+    null;
+  const buttonSet = errorCtaUtils?.resolveButtonSetFromFlags
+    ? errorCtaUtils.resolveButtonSetFromFlags({
+        showRefreshButton,
+        isProQuotaExceeded,
+        showUpgradeButton,
+        isSignInIssue,
+        isInfoNotice,
+      })
+    : showRefreshButton
+      ? "refresh"
+      : isProQuotaExceeded
+        ? "pro_quota"
+        : showUpgradeButton
+          ? "upgrade"
+          : isSignInIssue
+            ? "sign_in"
+            : isInfoNotice
+              ? "info"
+              : "generic";
+  const errorCtas = errorCtaUtils?.resolveSummaryErrorCtas
+    ? errorCtaUtils.resolveSummaryErrorCtas(buttonSet)
+    : null;
   let buttonsHtml;
-  if (showRefreshButton) {
+  if (errorCtaUtils?.buildSummaryErrorButtonsHtml && errorCtas) {
+    buttonsHtml = errorCtaUtils.buildSummaryErrorButtonsHtml(errorCtas);
+  } else if (showRefreshButton) {
     buttonsHtml = `
       <button data-action="refresh-page">Refresh page</button>
       <button data-action="open-link">View page</button>
@@ -2348,19 +2375,27 @@ function setupHighlightObserver() {
 
 // Scan the page for legal links and set up observation
 function scanAndObserveLegalLinks() {
+  const scanUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestHighlightScanUtils) ||
+    null;
+  const selector =
+    scanUtils?.LEGAL_INTERACTIVE_SELECTOR ||
+    'a, button, [role="link"], [role="button"]';
   // Find all potential link/button elements
-  const elements = document.querySelectorAll('a, button, [role="link"], [role="button"]');
-  
+  const elements = document.querySelectorAll(selector);
+
   elements.forEach((el) => {
-    // Skip already processed elements
-    if (highlightedElements.has(el)) return;
-    if (el.classList.contains("td-highlighted")) return;
-    
-    // Check if it's a legal link
-    if (isLikelyLegalLink(el)) {
-      // Observe for viewport entry
-      highlightObserver.observe(el);
-    }
+    const shouldObserve = scanUtils?.shouldObserveHighlightCandidate
+      ? scanUtils.shouldObserveHighlightCandidate({
+          alreadyTracked: highlightedElements.has(el),
+          hasHighlightClass: el.classList.contains("td-highlighted"),
+          isLegalLink: isLikelyLegalLink(el),
+        })
+      : !highlightedElements.has(el) &&
+        !el.classList.contains("td-highlighted") &&
+        isLikelyLegalLink(el);
+    if (!shouldObserve) return;
+    highlightObserver.observe(el);
   });
 }
 
@@ -2369,33 +2404,50 @@ let mutationObserverForHighlight = null;
 
 function setupMutationObserverForHighlight() {
   if (mutationObserverForHighlight) return;
-  
+
+  const scanUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestHighlightScanUtils) ||
+    null;
+  const debounceMs = scanUtils?.HIGHLIGHT_SCAN_DEBOUNCE_MS ?? 100;
+
   mutationObserverForHighlight = new MutationObserver((mutations) => {
-    let shouldScan = false;
-    
-    for (const mutation of mutations) {
-      if (mutation.type === "childList" && mutation.addedNodes.length > 0) {
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            // Check if the added node or its children might contain legal links
-            if (node.matches && (node.matches('a, button, [role="link"], [role="button"]') || 
-                node.querySelector('a, button, [role="link"], [role="button"]'))) {
-              shouldScan = true;
-              break;
+    const signals = mutations.map((mutation) => ({
+      type: mutation.type,
+      addedNodes: Array.from(mutation.addedNodes || []).map((node) =>
+        scanUtils?.buildAddedNodeScanSignal
+          ? scanUtils.buildAddedNodeScanSignal(node)
+          : {
+              isElement: node.nodeType === Node.ELEMENT_NODE,
+              matchesInteractive:
+                !!(node.matches &&
+                  node.matches('a, button, [role="link"], [role="button"]')),
+              hasInteractiveDescendant:
+                !!(node.querySelector &&
+                  node.querySelector('a, button, [role="link"], [role="button"]')),
             }
-          }
-        }
-      }
-      if (shouldScan) break;
-    }
-    
+      ),
+    }));
+
+    const shouldScan = scanUtils?.shouldRescanLegalLinksFromMutations
+      ? scanUtils.shouldRescanLegalLinksFromMutations(signals)
+      : signals.some(
+          (m) =>
+            m.type === "childList" &&
+            m.addedNodes.some(
+              (n) => n.isElement && (n.matchesInteractive || n.hasInteractiveDescendant)
+            )
+        );
+
     if (shouldScan) {
       // Debounce scanning for performance
       clearTimeout(mutationObserverForHighlight._scanTimeout);
-      mutationObserverForHighlight._scanTimeout = setTimeout(scanAndObserveLegalLinks, 100);
+      mutationObserverForHighlight._scanTimeout = setTimeout(
+        scanAndObserveLegalLinks,
+        debounceMs
+      );
     }
   });
-  
+
   mutationObserverForHighlight.observe(document.body, {
     childList: true,
     subtree: true
@@ -2404,11 +2456,21 @@ function setupMutationObserverForHighlight() {
 
 // Initialize highlighting when DOM is ready
 function initLinkHighlighting() {
+  const scanUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestHighlightScanUtils) ||
+    null;
+  const canInit = scanUtils?.shouldInitLinkHighlighting
+    ? scanUtils.shouldInitLinkHighlighting({
+        hasUiHost: !!UI.host,
+        hasDocumentHead: !!document.head,
+        hasDocumentBody: !!document.body,
+        autoHover: !!preferences.autoHover,
+      })
+    : !!(UI.host && document.head && document.body && preferences.autoHover);
   // Skip on non-HTML documents (SVG/XML viewers) — no document.head, no document.body
-  if (!UI.host || !document.head || !document.body) return;
   // Don't highlight if auto-hover is disabled (user preference)
-  if (!preferences.autoHover) return;
-  
+  if (!canInit) return;
+
   injectHighlightStyles();
   setupHighlightObserver();
   scanAndObserveLegalLinks();
