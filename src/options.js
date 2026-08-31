@@ -350,14 +350,27 @@ clearCacheBtn?.addEventListener("click", async () => {
   showStatus("Summary cache cleared!");
 });
 
-// Export data (options page only)
+// Export data (options page only) — allowlist excludes secrets / session / billing
 exportDataBtn?.addEventListener("click", async () => {
-  const data = await chrome.storage.local.get(["summariesCache", "preferences"]);
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const exportUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestDataExportUtils) ||
+    null;
+  const keys = exportUtils?.EXPORT_STORAGE_KEYS || ["summariesCache", "preferences"];
+  const stored = await chrome.storage.local.get([...keys]);
+  const payload = exportUtils?.buildExportPayload
+    ? exportUtils.buildExportPayload(stored)
+    : {
+        summariesCache: stored.summariesCache || {},
+        preferences: stored.preferences || {},
+      };
+  const filename = exportUtils?.buildExportFilename
+    ? exportUtils.buildExportFilename(Date.now())
+    : `termsdigest-data-${Date.now()}.json`;
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `termsdigest-data-${Date.now()}.json`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
   showStatus("Data exported!");
@@ -1102,35 +1115,57 @@ deleteAccountModalConfirm?.addEventListener("click", async () => {
 
 document.getElementById("deleteAccountBtn")?.addEventListener("click", showDeleteAccountModal);
 
-// Check for query parameters (e.g., ?upgrade=true)
-function handleQueryParams() {
+// Check for upgrade deep-link via ?upgrade=true or storage flag (Safari openOptionsPage)
+async function handleQueryParams() {
   const params = new URLSearchParams(window.location.search);
-  
-  if (params.get("upgrade") === "true") {
-    // Wait a moment for the page to load, then trigger upgrade
-    setTimeout(async () => {
-      // Check if user is logged in
-      const { supabaseSession } = await chrome.storage.local.get(["supabaseSession"]);
-      
-      if (supabaseSession?.access_token) {
-        // User is logged in, trigger upgrade flow
-        upgradeBtn?.click();
-      } else {
-        // User not logged in, show login form and info
-        authFormEl?.classList.remove("hidden");
-        showModal("info", "Sign in to upgrade", "Please sign in or create an account first, then click the 'Upgrade to Pro' button.");
-      }
-      
-      // Clear the query param from URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }, 500);
+  const fromQuery = params.get("upgrade") === "true";
+  const { openUpgradeIntent } = await chrome.storage.local.get(["openUpgradeIntent"]);
+  const shouldUpgrade = fromQuery || !!openUpgradeIntent;
+
+  if (!shouldUpgrade) return;
+
+  if (openUpgradeIntent) {
+    await chrome.storage.local.remove(["openUpgradeIntent"]);
   }
+
+  // Wait a moment for the page to load, then trigger upgrade
+  setTimeout(async () => {
+    const { supabaseSession } = await chrome.storage.local.get(["supabaseSession"]);
+
+    if (supabaseSession?.access_token) {
+      upgradeBtn?.click();
+    } else {
+      authFormEl?.classList.remove("hidden");
+      showModal("info", "Sign in to upgrade", "Please sign in or create an account first, then click the 'Upgrade to Pro' button.");
+    }
+
+    if (fromQuery) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, 500);
 }
 
 // Initialize logo
 const logoImg = document.getElementById("logoImg");
 if (logoImg) {
   logoImg.src = chrome.runtime.getURL("icons/icon48.png");
+}
+
+// Touch / iOS: clarify auto-summarize uses tap
+try {
+  const ua = navigator.userAgent || "";
+  const touchFirst =
+    window.matchMedia?.("(pointer: coarse)")?.matches ||
+    /iPhone|iPad|iPod/i.test(ua) ||
+    (/Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1);
+  if (touchFirst) {
+    const label = document.getElementById("autoHoverLabel");
+    const hint = document.getElementById("autoHoverHint");
+    if (label) label.textContent = "Auto-summarise on tap";
+    if (hint) hint.textContent = "Automatically show summary when tapping legal links";
+  }
+} catch {
+  // ignore
 }
 
 // Initialize
@@ -1144,27 +1179,31 @@ loadSettings().then(() => {
 
 // Listen for storage changes to auto-refresh stats when monthlyUsage updates
 chrome.storage.onChanged.addListener(async (changes, areaName) => {
-  if (areaName === "local" && changes.monthlyUsage) {
-    const oldValue = changes.monthlyUsage.oldValue;
-    const newValue = changes.monthlyUsage.newValue;
-    
-    // Only refresh if the value actually changed (not just initialized)
-    if (oldValue !== newValue) {
-      // Reload stats with updated usage count
-      const data = await chrome.storage.local.get([
-        "summariesCache",
-        "usageStats", 
-        "monthlyUsage",
-        "subscriptionPlan",
-        "cycleAnchorDate"
-      ]);
-      updateStats(
-        data.summariesCache, 
-        data.usageStats, 
-        data.monthlyUsage, 
-        data.subscriptionPlan,
-        data.cycleAnchorDate
-      );
-    }
+  const usageRefreshUtils =
+    (typeof globalThis !== "undefined" &&
+      globalThis.TermsDigestOptionsUsageRefreshUtils) ||
+    null;
+  const shouldRefresh = usageRefreshUtils?.shouldRefreshOptionsStatsOnUsageChange
+    ? usageRefreshUtils.shouldRefreshOptionsStatsOnUsageChange(areaName, changes)
+    : areaName === "local" &&
+      changes.monthlyUsage &&
+      changes.monthlyUsage.oldValue !== changes.monthlyUsage.newValue;
+
+  if (shouldRefresh) {
+    // Reload stats with updated usage count
+    const data = await chrome.storage.local.get([
+      "summariesCache",
+      "usageStats",
+      "monthlyUsage",
+      "subscriptionPlan",
+      "cycleAnchorDate"
+    ]);
+    updateStats(
+      data.summariesCache,
+      data.usageStats,
+      data.monthlyUsage,
+      data.subscriptionPlan,
+      data.cycleAnchorDate
+    );
   }
 });

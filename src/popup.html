@@ -227,6 +227,25 @@
       .footer a { color: var(--accent); text-decoration: none; }
       .footer a:hover { text-decoration: underline; }
 
+      /* ── Safari permission tip ───────────────────────── */
+      .safari-tip {
+        background: rgba(59, 130, 246, 0.12);
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        border-radius: 12px;
+        padding: 12px 14px;
+        margin-bottom: 10px;
+        font-size: 0.78rem;
+        line-height: 1.45;
+        color: var(--text);
+      }
+      .safari-tip strong { display: block; margin-bottom: 4px; }
+      .safari-tip ol {
+        margin: 6px 0 0;
+        padding-left: 1.15rem;
+        color: var(--text-muted);
+      }
+      .safari-tip li { margin: 2px 0; }
+
       /* ── Modal ───────────────────────────────────────── */
       .hidden { display: none !important; }
       .modal-overlay {
@@ -312,6 +331,17 @@
       </a>
     </div>
 
+    <!-- Safari / iOS site-access tip (shown only in Safari Web Extensions) -->
+    <div id="safariPermissionTip" class="safari-tip hidden">
+      <strong>Allow website access</strong>
+      Safari does not grant access on install. For hover/tap summaries to work:
+      <ol>
+        <li>Open a site with Terms/Privacy links</li>
+        <li>Tap the TermsDigest toolbar icon</li>
+        <li>Choose <em>Always Allow on This Website</em> (or all websites)</li>
+      </ol>
+    </div>
+
     <!-- Account card -->
     <div class="card">
       <div class="card-header">
@@ -388,8 +418,8 @@
 
       <div class="toggle-row">
         <div>
-          <div class="toggle-label">Auto-summarize on hover</div>
-          <div class="toggle-hint">Show summary when hovering legal links</div>
+          <div class="toggle-label" id="autoHoverLabel">Auto-summarize on hover</div>
+          <div class="toggle-hint" id="autoHoverHint">Show summary when hovering legal links</div>
         </div>
         <label class="toggle">
           <input type="checkbox" id="autoHover" checked />
