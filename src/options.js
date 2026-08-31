@@ -350,14 +350,27 @@ clearCacheBtn?.addEventListener("click", async () => {
   showStatus("Summary cache cleared!");
 });
 
-// Export data (options page only)
+// Export data (options page only) — allowlist excludes secrets / session / billing
 exportDataBtn?.addEventListener("click", async () => {
-  const data = await chrome.storage.local.get(["summariesCache", "preferences"]);
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const exportUtils =
+    (typeof globalThis !== "undefined" && globalThis.TermsDigestDataExportUtils) ||
+    null;
+  const keys = exportUtils?.EXPORT_STORAGE_KEYS || ["summariesCache", "preferences"];
+  const stored = await chrome.storage.local.get([...keys]);
+  const payload = exportUtils?.buildExportPayload
+    ? exportUtils.buildExportPayload(stored)
+    : {
+        summariesCache: stored.summariesCache || {},
+        preferences: stored.preferences || {},
+      };
+  const filename = exportUtils?.buildExportFilename
+    ? exportUtils.buildExportFilename(Date.now())
+    : `termsdigest-data-${Date.now()}.json`;
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `termsdigest-data-${Date.now()}.json`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
   showStatus("Data exported!");
@@ -1166,27 +1179,31 @@ loadSettings().then(() => {
 
 // Listen for storage changes to auto-refresh stats when monthlyUsage updates
 chrome.storage.onChanged.addListener(async (changes, areaName) => {
-  if (areaName === "local" && changes.monthlyUsage) {
-    const oldValue = changes.monthlyUsage.oldValue;
-    const newValue = changes.monthlyUsage.newValue;
-    
-    // Only refresh if the value actually changed (not just initialized)
-    if (oldValue !== newValue) {
-      // Reload stats with updated usage count
-      const data = await chrome.storage.local.get([
-        "summariesCache",
-        "usageStats", 
-        "monthlyUsage",
-        "subscriptionPlan",
-        "cycleAnchorDate"
-      ]);
-      updateStats(
-        data.summariesCache, 
-        data.usageStats, 
-        data.monthlyUsage, 
-        data.subscriptionPlan,
-        data.cycleAnchorDate
-      );
-    }
+  const usageRefreshUtils =
+    (typeof globalThis !== "undefined" &&
+      globalThis.TermsDigestOptionsUsageRefreshUtils) ||
+    null;
+  const shouldRefresh = usageRefreshUtils?.shouldRefreshOptionsStatsOnUsageChange
+    ? usageRefreshUtils.shouldRefreshOptionsStatsOnUsageChange(areaName, changes)
+    : areaName === "local" &&
+      changes.monthlyUsage &&
+      changes.monthlyUsage.oldValue !== changes.monthlyUsage.newValue;
+
+  if (shouldRefresh) {
+    // Reload stats with updated usage count
+    const data = await chrome.storage.local.get([
+      "summariesCache",
+      "usageStats",
+      "monthlyUsage",
+      "subscriptionPlan",
+      "cycleAnchorDate"
+    ]);
+    updateStats(
+      data.summariesCache,
+      data.usageStats,
+      data.monthlyUsage,
+      data.subscriptionPlan,
+      data.cycleAnchorDate
+    );
   }
 });

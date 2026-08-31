@@ -2478,9 +2478,26 @@ async function refreshFooterIfVisible() {
     }
 
     const viewSourceLink = UI.popover.shadowRoot.querySelector('a[data-action="view-source"]');
-    const currentUrl = viewSourceLink?.getAttribute("href") || current.url || null;
-    const isSummary = !!UI.popover.shadowRoot.querySelector(".summary-content-reveal");
-    const html = await getStatsFooter(currentUrl, isSummary);
+    const footerCtxUtils =
+      (typeof globalThis !== "undefined" &&
+        globalThis.TermsDigestFooterRefreshContextUtils) ||
+      null;
+    const ctx = footerCtxUtils?.resolveFooterRefreshContext
+      ? footerCtxUtils.resolveFooterRefreshContext({
+          viewSourceHref: viewSourceLink?.getAttribute("href") || null,
+          fallbackUrl: current.url || null,
+          hasSummaryContent: !!UI.popover.shadowRoot.querySelector(
+            ".summary-content-reveal"
+          ),
+        })
+      : {
+          currentUrl:
+            viewSourceLink?.getAttribute("href") || current.url || null,
+          isSummaryView: !!UI.popover.shadowRoot.querySelector(
+            ".summary-content-reveal"
+          ),
+        };
+    const html = await getStatsFooter(ctx.currentUrl, ctx.isSummaryView);
     const wrap = document.createElement("div");
     wrap.innerHTML = html.trim();
     const nextStats = wrap.querySelector(".footer-stats");
