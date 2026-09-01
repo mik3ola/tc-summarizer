@@ -85,3 +85,59 @@ export function resolvedSiteUrl(envSiteUrl: string | undefined): string {
     ? envSiteUrl
     : "https://termsdigest.com";
 }
+
+/** Default Chat Completions model when OPENAI_MODEL is unset/empty. */
+export const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
+
+/**
+ * Resolve the hosted summarize model from env.
+ * Empty string falls back (matches `env || "gpt-4o-mini"` at historical call sites).
+ * Distinct from #44 `buildUsageEventInsert` which accepts an already-resolved model.
+ */
+export function resolveOpenaiModel(envModel: string | undefined | null): string {
+  return envModel || DEFAULT_OPENAI_MODEL;
+}
+
+export type OpenAiChatCompletionBody = {
+  model: string;
+  temperature: number;
+  service_tier: "priority";
+  messages: { role: "system" | "user"; content: string }[];
+};
+
+/**
+ * Chat Completions body for the hosted summarize path.
+ * Locks Priority Processing (`service_tier: "priority"`) and temperature —
+ * regressions here change latency/cost or drift from the productized prompt.
+ * Distinct from extension own-key `buildOpenAiChatCompletionBody` (#43), which
+ * does not set service_tier.
+ */
+export function buildBackendOpenAiChatBody(args: {
+  model: string;
+  prompt: { system: string; user: string };
+}): OpenAiChatCompletionBody {
+  return {
+    model: args.model,
+    temperature: 0.2,
+    service_tier: "priority",
+    messages: [
+      { role: "system", content: args.prompt.system },
+      { role: "user", content: args.prompt.user },
+    ],
+  };
+}
+
+/**
+ * Extract + parse the assistant JSON summary from a Chat Completions payload.
+ * Empty `choices[0].message.content` must fail closed (do not invent a summary).
+ * Backend historically uses raw JSON.parse (no markdown-fence stripping) —
+ * keep that policy here; client own-key fence handling stays in parse-utils (#18).
+ */
+export function parseOpenAiSummaryContent(data: unknown): Summary {
+  const content = (data as { choices?: { message?: { content?: unknown } }[] })
+    ?.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || !content) {
+    throw new Error("Empty OpenAI response");
+  }
+  return JSON.parse(content) as Summary;
+}

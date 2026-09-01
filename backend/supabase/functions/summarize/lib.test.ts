@@ -1,6 +1,16 @@
 // Unit tests for summarize lib
-import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.168.0/testing/asserts.ts";
-import { getMonthlyQuota, periodStart, decodeJwtPayload, buildPrompt, resolvedSiteUrl } from "./lib.ts";
+import { assertEquals, assertStringIncludes, assertThrows } from "https://deno.land/std@0.168.0/testing/asserts.ts";
+import {
+  getMonthlyQuota,
+  periodStart,
+  decodeJwtPayload,
+  buildPrompt,
+  resolvedSiteUrl,
+  DEFAULT_OPENAI_MODEL,
+  resolveOpenaiModel,
+  buildBackendOpenAiChatBody,
+  parseOpenAiSummaryContent,
+} from "./lib.ts";
 
 // ─── getMonthlyQuota ────────────────────────────────────────────────────────
 
@@ -121,4 +131,67 @@ Deno.test("resolvedSiteUrl - falls back to production when env is localhost", ()
 
 Deno.test("resolvedSiteUrl - falls back to production when env is undefined", () => {
   assertEquals(resolvedSiteUrl(undefined), "https://termsdigest.com");
+});
+
+// ─── resolveOpenaiModel ─────────────────────────────────────────────────────
+
+Deno.test("resolveOpenaiModel - uses env when set, else gpt-4o-mini", () => {
+  assertEquals(resolveOpenaiModel("gpt-4o"), "gpt-4o");
+  assertEquals(resolveOpenaiModel(""), DEFAULT_OPENAI_MODEL);
+  assertEquals(resolveOpenaiModel(undefined), DEFAULT_OPENAI_MODEL);
+  assertEquals(resolveOpenaiModel(null), DEFAULT_OPENAI_MODEL);
+  assertEquals(DEFAULT_OPENAI_MODEL, "gpt-4o-mini");
+});
+
+// ─── buildBackendOpenAiChatBody / parseOpenAiSummaryContent ─────────────────
+
+Deno.test("buildBackendOpenAiChatBody - locks priority tier, temperature, and messages", () => {
+  const body = buildBackendOpenAiChatBody({
+    model: "gpt-4o-mini",
+    prompt: { system: "sys", user: "usr" },
+  });
+  assertEquals(body.model, "gpt-4o-mini");
+  assertEquals(body.temperature, 0.2);
+  assertEquals(body.service_tier, "priority");
+  assertEquals(body.messages, [
+    { role: "system", content: "sys" },
+    { role: "user", content: "usr" },
+  ]);
+});
+
+Deno.test("parseOpenAiSummaryContent - parses assistant JSON content", () => {
+  const summary = {
+    title: "T",
+    tldr: "tl",
+    costs_and_renewal: [],
+    cancellation_and_refunds: [],
+    liability_and_disputes: [],
+    privacy_and_data: [],
+    red_flags: [],
+    quotes: [],
+    confidence: "high",
+  };
+  const parsed = parseOpenAiSummaryContent({
+    choices: [{ message: { content: JSON.stringify(summary) } }],
+  });
+  assertEquals(parsed.title, "T");
+  assertEquals(parsed.confidence, "high");
+});
+
+Deno.test("parseOpenAiSummaryContent - fails closed on empty / missing content", () => {
+  assertThrows(
+    () => parseOpenAiSummaryContent({ choices: [{ message: { content: "" } }] }),
+    Error,
+    "Empty OpenAI response",
+  );
+  assertThrows(
+    () => parseOpenAiSummaryContent({ choices: [{ message: {} }] }),
+    Error,
+    "Empty OpenAI response",
+  );
+  assertThrows(
+    () => parseOpenAiSummaryContent({}),
+    Error,
+    "Empty OpenAI response",
+  );
 });
