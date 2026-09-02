@@ -23,6 +23,10 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import {
+  buildWelcomeMailSendOptions,
+  hasRequiredSmtpConfig,
+} from "./mail-send-utils.ts";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -167,12 +171,12 @@ serve(async (req: Request) => {
   const port = Number(Deno.env.get("SMTP_PORT") || "465");
   const username = Deno.env.get("SMTP_USERNAME");
   const password = Deno.env.get("SMTP_PASSWORD");
-  const fromEmail = Deno.env.get("SMTP_FROM_EMAIL") || "no-reply@termsdigest.com";
-  const fromName = Deno.env.get("SMTP_FROM_NAME") || "TermsDigest";
-  const bcc = Deno.env.get("TRUSTPILOT_AFS_BCC") || "";
+  const fromEmail = Deno.env.get("SMTP_FROM_EMAIL");
+  const fromName = Deno.env.get("SMTP_FROM_NAME");
+  const bccEnv = Deno.env.get("TRUSTPILOT_AFS_BCC");
   const siteUrl = Deno.env.get("SITE_URL") || "https://termsdigest.com";
 
-  if (!host || !username || !password) {
+  if (!hasRequiredSmtpConfig({ host, username, password })) {
     console.error("[send-welcome-email] Missing SMTP config");
     return json({ error: "Server misconfigured (SMTP)" }, 500);
   }
@@ -187,11 +191,14 @@ serve(async (req: Request) => {
   });
 
   try {
+    const sendOpts = buildWelcomeMailSendOptions({
+      email,
+      fromEmail,
+      fromName,
+      bccEnv,
+    });
     await client.send({
-      from: `${fromName} <${fromEmail}>`,
-      to: email,
-      bcc: bcc ? [bcc] : undefined,
-      subject: "Welcome to TermsDigest",
+      ...sendOpts,
       content: buildWelcomeEmailText(siteUrl),
       html: buildWelcomeEmailHtml(siteUrl),
     });

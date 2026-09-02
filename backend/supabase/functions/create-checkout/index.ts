@@ -5,6 +5,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@13.10.0?target=deno";
+import { buildCheckoutSessionParams } from "./session-params.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -108,29 +109,19 @@ serve(async (req: Request) => {
 
     console.log("Creating checkout session for user:", userId);
 
-    // Create Stripe checkout session
-    const sessionParams: Stripe.Checkout.SessionCreateParams = {
-      mode: "subscription",
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
-      success_url: `${siteUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${siteUrl}/pricing`,
-      metadata: {
-        user_id: userId,
-      },
-    };
+    // Prefer existing Stripe customer id; otherwise seed checkout with JWT email.
+    const customerFields = subscription?.stripe_customer_id
+      ? { customer: subscription.stripe_customer_id }
+      : userEmail
+        ? { customer_email: userEmail }
+        : {};
 
-    // Use existing Stripe customer or email
-    if (subscription?.stripe_customer_id) {
-      sessionParams.customer = subscription.stripe_customer_id;
-    } else if (userEmail) {
-      sessionParams.customer_email = userEmail;
-    }
+    const sessionParams = buildCheckoutSessionParams({
+      siteUrl,
+      priceId,
+      userId,
+      customerFields,
+    }) as Stripe.Checkout.SessionCreateParams;
 
     const session = await stripe.checkout.sessions.create(sessionParams);
     console.log("Checkout session created:", session.id);
