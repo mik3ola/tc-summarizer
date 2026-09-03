@@ -5,6 +5,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@13.10.0?target=deno";
+import {
+  buildAlreadyScheduledDeletionResponse,
+  buildDeletionScheduleProfileUpdate,
+  buildNewlyScheduledDeletionResponse,
+  shouldCancelStripeSubscription,
+} from "./deletion-outcomes.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -76,11 +82,9 @@ serve(async (req: Request) => {
     }
 
     if (profile.deletion_scheduled_for) {
-      return json({
-        success: true,
-        deletion_scheduled_for: profile.deletion_scheduled_for,
-        message: "Deletion already scheduled",
-      });
+      return json(
+        buildAlreadyScheduledDeletionResponse(profile.deletion_scheduled_for),
+      );
     }
 
     const { data: sub } = await supabase
@@ -89,7 +93,12 @@ serve(async (req: Request) => {
       .eq("user_id", userId)
       .maybeSingle();
 
-    if (stripeSecretKey && sub?.stripe_subscription_id) {
+    if (
+      shouldCancelStripeSubscription({
+        stripeSecretKey,
+        stripeSubscriptionId: sub?.stripe_subscription_id,
+      })
+    ) {
       try {
         const stripe = new Stripe(stripeSecretKey, {
           apiVersion: "2023-10-16",
@@ -107,7 +116,7 @@ serve(async (req: Request) => {
 
     const { error } = await supabase
       .from("profiles")
-      .update({ deletion_scheduled_for: scheduledForIso })
+      .update(buildDeletionScheduleProfileUpdate(scheduledForIso))
       .eq("user_id", userId);
 
     if (error) {
@@ -115,11 +124,7 @@ serve(async (req: Request) => {
       return json({ error: "Failed to schedule deletion" }, 500);
     }
 
-    return json({
-      success: true,
-      deletion_scheduled_for: scheduledForIso,
-      message: "Account will be permanently deleted in 30 days",
-    });
+    return json(buildNewlyScheduledDeletionResponse(scheduledForIso));
   } catch (err) {
     console.error("Delete account error:", err);
     return json({ error: (err as Error).message || "Internal server error" }, 500);
