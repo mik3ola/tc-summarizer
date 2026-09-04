@@ -91,6 +91,43 @@ Deno.test("buildSubscriptionUpdateData - canceled status sets plan to free", () 
   assertEquals(result.plan, "free");
 });
 
+// past_due / unpaid must keep paid plans (never silently downgrade until canceled).
+Deno.test("buildSubscriptionUpdateData - past_due preserves pro plan and status", () => {
+  const result = buildSubscriptionUpdateData("past_due", false, PERIOD_END, { plan: "pro" }, NOW);
+  assertEquals(result.status, "past_due");
+  assertEquals(result.plan, "pro");
+  assertEquals(result.auto_renew, true);
+  assertEquals(result.downgrade_scheduled_for, null);
+  assertEquals(result.current_period_end, PERIOD_END);
+});
+
+Deno.test("buildSubscriptionUpdateData - unpaid maps to past_due and preserves pro", () => {
+  const result = buildSubscriptionUpdateData("unpaid", false, PERIOD_END, { plan: "pro" }, NOW);
+  assertEquals(result.status, "past_due");
+  assertEquals(result.plan, "pro");
+});
+
+Deno.test("buildSubscriptionUpdateData - past_due preserves enterprise plan", () => {
+  const result = buildSubscriptionUpdateData("past_due", false, PERIOD_END, { plan: "enterprise" }, NOW);
+  assertEquals(result.status, "past_due");
+  assertEquals(result.plan, "enterprise");
+});
+
+Deno.test("buildSubscriptionUpdateData - past_due with cancel_at_period_end still keeps plan", () => {
+  const result = buildSubscriptionUpdateData("past_due", true, PERIOD_END, { plan: "pro" }, NOW);
+  assertEquals(result.status, "past_due");
+  assertEquals(result.plan, "pro");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, PERIOD_END);
+  assertEquals(result.downgrade_reason, "user_requested");
+});
+
+Deno.test("buildSubscriptionUpdateData - past_due without existing plan omits plan field", () => {
+  const result = buildSubscriptionUpdateData("past_due", false, PERIOD_END, null, NOW);
+  assertEquals(result.status, "past_due");
+  assertEquals(result.plan, undefined);
+});
+
 Deno.test("buildSubscriptionUpdateData - no current_period_end means field is omitted", () => {
   const result = buildSubscriptionUpdateData("active", false, null, null, NOW);
   assertEquals(result.current_period_end, undefined);
