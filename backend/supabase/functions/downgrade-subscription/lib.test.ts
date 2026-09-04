@@ -36,6 +36,11 @@ Deno.test("validateRequestBody - valid downgrade_now", () => {
   assertEquals(result, { action: "downgrade_now", reason: "expired" });
 });
 
+Deno.test("validateRequestBody - valid re_enable_auto_renew", () => {
+  const result = validateRequestBody({ action: "re_enable_auto_renew", reason: "user_requested" });
+  assertEquals(result, { action: "re_enable_auto_renew", reason: "user_requested" });
+});
+
 Deno.test("validateRequestBody - defaults reason to user_requested", () => {
   const result = validateRequestBody({ action: "cancel_auto_renew" });
   assertEquals(result.reason, "user_requested");
