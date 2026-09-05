@@ -36,6 +36,11 @@ Deno.test("validateRequestBody - valid downgrade_now", () => {
   assertEquals(result, { action: "downgrade_now", reason: "expired" });
 });
 
+Deno.test("validateRequestBody - accepts payment_failed reason", () => {
+  const result = validateRequestBody({ action: "downgrade_now", reason: "payment_failed" });
+  assertEquals(result, { action: "downgrade_now", reason: "payment_failed" });
+});
+
 Deno.test("validateRequestBody - defaults reason to user_requested", () => {
   const result = validateRequestBody({ action: "cancel_auto_renew" });
   assertEquals(result.reason, "user_requested");
@@ -70,6 +75,14 @@ Deno.test("validateRequestBody - null body throws", () => {
   );
 });
 
+Deno.test("validateRequestBody - non-object body throws", () => {
+  assertThrows(
+    () => validateRequestBody("cancel_auto_renew"),
+    Error,
+    "Invalid request body"
+  );
+});
+
 Deno.test("extractUserId - Bearer token returns sub", () => {
   const jwt = makeJwt({ sub: "user-456" });
   assertEquals(extractUserId(`Bearer ${jwt}`), "user-456");
@@ -83,4 +96,23 @@ Deno.test("extractUserId - no Bearer returns null", () => {
 
 Deno.test("extractUserId - invalid token returns null", () => {
   assertEquals(extractUserId("Bearer invalid"), null);
+});
+
+Deno.test("extractUserId - valid JWT without sub returns null", () => {
+  const jwt = makeJwt({ email: "no-sub@example.com" });
+  assertEquals(extractUserId(`Bearer ${jwt}`), null);
+});
+
+Deno.test("decodeJwtPayload - URL-safe base64 payload with padding", () => {
+  // Real JWTs use URL-safe alphabet; payload length often needs "=" padding.
+  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  const payload = btoa(JSON.stringify({ sub: "url-safe-user" }))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  const jwt = `${header}.${payload}.sig`;
+  assertEquals(decodeJwtPayload(jwt)?.sub, "url-safe-user");
 });

@@ -91,6 +91,33 @@ Deno.test("buildSubscriptionUpdateData - canceled status sets plan to free", () 
   assertEquals(result.plan, "free");
 });
 
+// incomplete maps to free but must not wipe or promote a paid plan to active
+Deno.test("buildSubscriptionUpdateData - incomplete with existing pro keeps plan, status stays free", () => {
+  const result = buildSubscriptionUpdateData("incomplete", false, PERIOD_END, { plan: "pro" }, NOW);
+  assertEquals(result.status, "free");
+  assertEquals(result.plan, "pro");
+  assertEquals(result.auto_renew, true);
+  assertEquals(result.current_period_end, PERIOD_END);
+});
+
+Deno.test("buildSubscriptionUpdateData - incomplete with existing enterprise keeps plan, status stays free", () => {
+  const result = buildSubscriptionUpdateData("incomplete", false, PERIOD_END, { plan: "enterprise" }, NOW);
+  assertEquals(result.status, "free");
+  assertEquals(result.plan, "enterprise");
+});
+
+Deno.test("buildSubscriptionUpdateData - incomplete_expired forces free even with existing pro", () => {
+  const result = buildSubscriptionUpdateData("incomplete_expired", false, null, { plan: "pro" }, NOW);
+  assertEquals(result.status, "canceled");
+  assertEquals(result.plan, "free");
+});
+
+Deno.test("buildSubscriptionUpdateData - existing free plan does not set plan on active", () => {
+  const result = buildSubscriptionUpdateData("active", false, PERIOD_END, { plan: "free" }, NOW);
+  assertEquals(result.status, "active");
+  assertEquals(result.plan, undefined);
+});
+
 Deno.test("buildSubscriptionUpdateData - no current_period_end means field is omitted", () => {
   const result = buildSubscriptionUpdateData("active", false, null, null, NOW);
   assertEquals(result.current_period_end, undefined);
@@ -117,4 +144,13 @@ Deno.test("shouldSkipCreatedEvent - does not skip when existing is free", () => 
 
 Deno.test("shouldSkipCreatedEvent - does not skip when no existing record", () => {
   assertEquals(shouldSkipCreatedEvent(null), false);
+});
+
+// Intentional asymmetry: only pro+active skips; enterprise must still process created
+Deno.test("shouldSkipCreatedEvent - does not skip enterprise+active", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "enterprise", status: "active" }), false);
+});
+
+Deno.test("shouldSkipCreatedEvent - does not skip pro+past_due", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "pro", status: "past_due" }), false);
 });
