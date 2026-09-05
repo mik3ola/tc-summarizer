@@ -87,6 +87,21 @@ Deno.test("decodeJwtPayload - malformed base64 returns null", () => {
   assertEquals(decodeJwtPayload("a.!!!.c"), null);
 });
 
+Deno.test("decodeJwtPayload - URL-safe base64 payload with padding", () => {
+  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  const payload = btoa(JSON.stringify({ sub: "url-safe-user", role: "authenticated" }))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  const jwt = `${header}.${payload}.sig`;
+  const result = decodeJwtPayload(jwt);
+  assertEquals(result?.sub, "url-safe-user");
+  assertEquals(result?.role, "authenticated");
+});
+
 // ─── buildPrompt ────────────────────────────────────────────────────────────
 
 Deno.test("buildPrompt - includes url and text in user prompt", () => {
@@ -121,4 +136,8 @@ Deno.test("resolvedSiteUrl - falls back to production when env is localhost", ()
 
 Deno.test("resolvedSiteUrl - falls back to production when env is undefined", () => {
   assertEquals(resolvedSiteUrl(undefined), "https://termsdigest.com");
+});
+
+Deno.test("resolvedSiteUrl - falls back to production when env is empty string", () => {
+  assertEquals(resolvedSiteUrl(""), "https://termsdigest.com");
 });
