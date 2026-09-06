@@ -41,6 +41,11 @@ Deno.test("validateRequestBody - defaults reason to user_requested", () => {
   assertEquals(result.reason, "user_requested");
 });
 
+Deno.test("validateRequestBody - empty string reason defaults to user_requested", () => {
+  const result = validateRequestBody({ action: "cancel_auto_renew", reason: "" });
+  assertEquals(result.reason, "user_requested");
+});
+
 Deno.test("validateRequestBody - invalid reason defaults to user_requested", () => {
   const result = validateRequestBody({ action: "downgrade_now", reason: "unknown" });
   assertEquals(result.reason, "user_requested");
@@ -49,6 +54,14 @@ Deno.test("validateRequestBody - invalid reason defaults to user_requested", () 
 Deno.test("validateRequestBody - invalid action throws", () => {
   assertThrows(
     () => validateRequestBody({ action: "invalid" }),
+    Error,
+    "Invalid action"
+  );
+});
+
+Deno.test("validateRequestBody - empty string action throws", () => {
+  assertThrows(
+    () => validateRequestBody({ action: "" }),
     Error,
     "Invalid action"
   );
@@ -70,6 +83,23 @@ Deno.test("validateRequestBody - null body throws", () => {
   );
 });
 
+Deno.test("validateRequestBody - number body throws", () => {
+  assertThrows(
+    () => validateRequestBody(42),
+    Error,
+    "Invalid request body"
+  );
+});
+
+// Arrays are typeof "object", so they pass the body gate and fail on missing action.
+Deno.test("validateRequestBody - array body throws invalid action", () => {
+  assertThrows(
+    () => validateRequestBody(["cancel_auto_renew"]),
+    Error,
+    "Invalid action"
+  );
+});
+
 Deno.test("extractUserId - Bearer token returns sub", () => {
   const jwt = makeJwt({ sub: "user-456" });
   assertEquals(extractUserId(`Bearer ${jwt}`), "user-456");
@@ -83,4 +113,10 @@ Deno.test("extractUserId - no Bearer returns null", () => {
 
 Deno.test("extractUserId - invalid token returns null", () => {
   assertEquals(extractUserId("Bearer invalid"), null);
+});
+
+Deno.test("extractUserId - empty string sub is returned as empty string", () => {
+  // ?? only nullishes null/undefined; empty sub must not become a fabricated id.
+  const jwt = makeJwt({ sub: "" });
+  assertEquals(extractUserId(`Bearer ${jwt}`), "");
 });
