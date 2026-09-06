@@ -13,6 +13,11 @@ Deno.test("getMonthlyQuota - unknown plan defaults to 5", () => {
   assertEquals(getMonthlyQuota("unknown"), 5);
 });
 
+Deno.test("getMonthlyQuota - plan matching is case-sensitive", () => {
+  assertEquals(getMonthlyQuota("PRO"), 5);
+  assertEquals(getMonthlyQuota("Enterprise"), 5);
+});
+
 Deno.test("getMonthlyQuota - pro plan returns 50", () => {
   assertEquals(getMonthlyQuota("pro"), 50);
 });
@@ -49,6 +54,11 @@ Deno.test("periodStart - mid second period returns correct start", () => {
 Deno.test("periodStart - exactly 60 days later starts period 2", () => {
   const result = periodStart("2026-01-20", new Date("2026-03-21T00:00:00Z"));
   assertEquals(result, "2026-03-21");
+});
+
+Deno.test("periodStart - exactly 90 days later starts period 3", () => {
+  const result = periodStart("2026-01-20", new Date("2026-04-20T00:00:00Z"));
+  assertEquals(result, "2026-04-20");
 });
 
 Deno.test("periodStart - today before anchor clamps to anchor", () => {
@@ -121,4 +131,16 @@ Deno.test("resolvedSiteUrl - falls back to production when env is localhost", ()
 
 Deno.test("resolvedSiteUrl - falls back to production when env is undefined", () => {
   assertEquals(resolvedSiteUrl(undefined), "https://termsdigest.com");
+});
+
+Deno.test("resolvedSiteUrl - rejects any env value containing localhost substring", () => {
+  assertEquals(
+    resolvedSiteUrl("https://evil.example/?ref=localhost"),
+    "https://termsdigest.com",
+  );
+});
+
+Deno.test("resolvedSiteUrl - does not treat 127.0.0.1 as localhost", () => {
+  // Historical includes("localhost") gate only; keep until product widens loopback rejection.
+  assertEquals(resolvedSiteUrl("http://127.0.0.1:3000"), "http://127.0.0.1:3000");
 });

@@ -91,10 +91,30 @@ Deno.test("buildSubscriptionUpdateData - canceled status sets plan to free", () 
   assertEquals(result.plan, "free");
 });
 
+// Canceled wins over plan-preservation even when cancel_at_period_end is also set.
+Deno.test("buildSubscriptionUpdateData - canceled with cancel_at_period_end still forces free plan", () => {
+  const result = buildSubscriptionUpdateData("canceled", true, PERIOD_END, { plan: "pro" }, NOW);
+  assertEquals(result.status, "canceled");
+  assertEquals(result.plan, "free");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, PERIOD_END);
+  assertEquals(result.downgrade_reason, "user_requested");
+  assertEquals(result.current_period_end, PERIOD_END);
+});
+
+// incomplete with no prior row must not invent a plan (checkout owns first plan write).
+Deno.test("buildSubscriptionUpdateData - incomplete without existing plan omits plan field", () => {
+  const result = buildSubscriptionUpdateData("incomplete", false, PERIOD_END, null, NOW);
+  assertEquals(result.status, "free");
+  assertEquals(result.plan, undefined);
+  assertEquals(result.current_period_end, PERIOD_END);
+});
+
 Deno.test("buildSubscriptionUpdateData - no current_period_end means field is omitted", () => {
   const result = buildSubscriptionUpdateData("active", false, null, null, NOW);
   assertEquals(result.current_period_end, undefined);
 });
+
 
 Deno.test("buildSubscriptionUpdateData - updated_at is set to provided now", () => {
   const result = buildSubscriptionUpdateData("active", false, null, null, NOW);
@@ -117,4 +137,13 @@ Deno.test("shouldSkipCreatedEvent - does not skip when existing is free", () => 
 
 Deno.test("shouldSkipCreatedEvent - does not skip when no existing record", () => {
   assertEquals(shouldSkipCreatedEvent(null), false);
+});
+
+// Skip requires status === "active" literally; trialing is coerced only in update payloads.
+Deno.test("shouldSkipCreatedEvent - does not skip pro+trialing", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "pro", status: "trialing" }), false);
+});
+
+Deno.test("shouldSkipCreatedEvent - does not skip pro when status is missing", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "pro" }), false);
 });
