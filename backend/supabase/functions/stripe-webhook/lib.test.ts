@@ -91,6 +91,24 @@ Deno.test("buildSubscriptionUpdateData - canceled status sets plan to free", () 
   assertEquals(result.plan, "free");
 });
 
+// Enterprise cancel must free the plan the same way Pro does (do not leave paid entitlement).
+Deno.test("buildSubscriptionUpdateData - canceled with existing enterprise forces free plan", () => {
+  const result = buildSubscriptionUpdateData("canceled", false, PERIOD_END, { plan: "enterprise" }, NOW);
+  assertEquals(result.status, "canceled");
+  assertEquals(result.plan, "free");
+  assertEquals(result.current_period_end, PERIOD_END);
+});
+
+// Scheduled cancel while still active keeps paid plan and records the period-end downgrade.
+Deno.test("buildSubscriptionUpdateData - active cancel_at_period_end keeps enterprise and schedules downgrade", () => {
+  const result = buildSubscriptionUpdateData("active", true, PERIOD_END, { plan: "enterprise" }, NOW);
+  assertEquals(result.status, "active");
+  assertEquals(result.plan, "enterprise");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, PERIOD_END);
+  assertEquals(result.downgrade_reason, "user_requested");
+});
+
 Deno.test("buildSubscriptionUpdateData - no current_period_end means field is omitted", () => {
   const result = buildSubscriptionUpdateData("active", false, null, null, NOW);
   assertEquals(result.current_period_end, undefined);
@@ -117,4 +135,14 @@ Deno.test("shouldSkipCreatedEvent - does not skip when existing is free", () => 
 
 Deno.test("shouldSkipCreatedEvent - does not skip when no existing record", () => {
   assertEquals(shouldSkipCreatedEvent(null), false);
+});
+
+// Empty-string status is present but not literally "active" — do not treat like missing-or-active.
+Deno.test("shouldSkipCreatedEvent - does not skip pro with empty-string status", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "pro", status: "" }), false);
+});
+
+// Plan match is exact; wrong case must not suppress subscription.created handling.
+Deno.test("shouldSkipCreatedEvent - does not skip wrong-case Pro plan", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "Pro", status: "active" }), false);
 });

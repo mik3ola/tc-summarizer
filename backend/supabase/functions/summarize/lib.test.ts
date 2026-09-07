@@ -13,6 +13,11 @@ Deno.test("getMonthlyQuota - unknown plan defaults to 5", () => {
   assertEquals(getMonthlyQuota("unknown"), 5);
 });
 
+Deno.test("getMonthlyQuota - trailing whitespace does not match pro", () => {
+  assertEquals(getMonthlyQuota("pro "), 5);
+  assertEquals(getMonthlyQuota(" pro"), 5);
+});
+
 Deno.test("getMonthlyQuota - pro plan returns 50", () => {
   assertEquals(getMonthlyQuota("pro"), 50);
 });
@@ -49,6 +54,13 @@ Deno.test("periodStart - mid second period returns correct start", () => {
 Deno.test("periodStart - exactly 60 days later starts period 2", () => {
   const result = periodStart("2026-01-20", new Date("2026-03-21T00:00:00Z"));
   assertEquals(result, "2026-03-21");
+});
+
+// Cross-year math must stay on UTC calendar days (Dec → Jan) without local TZ drift.
+Deno.test("periodStart - crosses year boundary into next period", () => {
+  // anchor 2025-12-15, today 2026-01-20 → 36 days → period 1 start = 2026-01-14
+  const result = periodStart("2025-12-15", new Date("2026-01-20T00:00:00Z"));
+  assertEquals(result, "2026-01-14");
 });
 
 Deno.test("periodStart - today before anchor clamps to anchor", () => {
@@ -121,4 +133,9 @@ Deno.test("resolvedSiteUrl - falls back to production when env is localhost", ()
 
 Deno.test("resolvedSiteUrl - falls back to production when env is undefined", () => {
   assertEquals(resolvedSiteUrl(undefined), "https://termsdigest.com");
+});
+
+Deno.test("resolvedSiteUrl - localhost rejection is case-sensitive", () => {
+  // Historical includes("localhost") only; uppercase LOCALHOST is not rejected.
+  assertEquals(resolvedSiteUrl("http://LOCALHOST:3000"), "http://LOCALHOST:3000");
 });
