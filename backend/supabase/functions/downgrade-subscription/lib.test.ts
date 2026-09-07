@@ -46,6 +46,12 @@ Deno.test("validateRequestBody - invalid reason defaults to user_requested", () 
   assertEquals(result.reason, "user_requested");
 });
 
+// null is falsy under `|| "user_requested"` (distinct from empty-string reason coverage elsewhere).
+Deno.test("validateRequestBody - null reason defaults to user_requested", () => {
+  const result = validateRequestBody({ action: "cancel_auto_renew", reason: null });
+  assertEquals(result.reason, "user_requested");
+});
+
 Deno.test("validateRequestBody - invalid action throws", () => {
   assertThrows(
     () => validateRequestBody({ action: "invalid" }),
@@ -70,6 +76,22 @@ Deno.test("validateRequestBody - null body throws", () => {
   );
 });
 
+Deno.test("validateRequestBody - boolean body throws", () => {
+  assertThrows(
+    () => validateRequestBody(true),
+    Error,
+    "Invalid request body"
+  );
+});
+
+Deno.test("validateRequestBody - undefined body throws", () => {
+  assertThrows(
+    () => validateRequestBody(undefined),
+    Error,
+    "Invalid request body"
+  );
+});
+
 Deno.test("extractUserId - Bearer token returns sub", () => {
   const jwt = makeJwt({ sub: "user-456" });
   assertEquals(extractUserId(`Bearer ${jwt}`), "user-456");
@@ -83,4 +105,10 @@ Deno.test("extractUserId - no Bearer returns null", () => {
 
 Deno.test("extractUserId - invalid token returns null", () => {
   assertEquals(extractUserId("Bearer invalid"), null);
+});
+
+// Scheme match is case-sensitive (`Bearer ` only); lowercase must not authenticate.
+Deno.test("extractUserId - lowercase bearer scheme is rejected", () => {
+  const jwt = makeJwt({ sub: "user-789" });
+  assertEquals(extractUserId(`bearer ${jwt}`), null);
 });
