@@ -57,6 +57,12 @@ Deno.test("periodStart - today before anchor clamps to anchor", () => {
   assertEquals(result, "2026-03-01");
 });
 
+// Leap-day anchors must advance by exact 30-day UTC periods (not calendar months).
+Deno.test("periodStart - leap-day anchor advances by 30 UTC days", () => {
+  const result = periodStart("2024-02-29", new Date("2024-03-30T12:00:00Z"));
+  assertEquals(result, "2024-03-30");
+});
+
 Deno.test("periodStart - returns YYYY-MM-DD format string", () => {
   const result = periodStart("2026-01-15", new Date("2026-01-15T00:00:00Z"));
   assertEquals(typeof result, "string");
@@ -121,4 +127,15 @@ Deno.test("resolvedSiteUrl - falls back to production when env is localhost", ()
 
 Deno.test("resolvedSiteUrl - falls back to production when env is undefined", () => {
   assertEquals(resolvedSiteUrl(undefined), "https://termsdigest.com");
+});
+
+// Historical includes("localhost") is a substring check — hostnames containing that token are rejected.
+Deno.test("resolvedSiteUrl - rejects hostnames that contain localhost as a substring", () => {
+  assertEquals(resolvedSiteUrl("https://mylocalhost.com"), "https://termsdigest.com");
+  assertEquals(resolvedSiteUrl("https://localhost.example.com"), "https://termsdigest.com");
+});
+
+// Whitespace-only is truthy and does not include "localhost", so it is kept (not coerced to "").
+Deno.test("resolvedSiteUrl - keeps whitespace-only env value", () => {
+  assertEquals(resolvedSiteUrl("   "), "   ");
 });

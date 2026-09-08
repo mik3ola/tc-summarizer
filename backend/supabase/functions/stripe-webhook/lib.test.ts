@@ -91,6 +91,53 @@ Deno.test("buildSubscriptionUpdateData - canceled status sets plan to free", () 
   assertEquals(result.plan, "free");
 });
 
+// incomplete_expired maps to canceled and always frees entitlement (enterprise included).
+Deno.test("buildSubscriptionUpdateData - incomplete_expired with enterprise forces free plan", () => {
+  const result = buildSubscriptionUpdateData(
+    "incomplete_expired",
+    false,
+    PERIOD_END,
+    { plan: "enterprise" },
+    NOW,
+  );
+  assertEquals(result.status, "canceled");
+  assertEquals(result.plan, "free");
+  assertEquals(result.current_period_end, PERIOD_END);
+});
+
+// incomplete + cancel_at_period_end still preserves paid plan while recording the schedule.
+Deno.test("buildSubscriptionUpdateData - incomplete with cancel_at_period_end keeps pro and schedules", () => {
+  const result = buildSubscriptionUpdateData("incomplete", true, PERIOD_END, { plan: "pro" }, NOW);
+  assertEquals(result.status, "free");
+  assertEquals(result.plan, "pro");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, PERIOD_END);
+  assertEquals(result.downgrade_reason, "user_requested");
+});
+
+// Plan preservation is exact-match; wrong-case must not invent a plan write.
+Deno.test("buildSubscriptionUpdateData - wrong-case existing plan Pro does not set plan on active", () => {
+  const result = buildSubscriptionUpdateData("active", false, PERIOD_END, { plan: "Pro" }, NOW);
+  assertEquals(result.status, "active");
+  assertEquals(result.plan, undefined);
+});
+
+// Empty string is falsy — must omit current_period_end (not write "").
+Deno.test("buildSubscriptionUpdateData - empty-string currentPeriodEnd omits field", () => {
+  const result = buildSubscriptionUpdateData("active", false, "", { plan: "pro" }, NOW);
+  assertEquals(result.current_period_end, undefined);
+  assertEquals(result.plan, "pro");
+});
+
+// trialing + scheduled cancel: status coerced to active, plan kept, downgrade scheduled.
+Deno.test("buildSubscriptionUpdateData - trialing cancel_at_period_end keeps pro and coerces status active", () => {
+  const result = buildSubscriptionUpdateData("trialing", true, PERIOD_END, { plan: "pro" }, NOW);
+  assertEquals(result.status, "active");
+  assertEquals(result.plan, "pro");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, PERIOD_END);
+});
+
 Deno.test("buildSubscriptionUpdateData - no current_period_end means field is omitted", () => {
   const result = buildSubscriptionUpdateData("active", false, null, null, NOW);
   assertEquals(result.current_period_end, undefined);
@@ -117,4 +164,13 @@ Deno.test("shouldSkipCreatedEvent - does not skip when existing is free", () => 
 
 Deno.test("shouldSkipCreatedEvent - does not skip when no existing record", () => {
   assertEquals(shouldSkipCreatedEvent(null), false);
+});
+
+// Skip gate is pro+active only; enterprise past_due must still process created.
+Deno.test("shouldSkipCreatedEvent - does not skip enterprise+past_due", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "enterprise", status: "past_due" }), false);
+});
+
+Deno.test("mapStripeStatus - paused maps to free (unknown Stripe status)", () => {
+  assertEquals(mapStripeStatus("paused"), "free");
 });
