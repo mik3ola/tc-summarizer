@@ -70,6 +70,20 @@ Deno.test("validateRequestBody - null body throws", () => {
   );
 });
 
+// Non-string reason is coerced via || / includes; numeric values must not pass as custom reasons.
+Deno.test("validateRequestBody - numeric reason defaults to user_requested", () => {
+  const result = validateRequestBody({ action: "cancel_auto_renew", reason: 0 });
+  assertEquals(result.reason, "user_requested");
+});
+
+Deno.test("validateRequestBody - whitespace-padded action throws", () => {
+  assertThrows(
+    () => validateRequestBody({ action: " cancel_auto_renew " }),
+    Error,
+    "Invalid action"
+  );
+});
+
 Deno.test("extractUserId - Bearer token returns sub", () => {
   const jwt = makeJwt({ sub: "user-456" });
   assertEquals(extractUserId(`Bearer ${jwt}`), "user-456");
@@ -83,4 +97,15 @@ Deno.test("extractUserId - no Bearer returns null", () => {
 
 Deno.test("extractUserId - invalid token returns null", () => {
   assertEquals(extractUserId("Bearer invalid"), null);
+});
+
+// Scheme match is exact "Bearer " (capital B + space); all-caps fails the same way as lowercase.
+Deno.test("extractUserId - uppercase BEARER scheme is rejected", () => {
+  const jwt = makeJwt({ sub: "user-789" });
+  assertEquals(extractUserId(`BEARER ${jwt}`), null);
+});
+
+Deno.test("extractUserId - Bearer without trailing space is rejected", () => {
+  const jwt = makeJwt({ sub: "user-789" });
+  assertEquals(extractUserId(`Bearer${jwt}`), null);
 });
