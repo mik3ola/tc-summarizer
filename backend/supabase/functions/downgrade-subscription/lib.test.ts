@@ -46,6 +46,38 @@ Deno.test("validateRequestBody - invalid reason defaults to user_requested", () 
   assertEquals(result.reason, "user_requested");
 });
 
+Deno.test("validateRequestBody - accepts expired reason", () => {
+  const result = validateRequestBody({ action: "downgrade_now", reason: "expired" });
+  assertEquals(result, { action: "downgrade_now", reason: "expired" });
+});
+
+// Reason matching is exact; wrong-case must not widen the allowlist.
+Deno.test("validateRequestBody - wrong-case reason defaults to user_requested", () => {
+  assertEquals(
+    validateRequestBody({ action: "cancel_auto_renew", reason: "EXPIRED" }).reason,
+    "user_requested",
+  );
+  assertEquals(
+    validateRequestBody({ action: "cancel_auto_renew", reason: "Payment_Failed" }).reason,
+    "user_requested",
+  );
+});
+
+// Non-string truthy reasons fail includes() and fall back (do not throw).
+Deno.test("validateRequestBody - object reason defaults to user_requested", () => {
+  const result = validateRequestBody({ action: "re_enable_auto_renew", reason: { code: "x" } });
+  assertEquals(result.reason, "user_requested");
+  assertEquals(result.action, "re_enable_auto_renew");
+});
+
+Deno.test("validateRequestBody - number action throws", () => {
+  assertThrows(
+    () => validateRequestBody({ action: 1 }),
+    Error,
+    "Invalid action",
+  );
+});
+
 Deno.test("validateRequestBody - invalid action throws", () => {
   assertThrows(
     () => validateRequestBody({ action: "invalid" }),
@@ -83,4 +115,15 @@ Deno.test("extractUserId - no Bearer returns null", () => {
 
 Deno.test("extractUserId - invalid token returns null", () => {
   assertEquals(extractUserId("Bearer invalid"), null);
+});
+
+// "Bearer " prefix match alone is not enough — empty remainder must decode-fail to null.
+Deno.test("extractUserId - Bearer with empty token returns null", () => {
+  assertEquals(extractUserId("Bearer "), null);
+});
+
+// Extra space after the scheme only pollutes the JWT header segment; payload still decodes.
+Deno.test("extractUserId - extra space after Bearer still returns sub", () => {
+  const jwt = makeJwt({ sub: "user-789" });
+  assertEquals(extractUserId(`Bearer  ${jwt}`), "user-789");
 });

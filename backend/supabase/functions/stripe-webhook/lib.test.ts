@@ -36,6 +36,13 @@ Deno.test("mapStripeStatus - unknown → free", () => {
   assertEquals(mapStripeStatus(""), "free");
 });
 
+// Status matching is exact; wrong-case Stripe enums must not accidentally map to paid.
+Deno.test("mapStripeStatus - wrong-case Active/CANCELED map to free", () => {
+  assertEquals(mapStripeStatus("Active"), "free");
+  assertEquals(mapStripeStatus("CANCELED"), "free");
+  assertEquals(mapStripeStatus("Past_Due"), "free");
+});
+
 // ─── buildSubscriptionUpdateData ────────────────────────────────────────────
 
 Deno.test("buildSubscriptionUpdateData - active, auto-renew on, no existing plan", () => {
@@ -117,4 +124,74 @@ Deno.test("shouldSkipCreatedEvent - does not skip when existing is free", () => 
 
 Deno.test("shouldSkipCreatedEvent - does not skip when no existing record", () => {
   assertEquals(shouldSkipCreatedEvent(null), false);
+});
+
+// unpaid is adjacent to past_due (#56) but must preserve Enterprise the same way.
+Deno.test("buildSubscriptionUpdateData - unpaid preserves enterprise plan", () => {
+  const result = buildSubscriptionUpdateData("unpaid", false, PERIOD_END, { plan: "enterprise" }, NOW);
+  assertEquals(result.status, "past_due");
+  assertEquals(result.plan, "enterprise");
+  assertEquals(result.auto_renew, true);
+  assertEquals(result.downgrade_scheduled_for, null);
+});
+
+// unpaid + scheduled cancel must keep paid plan (symmetric to past_due+cancel in #56).
+Deno.test("buildSubscriptionUpdateData - unpaid with cancel_at_period_end keeps pro and schedules", () => {
+  const result = buildSubscriptionUpdateData("unpaid", true, PERIOD_END, { plan: "pro" }, NOW);
+  assertEquals(result.status, "past_due");
+  assertEquals(result.plan, "pro");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, PERIOD_END);
+  assertEquals(result.downgrade_reason, "user_requested");
+});
+
+// incomplete_expired is canceled-mapped; cancel_at_period_end must not preserve paid plan.
+Deno.test("buildSubscriptionUpdateData - incomplete_expired with cancel_at_period_end still forces free", () => {
+  const result = buildSubscriptionUpdateData(
+    "incomplete_expired",
+    true,
+    PERIOD_END,
+    { plan: "pro" },
+    NOW,
+  );
+  assertEquals(result.status, "canceled");
+  assertEquals(result.plan, "free");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, PERIOD_END);
+  assertEquals(result.downgrade_reason, "user_requested");
+});
+
+// incomplete + cancel schedule must keep Enterprise (symmetric to Pro path in #60).
+Deno.test("buildSubscriptionUpdateData - incomplete with cancel_at_period_end keeps enterprise and schedules", () => {
+  const result = buildSubscriptionUpdateData(
+    "incomplete",
+    true,
+    PERIOD_END,
+    { plan: "enterprise" },
+    NOW,
+  );
+  assertEquals(result.status, "free");
+  assertEquals(result.plan, "enterprise");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, PERIOD_END);
+  assertEquals(result.downgrade_reason, "user_requested");
+});
+
+// Explicit cancel with no prior row still writes plan free (checkout must not leave orphan paid).
+Deno.test("buildSubscriptionUpdateData - canceled with no existing plan still sets free", () => {
+  const result = buildSubscriptionUpdateData("canceled", false, null, null, NOW);
+  assertEquals(result.status, "canceled");
+  assertEquals(result.plan, "free");
+  assertEquals(result.auto_renew, true);
+  assertEquals(result.current_period_end, undefined);
+});
+
+// Skip gate is pro+active only; enterprise trialing must still process created.
+Deno.test("shouldSkipCreatedEvent - does not skip enterprise+trialing", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "enterprise", status: "trialing" }), false);
+});
+
+// Empty plan string must not be treated as pro.
+Deno.test("shouldSkipCreatedEvent - does not skip empty plan with active status", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "", status: "active" }), false);
 });
