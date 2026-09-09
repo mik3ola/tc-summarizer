@@ -13,6 +13,12 @@ Deno.test("getMonthlyQuota - unknown plan defaults to 5", () => {
   assertEquals(getMonthlyQuota("unknown"), 5);
 });
 
+// Leading whitespace is not trimmed — must not accidentally grant Pro quota.
+Deno.test("getMonthlyQuota - leading whitespace does not match pro", () => {
+  assertEquals(getMonthlyQuota(" pro"), 5);
+  assertEquals(getMonthlyQuota(" enterprise"), 5);
+});
+
 Deno.test("getMonthlyQuota - pro plan returns 50", () => {
   assertEquals(getMonthlyQuota("pro"), 50);
 });
@@ -31,6 +37,12 @@ Deno.test("periodStart - anchor day returns anchor on same day", () => {
 Deno.test("periodStart - day before anchor is still in previous period", () => {
   // anchor 2026-01-20, today 2026-02-18 → 29 days elapsed → still period 0
   const result = periodStart("2026-01-20", new Date("2026-02-18T12:00:00Z"));
+  assertEquals(result, "2026-01-20");
+});
+
+// Period math uses UTC calendar date only — late UTC times must not roll the day early.
+Deno.test("periodStart - uses UTC date so late UTC time stays on same period day", () => {
+  const result = periodStart("2026-01-20", new Date("2026-02-18T23:59:59Z"));
   assertEquals(result, "2026-01-20");
 });
 
@@ -121,4 +133,9 @@ Deno.test("resolvedSiteUrl - falls back to production when env is localhost", ()
 
 Deno.test("resolvedSiteUrl - falls back to production when env is undefined", () => {
   assertEquals(resolvedSiteUrl(undefined), "https://termsdigest.com");
+});
+
+// Historical includes("localhost") gate only — IPv6 loopback is kept (like 127.0.0.1 in #58).
+Deno.test("resolvedSiteUrl - does not treat IPv6 loopback as localhost", () => {
+  assertEquals(resolvedSiteUrl("http://[::1]:3000"), "http://[::1]:3000");
 });
