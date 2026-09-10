@@ -46,6 +46,31 @@ Deno.test("validateRequestBody - invalid reason defaults to user_requested", () 
   assertEquals(result.reason, "user_requested");
 });
 
+// boolean false is falsy under `|| "user_requested"` (distinct from null / numeric 0 cases elsewhere).
+Deno.test("validateRequestBody - false reason defaults to user_requested", () => {
+  const result = validateRequestBody({ action: "cancel_auto_renew", reason: false });
+  assertEquals(result.reason, "user_requested");
+  assertEquals(result.action, "cancel_auto_renew");
+});
+
+// null action fails the truthy gate the same way as missing action.
+Deno.test("validateRequestBody - null action throws", () => {
+  assertThrows(
+    () => validateRequestBody({ action: null }),
+    Error,
+    "Invalid action",
+  );
+});
+
+// Non-string truthy action fails includes() and must not be coerced.
+Deno.test("validateRequestBody - boolean true action throws", () => {
+  assertThrows(
+    () => validateRequestBody({ action: true }),
+    Error,
+    "Invalid action",
+  );
+});
+
 Deno.test("validateRequestBody - invalid action throws", () => {
   assertThrows(
     () => validateRequestBody({ action: "invalid" }),
@@ -83,4 +108,21 @@ Deno.test("extractUserId - no Bearer returns null", () => {
 
 Deno.test("extractUserId - invalid token returns null", () => {
   assertEquals(extractUserId("Bearer invalid"), null);
+});
+
+// Numeric sub is returned as-is (?? only nullishes null/undefined) — callers must not assume string.
+Deno.test("extractUserId - numeric sub is returned as number", () => {
+  const jwt = makeJwt({ sub: 42 });
+  const sub = extractUserId(`Bearer ${jwt}`) as unknown;
+  assertEquals(sub, 42 as unknown);
+});
+
+// Padding loop must handle payloads whose base64 length % 4 === 2 (needs "==").
+Deno.test("decodeJwtPayload - pads when base64 length mod 4 is 2", () => {
+  // "{\"a\":1}" → eyJhIjoxfQ (10 chars → needs "==")
+  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const payload = btoa('{"a\":1}').replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  assertEquals(payload.length % 4, 2);
+  const result = decodeJwtPayload(`${header}.${payload}.sig`) as unknown;
+  assertEquals((result as { a: number }).a, 1);
 });
