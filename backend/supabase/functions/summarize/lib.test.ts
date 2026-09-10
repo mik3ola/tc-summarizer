@@ -13,6 +13,13 @@ Deno.test("getMonthlyQuota - unknown plan defaults to 5", () => {
   assertEquals(getMonthlyQuota("unknown"), 5);
 });
 
+// Embedded whitespace/control chars are not trimmed — must not grant Pro/Enterprise quota.
+Deno.test("getMonthlyQuota - tab or newline in plan does not match pro", () => {
+  assertEquals(getMonthlyQuota("pro\t"), 5);
+  assertEquals(getMonthlyQuota("\nenterprise"), 5);
+  assertEquals(getMonthlyQuota("pro\n"), 5);
+});
+
 Deno.test("getMonthlyQuota - pro plan returns 50", () => {
   assertEquals(getMonthlyQuota("pro"), 50);
 });
@@ -61,6 +68,14 @@ Deno.test("periodStart - returns YYYY-MM-DD format string", () => {
   const result = periodStart("2026-01-15", new Date("2026-01-15T00:00:00Z"));
   assertEquals(typeof result, "string");
   assertEquals(result.length, 10);
+});
+
+// Far-future dates must advance by exact 30-day UTC periods (not calendar months).
+Deno.test("periodStart - multi-year span uses 30-day periods", () => {
+  // anchor 2024-01-01, today 2026-01-01 → 731 days → floor(731/30)=24 periods
+  // 24 * 30 = 720 days → 2024-01-01 + 720d = 2025-12-21
+  const result = periodStart("2024-01-01", new Date("2026-01-01T12:00:00Z"));
+  assertEquals(result, "2025-12-21");
 });
 
 // ─── decodeJwtPayload ───────────────────────────────────────────────────────
@@ -121,4 +136,17 @@ Deno.test("resolvedSiteUrl - falls back to production when env is localhost", ()
 
 Deno.test("resolvedSiteUrl - falls back to production when env is undefined", () => {
   assertEquals(resolvedSiteUrl(undefined), "https://termsdigest.com");
+});
+
+// Unbracketed ::1 is kept — historical includes("localhost") gate only (like 127.0.0.1 / [::1]).
+Deno.test("resolvedSiteUrl - does not treat unbracketed ::1 as localhost", () => {
+  assertEquals(resolvedSiteUrl("http://::1:3000"), "http://::1:3000");
+});
+
+Deno.test("buildPrompt - empty url and text still include schema keys", () => {
+  const result = buildPrompt("", "");
+  assertStringIncludes(result.user, "Page URL: ");
+  assertStringIncludes(result.user, "red_flags");
+  assertStringIncludes(result.user, "quotes");
+  assertEquals(result.system.length > 0, true);
 });

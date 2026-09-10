@@ -118,3 +118,58 @@ Deno.test("shouldSkipCreatedEvent - does not skip when existing is free", () => 
 Deno.test("shouldSkipCreatedEvent - does not skip when no existing record", () => {
   assertEquals(shouldSkipCreatedEvent(null), false);
 });
+
+// paused maps to free (not canceled) — paid plan must still be preserved until explicit cancel.
+Deno.test("buildSubscriptionUpdateData - paused preserves pro plan with free status", () => {
+  const result = buildSubscriptionUpdateData("paused", false, PERIOD_END, { plan: "pro" }, NOW);
+  assertEquals(result.status, "free");
+  assertEquals(result.plan, "pro");
+  assertEquals(result.auto_renew, true);
+  assertEquals(result.downgrade_scheduled_for, null);
+  assertEquals(result.current_period_end, PERIOD_END);
+});
+
+Deno.test("buildSubscriptionUpdateData - paused preserves enterprise plan with free status", () => {
+  const result = buildSubscriptionUpdateData("paused", false, PERIOD_END, { plan: "enterprise" }, NOW);
+  assertEquals(result.status, "free");
+  assertEquals(result.plan, "enterprise");
+});
+
+// Scheduled cancel while paused still keeps entitlement and records the period-end downgrade.
+Deno.test("buildSubscriptionUpdateData - paused with cancel_at_period_end keeps pro and schedules", () => {
+  const result = buildSubscriptionUpdateData("paused", true, PERIOD_END, { plan: "pro" }, NOW);
+  assertEquals(result.status, "free");
+  assertEquals(result.plan, "pro");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, PERIOD_END);
+  assertEquals(result.downgrade_reason, "user_requested");
+});
+
+// past_due + cancel must keep Enterprise (symmetric to Pro path covered elsewhere).
+Deno.test("buildSubscriptionUpdateData - past_due with cancel_at_period_end keeps enterprise and schedules", () => {
+  const result = buildSubscriptionUpdateData("past_due", true, PERIOD_END, { plan: "enterprise" }, NOW);
+  assertEquals(result.status, "past_due");
+  assertEquals(result.plan, "enterprise");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, PERIOD_END);
+  assertEquals(result.downgrade_reason, "user_requested");
+});
+
+// unpaid + cancel must keep Enterprise (symmetric to unpaid+cancel+Pro elsewhere).
+Deno.test("buildSubscriptionUpdateData - unpaid with cancel_at_period_end keeps enterprise and schedules", () => {
+  const result = buildSubscriptionUpdateData("unpaid", true, PERIOD_END, { plan: "enterprise" }, NOW);
+  assertEquals(result.status, "past_due");
+  assertEquals(result.plan, "enterprise");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, PERIOD_END);
+  assertEquals(result.downgrade_reason, "user_requested");
+});
+
+// Skip gate is pro+active only; unpaid/incomplete must still process subscription.created.
+Deno.test("shouldSkipCreatedEvent - does not skip pro+unpaid", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "pro", status: "unpaid" }), false);
+});
+
+Deno.test("shouldSkipCreatedEvent - does not skip pro+incomplete", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "pro", status: "incomplete" }), false);
+});
