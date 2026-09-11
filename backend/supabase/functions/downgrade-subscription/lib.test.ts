@@ -84,3 +84,39 @@ Deno.test("extractUserId - no Bearer returns null", () => {
 Deno.test("extractUserId - invalid token returns null", () => {
   assertEquals(extractUserId("Bearer invalid"), null);
 });
+
+// ─── Additional edge cases (unclaimed by parallel coverage PRs #56–#62) ─────
+
+Deno.test("extractUserId - null sub is returned as null", () => {
+  const jwt = makeJwt({ sub: null });
+  assertEquals(extractUserId(`Bearer ${jwt}`), null);
+});
+
+Deno.test("validateRequestBody - wrong-case action throws", () => {
+  assertThrows(
+    () => validateRequestBody({ action: "Cancel_Auto_Renew" }),
+    Error,
+    "Invalid action",
+  );
+});
+
+Deno.test("validateRequestBody - array reason defaults to user_requested", () => {
+  const result = validateRequestBody({ action: "downgrade_now", reason: [] });
+  assertEquals(result.reason, "user_requested");
+});
+
+Deno.test("validateRequestBody - whitespace-padded reason defaults to user_requested", () => {
+  const result = validateRequestBody({
+    action: "cancel_auto_renew",
+    reason: "user_requested ",
+  });
+  assertEquals(result.reason, "user_requested");
+});
+
+Deno.test("validateRequestBody - undefined action throws", () => {
+  assertThrows(
+    () => validateRequestBody({ action: undefined, reason: "user_requested" }),
+    Error,
+    "Invalid action",
+  );
+});

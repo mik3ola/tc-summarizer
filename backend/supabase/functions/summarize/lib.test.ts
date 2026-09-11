@@ -122,3 +122,24 @@ Deno.test("resolvedSiteUrl - falls back to production when env is localhost", ()
 Deno.test("resolvedSiteUrl - falls back to production when env is undefined", () => {
   assertEquals(resolvedSiteUrl(undefined), "https://termsdigest.com");
 });
+
+// ─── Additional edge cases (unclaimed by parallel coverage PRs #56–#62) ─────
+
+Deno.test("getMonthlyQuota - trailing whitespace does not match enterprise", () => {
+  assertEquals(getMonthlyQuota("enterprise "), 5);
+});
+
+Deno.test("periodStart - exactly 120 days later starts period 4", () => {
+  // anchor 2026-01-20 + 120 days = 2026-05-20
+  const result = periodStart("2026-01-20", new Date("2026-05-20T00:00:00Z"));
+  assertEquals(result, "2026-05-20");
+});
+
+Deno.test("resolvedSiteUrl - mixed-case LocalHost is not rejected", () => {
+  // Historical includes("localhost") is case-sensitive; do not "fix" casually
+  assertEquals(resolvedSiteUrl("http://LocalHost:3000"), "http://LocalHost:3000");
+});
+
+Deno.test("decodeJwtPayload - four-segment token returns null", () => {
+  assertEquals(decodeJwtPayload("a.b.c.d"), null);
+});
