@@ -118,3 +118,62 @@ Deno.test("shouldSkipCreatedEvent - does not skip when existing is free", () => 
 Deno.test("shouldSkipCreatedEvent - does not skip when no existing record", () => {
   assertEquals(shouldSkipCreatedEvent(null), false);
 });
+
+// ─── Additional edge cases (unclaimed by parallel coverage PRs #56–#62) ─────
+
+Deno.test("buildSubscriptionUpdateData - trialing cancel_at_period_end keeps enterprise and coerces status active", () => {
+  const result = buildSubscriptionUpdateData(
+    "trialing",
+    true,
+    PERIOD_END,
+    { plan: "enterprise" },
+    NOW,
+  );
+  assertEquals(result.plan, "enterprise");
+  assertEquals(result.status, "active");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, PERIOD_END);
+  assertEquals(result.downgrade_reason, "user_requested");
+});
+
+Deno.test("buildSubscriptionUpdateData - paused without existing plan omits plan field", () => {
+  const result = buildSubscriptionUpdateData("paused", false, PERIOD_END, null, NOW);
+  assertEquals(result.status, "free");
+  assertEquals(result.plan, undefined);
+  assertEquals(result.current_period_end, PERIOD_END);
+  assertEquals(result.auto_renew, true);
+});
+
+Deno.test("buildSubscriptionUpdateData - paused with cancel_at_period_end keeps enterprise and schedules", () => {
+  const result = buildSubscriptionUpdateData(
+    "paused",
+    true,
+    PERIOD_END,
+    { plan: "enterprise" },
+    NOW,
+  );
+  assertEquals(result.plan, "enterprise");
+  assertEquals(result.status, "free");
+  assertEquals(result.auto_renew, false);
+  assertEquals(result.downgrade_scheduled_for, PERIOD_END);
+  assertEquals(result.downgrade_reason, "user_requested");
+});
+
+Deno.test("buildSubscriptionUpdateData - unpaid without existing plan omits plan field", () => {
+  const result = buildSubscriptionUpdateData("unpaid", false, PERIOD_END, null, NOW);
+  assertEquals(result.status, "past_due");
+  assertEquals(result.plan, undefined);
+  assertEquals(result.current_period_end, PERIOD_END);
+});
+
+Deno.test("shouldSkipCreatedEvent - does not skip pro+paused", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "pro", status: "paused" }), false);
+});
+
+Deno.test("shouldSkipCreatedEvent - does not skip enterprise+incomplete", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "enterprise", status: "incomplete" }), false);
+});
+
+Deno.test("shouldSkipCreatedEvent - does not skip enterprise+canceled", () => {
+  assertEquals(shouldSkipCreatedEvent({ plan: "enterprise", status: "canceled" }), false);
+});
